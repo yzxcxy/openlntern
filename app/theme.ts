@@ -83,6 +83,16 @@ const h3 = {
   "typography-sz-ts": true,
 };
 
+const h4 = {
+  ...heading,
+  "typography-sz-bl": true,
+};
+
+const h5 = {
+  ...heading,
+  "typography-sz-bm": true,
+};
+
 const iframe = {
   "behavior-sw-n": true,
 };
@@ -166,6 +176,8 @@ const buttonLight = v0_8.Styles.merge(button, { "color-c-n100": true });
 const h1Light = v0_8.Styles.merge(h1, { "color-c-n5": true });
 const h2Light = v0_8.Styles.merge(h2, { "color-c-n5": true });
 const h3Light = v0_8.Styles.merge(h3, { "color-c-n5": true });
+const h4Light = v0_8.Styles.merge(h4, { "color-c-n5": true });
+const h5Light = v0_8.Styles.merge(h5, { "color-c-n5": true });
 const bodyLight = v0_8.Styles.merge(body, { "color-c-n5": true });
 const pLight = v0_8.Styles.merge(p, { "color-c-n35": true });
 const preLight = v0_8.Styles.merge(pre, { "color-c-n35": true });
@@ -391,6 +403,8 @@ export const theme: v0_8.Types.Theme = {
     h1: h1Light,
     h2: h2Light,
     h3: h3Light,
+    h4: h4Light,
+    h5: h5Light,
     iframe,
     input: inputLight,
     p: pLight,
@@ -403,9 +417,8 @@ export const theme: v0_8.Types.Theme = {
     h1: [...Object.keys(h1Light)],
     h2: [...Object.keys(h2Light)],
     h3: [...Object.keys(h3Light)],
-    h4: [],
-    h5: [],
-    h6: [],
+    h4: [...Object.keys(h4Light)],
+    h5: [...Object.keys(h5Light)],
     ul: [...Object.keys(unorderedListLight)],
     ol: [...Object.keys(orderedListLight)],
     li: [...Object.keys(listItemLight)],
