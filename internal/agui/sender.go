@@ -144,14 +144,14 @@ func (s *Sender) ActivityUpdate(messageID, activityType string, patch []events.J
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 
-// SendA2UI sends an A2UI message using ActivitySnapshot event with "a2ui" activity type
+// SendA2UI sends an A2UI message using ActivitySnapshot event with "a2ui-surface" activity type
 func (s *Sender) SendA2UI(messageID string, content any) error {
-	return s.ActivitySnapshot(messageID, "a2ui", content)
+	return s.ActivitySnapshot(messageID, "a2ui-surface", content)
 }
 
-// UpdateA2UI sends an A2UI update using ActivityDelta event with "a2ui" activity type
+// UpdateA2UI sends an A2UI update using ActivityDelta event with "a2ui-surface" activity type
 func (s *Sender) UpdateA2UI(messageID string, patch []events.JSONPatchOperation) error {
-	return s.ActivityUpdate(messageID, "a2ui", patch)
+	return s.ActivityUpdate(messageID, "a2ui-surface", patch)
 }
 
 // Custom sends a Custom event

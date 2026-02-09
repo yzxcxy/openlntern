@@ -273,7 +273,9 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		}
 
 		// Send initial empty snapshot to create the message/activity
-		if err := s.SendA2UI(msgID, map[string]interface{}{}); err != nil {
+		if err := s.SendA2UI(msgID, map[string]interface{}{
+			"operations": []interface{}{},
+		}); err != nil {
 			return err
 		}
 
@@ -281,9 +283,12 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
 			{
 				Op:   "add",
-				Path: "/surfaceUpdate",
+				Path: "/operations/-",
 				Value: map[string]interface{}{
-					"components": ui,
+					"surfaceUpdate": map[string]interface{}{
+						"surfaceId":  "default",
+						"components": ui,
+					},
 				},
 			},
 		}); err != nil {
@@ -294,9 +299,11 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
 			{
 				Op:   "add",
-				Path: "/dataModelUpdate",
+				Path: "/operations/-",
 				Value: map[string]interface{}{
-					"data": data,
+					"dataModelUpdate": map[string]interface{}{
+						"data": data,
+					},
 				},
 			},
 		}); err != nil {
@@ -307,9 +314,12 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
 			{
 				Op:   "add",
-				Path: "/beginRendering",
+				Path: "/operations/-",
 				Value: map[string]interface{}{
-					"root": "root",
+					"beginRendering": map[string]interface{}{
+						"surfaceId": "default",
+						"root":      "root",
+					},
 				},
 			},
 		}); err != nil {
@@ -338,16 +348,42 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 			return err
 		}
 
-		a2uiPayload := map[string]interface{}{
-			"surfaceUpdate": map[string]interface{}{
-				"components": ui,
-			},
-			"beginRendering": map[string]interface{}{
-				"root": "root",
-			},
+		// Send initial empty snapshot
+		if err := s.SendA2UI(msgID, map[string]interface{}{
+			"operations": []interface{}{},
+		}); err != nil {
+			return err
 		}
 
-		if err := s.SendA2UI(msgID, a2uiPayload); err != nil {
+		// Send surfaceUpdate
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"surfaceUpdate": map[string]interface{}{
+						"surfaceId":  "default",
+						"components": ui,
+					},
+				},
+			},
+		}); err != nil {
+			return err
+		}
+
+		// Send beginRendering
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"beginRendering": map[string]interface{}{
+						"surfaceId": "default",
+						"root":      "root",
+					},
+				},
+			},
+		}); err != nil {
 			return err
 		}
 

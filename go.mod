@@ -2,7 +2,10 @@ module agent_backend
 
 go 1.25.5
 
-require github.com/gin-gonic/gin v1.11.0
+require (
+	github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260208083914-f2ebe6b1e49d
+	github.com/gin-gonic/gin v1.11.0
+)
 
 require (
 	github.com/google/uuid v1.6.0 // indirect
@@ -10,7 +13,6 @@ require (
 )
 
 require (
-	github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.2 // indirect
 	github.com/bytedance/sonic/loader v0.4.0 // indirect
@@ -41,5 +43,3 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
-
-replace github.com/ag-ui-protocol/ag-ui/sdks/community/go => ../../go

@@ -1,3 +1,5 @@
+github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260208083914-f2ebe6b1e49d h1:bh3fdv2SKZqYbeDdiaN6V2IGNl61himom7nWdXPeWOE=
+github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260208083914-f2ebe6b1e49d/go.mod h1:ERAMOexUee4AIuoxksuuGoEcHl3aqLwaazjGwlR9ZCI=
 github.com/bytedance/gopkg v0.1.3 h1:TPBSwH8RsouGCBcMBktLt1AymVo2TVsBVCY4b6TnZ/M=
 github.com/bytedance/gopkg v0.1.3/go.mod h1:576VvJ+eJgyCzdjS+c4+77QF3p7ubbtiKARP3TxducM=
 github.com/bytedance/sonic v1.14.2 h1:k1twIoe97C1DtYUo+fZQy865IuHia4PR5RPiuGPPIIE=
