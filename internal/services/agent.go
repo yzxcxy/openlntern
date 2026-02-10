@@ -123,110 +123,63 @@ const menuDataJSON = `{
      { 
        "name": "宫保鸡丁", 
        "description": "经典川菜，鲜香微辣", 
-       "imageUrl": "https://example.com/images/gongbao.jpg" 
+       "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTObmT7jUhWYIUW5nW0agmwc0X4pyFis_IBsw&s" 
      }, 
      { 
        "name": "鱼香肉丝", 
        "description": "酸甜鲜辣，开胃下饭", 
-       "imageUrl": "https://example.com/images/yuxiang.jpg" 
+       "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTObmT7jUhWYIUW5nW0agmwc0X4pyFis_IBsw&s" 
      }, 
      { 
        "name": "麻婆豆腐", 
        "description": "麻辣鲜香，豆腐嫩滑", 
-       "imageUrl": "https://example.com/images/mapo.jpg" 
-     } 
+       "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTObmT7jUhWYIUW5nW0agmwc0X4pyFis_IBsw&s" 
+     },
+     {
+       "name": "拍黄瓜",
+       "description": "清爽解腻，脆嫩爽口",
+       "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTObmT7jUhWYIUW5nW0agmwc0X4pyFis_IBsw&s"
+     }
    ] 
  }`
 
-const orderUIJSON = `[ 
-   { 
-     "id": "root", 
-     "component": { 
-       "Column": { 
-         "children": { 
-           "explicitList": [ 
-             "dishField", 
-             "quantityField", 
-             "submitBtn" 
-           ] 
-         }, 
-         "distribution": "start", 
-         "alignment": "stretch" 
-       } 
-     } 
-   }, 
-   { 
-     "id": "dishField", 
-     "component": { 
-       "TextField": { 
-         "label": { 
-           "literalString": "菜品" 
-         }, 
-         "text": { 
-           "path": "/form/dish" 
-         }, 
-         "textFieldType": "shortText" 
-       } 
-     } 
-   }, 
-   { 
-     "id": "quantityField", 
-     "component": { 
-       "TextField": { 
-         "label": { 
-           "literalString": "数量" 
-         }, 
-         "text": { 
-           "path": "/form/quantity" 
-         }, 
-         "textFieldType": "number" 
-       } 
-     } 
-   }, 
-   { 
-     "id": "submitBtnText", 
-     "component": { 
-       "Text": { 
-         "text": { 
-           "literalString": "提交" 
-         } 
-       } 
-     } 
-   }, 
-   { 
-     "id": "submitBtn", 
-     "component": { 
-       "Button": { 
-         "child": "submitBtnText", 
-         "primary": true, 
-         "action": { 
-           "name": "submitOrder", 
-           "context": [ 
-             { 
-               "key": "dish", 
-               "value": { 
-                 "path": "/form/dish" 
-               } 
-             }, 
-             { 
-               "key": "quantity", 
-               "value": { 
-                 "path": "/form/quantity" 
-               } 
-             } 
-           ] 
-         } 
-       } 
-     } 
-   } 
- ]`
-
-const orderDataJSON = `{
-  "form": {
-    "dish": "",
-    "quantity": "1"
+ const WelcomeText = `[
+  {
+    "id": "root",
+    "component": {
+      "Card": {
+        "child": "content"
+      }
+    }
+  },
+  {
+    "id": "content",
+    "component": {
+      "Column": {
+        "children": {
+          "explicitList": [
+            "welcomeText"
+          ]
+        },
+        "distribution": "center",
+        "alignment": "center"
+      }
+    }
+  },
+  {
+    "id": "welcomeText",
+    "component": {
+      "Text": {
+        "text": {
+          "literalString": "欢迎你！"
+        },
+        "usageHint": "h2"
+      }
+    }
   }
-}`
+]
+ `
+
 
 func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) error {
 	threadID := input.ThreadID
@@ -253,7 +206,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		}
 	}
 
-	if strings.Contains(userMsg, "查看菜单") {
+	if strings.Contains(userMsg, "欢迎") {
 		// Start Run (uses injected IDs)
 		if err := s.Start(); err != nil {
 			return err
@@ -261,16 +214,24 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 
 		time.Sleep(2 * time.Second)
 
+		// Send Text Message
+		// if err := s.StartMessage(msgID, "assistant"); err != nil {
+		// 	return err
+		// }
+		// if err := s.SendContent(msgID, "好的，这是我们的菜单："); err != nil {
+		// 	return err
+		// }
+
 		// Send A2UI with surfaceUpdate, dataModelUpdate, and beginRendering
 		var ui []interface{}
-		if err := json.Unmarshal([]byte(menuUIJSON), &ui); err != nil {
+		if err := json.Unmarshal([]byte(WelcomeText), &ui); err != nil {
 			return err
 		}
 
-		var data map[string]interface{}
-		if err := json.Unmarshal([]byte(menuDataJSON), &data); err != nil {
-			return err
-		}
+		// var data map[string]interface{}
+		// if err := json.Unmarshal([]byte(menuDataJSON), &data); err != nil {
+		// 	return err
+		// }
 
 		// Send initial empty snapshot to create the message/activity
 		if err := s.SendA2UI(msgID, map[string]interface{}{
@@ -279,6 +240,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 			return err
 		}
 
+
 		// Send surfaceUpdate
 		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
 			{
@@ -288,6 +250,22 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 					"surfaceUpdate": map[string]interface{}{
 						"surfaceId":  "default",
 						"components": ui,
+					},
+				},
+			},
+		}); err != nil {
+			return err
+		}
+
+    // Send beginRendering
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"beginRendering": map[string]interface{}{
+						"surfaceId": "default",
+						"root":      "root",
 					},
 				},
 			},
@@ -296,100 +274,25 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		}
 
 		// Send dataModelUpdate
-		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
-			{
-				Op:   "add",
-				Path: "/operations/-",
-				Value: map[string]interface{}{
-					"dataModelUpdate": map[string]interface{}{
-						"data": data,
-					},
-				},
-			},
-		}); err != nil {
-			return err
-		}
+		// if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+		// 	{
+		// 		Op:   "add",
+		// 		Path: "/operations/-",
+		// 		Value: map[string]interface{}{
+		// 			"dataModelUpdate": map[string]interface{}{
+		// 				"data": data,
+		// 			},
+		// 		},
+		// 	},
+		// }); err != nil {
+		// 	return err
+		// }
 
-		// Send beginRendering
-		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
-			{
-				Op:   "add",
-				Path: "/operations/-",
-				Value: map[string]interface{}{
-					"beginRendering": map[string]interface{}{
-						"surfaceId": "default",
-						"root":      "root",
-					},
-				},
-			},
-		}); err != nil {
-			return err
-		}
-
-		time.Sleep(2 * time.Second)
+		// if err := s.EndMessage(msgID); err != nil {
+		// 	return err
+		// }
 
 		// End Run (uses injected IDs)
-		if err := s.Finish(); err != nil {
-			return err
-		}
-
-		return nil
-	} else if strings.Contains(userMsg, "我要点单") {
-		// Start Run (uses injected IDs)
-		if err := s.Start(); err != nil {
-			return err
-		}
-
-		time.Sleep(2 * time.Second)
-
-		// Send A2UI with surfaceUpdate, dataModelUpdate, and beginRendering
-		var ui []interface{}
-		if err := json.Unmarshal([]byte(orderUIJSON), &ui); err != nil {
-			return err
-		}
-
-		// Send initial empty snapshot
-		if err := s.SendA2UI(msgID, map[string]interface{}{
-			"operations": []interface{}{},
-		}); err != nil {
-			return err
-		}
-
-		// Send surfaceUpdate
-		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
-			{
-				Op:   "add",
-				Path: "/operations/-",
-				Value: map[string]interface{}{
-					"surfaceUpdate": map[string]interface{}{
-						"surfaceId":  "default",
-						"components": ui,
-					},
-				},
-			},
-		}); err != nil {
-			return err
-		}
-
-		// Send beginRendering
-		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
-			{
-				Op:   "add",
-				Path: "/operations/-",
-				Value: map[string]interface{}{
-					"beginRendering": map[string]interface{}{
-						"surfaceId": "default",
-						"root":      "root",
-					},
-				},
-			},
-		}); err != nil {
-			return err
-		}
-
-		time.Sleep(2 * time.Second)
-
-		//  End Run (uses injected IDs)
 		if err := s.Finish(); err != nil {
 			return err
 		}
