@@ -1,22 +1,25 @@
 import {
   CopilotRuntime,
   createCopilotEndpoint,
-  InMemoryAgentRunner,
 } from "@copilotkit/runtime/v2";
 import { handle } from "hono/vercel";
-import { A2AAgent } from "@ag-ui/a2a";
-import { A2AClient } from "@a2a-js/sdk/client";
+import { HttpAgent } from "@ag-ui/client";
+import { ExperimentalEmptyAdapter } from "@copilotkit/runtime";
 
-const a2aClient = new A2AClient("http://localhost:10002");
 
-const agent = new A2AAgent({ a2aClient });
+// 1. You can use any service adapter here for multi-agent support. We use
+//    the empty adapter since we're only using one agent.
+const serviceAdapter = new ExperimentalEmptyAdapter();
 
+// 2. Create the CopilotRuntime instance and utilize the HttpAgent to setup the connection.
 const runtime = new CopilotRuntime({
   agents: {
-    default: agent,
+    default: new HttpAgent({
+      url: "http://localhost:8080/v1/chat/sse",
+    }),
   },
-  runner: new InMemoryAgentRunner(),
 });
+
 
 const app = createCopilotEndpoint({
   runtime,
