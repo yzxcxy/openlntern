@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"time"
 
@@ -143,7 +144,7 @@ const menuDataJSON = `{
    ] 
  }`
 
- const WelcomeText = `[
+const WelcomeText = `[
   {
     "id": "root",
     "component": {
@@ -171,7 +172,7 @@ const menuDataJSON = `{
     "component": {
       "Text": {
         "text": {
-          "literalString": "欢迎你！"
+          "literalString": "我是小智，欢迎你！"
         },
         "usageHint": "h2"
       }
@@ -179,7 +180,6 @@ const menuDataJSON = `{
   }
 ]
  `
-
 
 func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) error {
 	threadID := input.ThreadID
@@ -214,34 +214,17 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 
 		time.Sleep(2 * time.Second)
 
-		// Send Text Message
-		// if err := s.StartMessage(msgID, "assistant"); err != nil {
-		// 	return err
-		// }
-		// if err := s.SendContent(msgID, "好的，这是我们的菜单："); err != nil {
-		// 	return err
-		// }
-
-		// Send A2UI with surfaceUpdate, dataModelUpdate, and beginRendering
 		var ui []interface{}
 		if err := json.Unmarshal([]byte(WelcomeText), &ui); err != nil {
 			return err
 		}
 
-		// var data map[string]interface{}
-		// if err := json.Unmarshal([]byte(menuDataJSON), &data); err != nil {
-		// 	return err
-		// }
-
-		// Send initial empty snapshot to create the message/activity
 		if err := s.SendA2UI(msgID, map[string]interface{}{
 			"operations": []interface{}{},
 		}); err != nil {
 			return err
 		}
 
-
-		// Send surfaceUpdate
 		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
 			{
 				Op:   "add",
@@ -257,7 +240,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 			return err
 		}
 
-    // Send beginRendering
+		// Send beginRendering
 		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
 			{
 				Op:   "add",
@@ -273,31 +256,127 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 			return err
 		}
 
-		// Send dataModelUpdate
-		// if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
-		// 	{
-		// 		Op:   "add",
-		// 		Path: "/operations/-",
-		// 		Value: map[string]interface{}{
-		// 			"dataModelUpdate": map[string]interface{}{
-		// 				"data": data,
-		// 			},
-		// 		},
-		// 	},
-		// }); err != nil {
-		// 	return err
-		// }
-
-		// if err := s.EndMessage(msgID); err != nil {
-		// 	return err
-		// }
-
-		// End Run (uses injected IDs)
 		if err := s.Finish(); err != nil {
 			return err
 		}
 
 		return nil
+	} else if strings.Contains(userMsg, "菜单") {
+
+		var ui []interface{}
+		if err := json.Unmarshal([]byte(menuUIJSON), &ui); err != nil {
+			log.Printf("Unmarshal menuUIJSON failed: %v", err)
+			return err
+		}
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(menuDataJSON), &data); err != nil {
+			log.Printf("Unmarshal menuDataJSON failed: %v", err)
+			return err
+		}
+
+		// Start Run (uses injected IDs)
+		if err := s.Start(); err != nil {
+			log.Printf("Start run failed: %v", err)
+			return err
+		}
+		log.Printf("Start run success")
+
+		time.Sleep(2 * time.Second)
+
+		// Send initial empty snapshot to create the message/activity
+		if err := s.SendA2UI(msgID, map[string]interface{}{
+			"operations": []interface{}{},
+		}); err != nil {
+			log.Printf("Send initial empty snapshot failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send initial empty snapshot success")
+
+		// Send surfaceUpdate
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"surfaceUpdate": map[string]interface{}{
+						"surfaceId":  "default",
+						"components": ui,
+					},
+				},
+			},
+		}); err != nil {
+			log.Printf("Send surfaceUpdate failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send surfaceUpdate success")
+
+		// send data
+		dishes := data["dishes"].([]interface{})
+		dishMap := make([]interface{}, len(dishes))
+		for i, dish := range dishes {
+			dishMap[i] = map[string]interface{}{
+				"key": fmt.Sprintf("dish%d", i),
+				"valueMap": []interface{}{
+					map[string]interface{}{"key": "name", "valueString": dish.(map[string]interface{})["name"]},
+					map[string]interface{}{"key": "description", "valueString": dish.(map[string]interface{})["description"]},
+					map[string]interface{}{"key": "imageUrl", "valueString": dish.(map[string]interface{})["imageUrl"]},
+				},
+			}
+		}
+
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"dataModelUpdate": map[string]interface{}{
+						"surfaceId": "default",
+						"contents": []interface{}{
+							map[string]interface{}{
+								"key":      "dishes",
+								"valueMap": dishMap,
+							},
+						},
+					},
+				},
+			},
+		}); err != nil {
+			log.Printf("Send data failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send data success")
+
+		// Send beginRendering
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"beginRendering": map[string]interface{}{
+						"surfaceId": "default",
+						"root":      "root",
+					},
+				},
+			},
+		}); err != nil {
+			log.Printf("Send beginRendering failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send beginRendering success")
+
+		// End Run (uses injected IDs)
+		if err := s.Finish(); err != nil {
+			log.Printf("End run failed: %v", err)
+			return err
+		}
+		log.Printf("End run success")
+		return nil
+	} else if strings.Contains(userMsg, "收集") {
+
 	}
 
 	// 1. Start Run (uses injected IDs)
