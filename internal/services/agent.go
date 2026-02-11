@@ -181,6 +181,89 @@ const WelcomeText = `[
 ]
  `
 
+const collectFormUIJSON = `[ 
+   { 
+     "id": "root", 
+     "component": { 
+       "Column": { 
+         "children": { 
+           "explicitList": [ 
+             "nameField", 
+             "phoneField", 
+             "submitButton" 
+           ] 
+         }, 
+         "alignment": "stretch", 
+         "distribution": "start" 
+       } 
+     } 
+   }, 
+   { 
+      "id": "nameField", 
+      "component": { 
+        "TextField": { 
+          "label": { 
+            "literalString": "姓名" 
+          }, 
+          "text": { 
+            "path": "/form/name" 
+          }, 
+          "textFieldType": "shortText" 
+        } 
+      } 
+    }, 
+    { 
+      "id": "phoneField", 
+      "component": { 
+        "TextField": { 
+          "label": { 
+            "literalString": "电话" 
+          }, 
+          "text": { 
+            "path": "/form/phone" 
+          }, 
+          "textFieldType": "shortText" 
+        } 
+      } 
+    }, 
+    { 
+      "id": "submitButtonText", 
+      "component": { 
+        "Text": { 
+          "text": { 
+            "literalString": "提交" 
+          }
+        } 
+      } 
+    }, 
+    { 
+      "id": "submitButton", 
+     "component": { 
+       "Button": { 
+         "child": "submitButtonText", 
+         "primary": true, 
+         "action": { 
+           "name": "submitForm",
+           "context": [
+             {
+               "key": "name",
+               "value": {
+                 "path": "/form/name"
+               }
+             },
+             {
+               "key": "phone",
+               "value": {
+                 "path": "/form/phone"
+               }
+             }
+           ]
+         } 
+       } 
+     } 
+   } 
+ ]`
+
 func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) error {
 	threadID := input.ThreadID
 
@@ -191,6 +274,21 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	s := agui.NewSenderWithThreadID(ctx, w, threadID)
 
 	msgID := "msg_" + time.Now().Format("150405")
+
+	// Check for A2UI action
+	if input.ForwardedProps != nil {
+		// Use a recursive map lookup or simple casting if we assume structure
+		// forwardedProps -> a2uiAction -> userAction -> name
+		if props, ok := toMap(input.ForwardedProps); ok {
+			if a2uiAction, ok := toMap(props["a2uiAction"]); ok {
+				if userAction, ok := toMap(a2uiAction["userAction"]); ok {
+					if name, ok := userAction["name"].(string); ok && name == "submitForm" {
+						return handleSubmitForm(ctx, w, s, msgID, input.State, userAction)
+					}
+				}
+			}
+		}
+	}
 
 	// 3. Stream Content
 	userMsg := ""
@@ -376,7 +474,98 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("End run success")
 		return nil
 	} else if strings.Contains(userMsg, "收集") {
+		var ui []interface{}
+		if err := json.Unmarshal([]byte(collectFormUIJSON), &ui); err != nil {
+			log.Printf("Unmarshal collectFormUIJSON failed: %v", err)
+			return err
+		}
 
+		if err := s.Start(); err != nil {
+			log.Printf("Start run failed: %v", err)
+			return err
+		}
+		log.Printf("Start run success")
+
+		time.Sleep(2 * time.Second)
+
+		if err := s.SendA2UI(msgID, map[string]interface{}{
+			"operations": []interface{}{},
+		}); err != nil {
+			log.Printf("Send initial empty snapshot failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send initial empty snapshot success")
+
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"surfaceUpdate": map[string]interface{}{
+						"surfaceId":  "default",
+						"components": ui,
+					},
+				},
+			},
+		}); err != nil {
+			log.Printf("Send surfaceUpdate failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send surfaceUpdate success")
+
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"dataModelUpdate": map[string]interface{}{
+						"surfaceId": "default",
+						"path":      "/",
+						"contents": []interface{}{
+							map[string]interface{}{
+								"key": "form",
+								"valueMap": []interface{}{
+									map[string]interface{}{"key": "name", "valueString": ""},
+									map[string]interface{}{"key": "phone", "valueString": ""},
+								},
+							},
+						},
+					},
+				},
+			},
+		}); err != nil {
+			log.Printf("Send data failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send data success")
+
+		if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+			{
+				Op:   "add",
+				Path: "/operations/-",
+				Value: map[string]interface{}{
+					"beginRendering": map[string]interface{}{
+						"surfaceId": "default",
+						"root":      "root",
+					},
+				},
+			},
+		}); err != nil {
+			log.Printf("Send beginRendering failed: %v", err)
+			return err
+		}
+
+		log.Printf("Send beginRendering success")
+
+		if err := s.Finish(); err != nil {
+			log.Printf("End run failed: %v", err)
+			return err
+		}
+		log.Printf("End run success")
+		return nil
 	}
 
 	// 1. Start Run (uses injected IDs)
@@ -409,6 +598,175 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	}
 
 	// 5. End Run (uses injected IDs)
+	if err := s.Finish(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func toMap(v interface{}) (map[string]interface{}, bool) {
+	if m, ok := v.(map[string]interface{}); ok {
+		return m, true
+	}
+	return nil, false
+}
+
+func handleSubmitForm(ctx context.Context, w io.Writer, s *agui.Sender, msgID string, state interface{}, userAction map[string]interface{}) error {
+	const successUIJSON = `[
+	  {
+		"id": "root",
+		"component": {
+		  "Column": {
+			"children": {
+			  "explicitList": [
+				"successText",
+				"infoText"
+			  ]
+			},
+			"alignment": "center",
+			"distribution": "center"
+		  }
+		}
+	  },
+	  {
+		"id": "successText",
+		"component": {
+		  "Text": {
+			"text": { "literalString": "提交成功！" },
+			"usageHint": "h2"
+		  }
+		}
+	  },
+	  {
+		"id": "infoText",
+		"component": {
+		  "Text": {
+			"text": { "path": "/info" },
+			"usageHint": "body"
+		  }
+		}
+	  }
+	]`
+
+	var ui []interface{}
+	if err := json.Unmarshal([]byte(successUIJSON), &ui); err != nil {
+		return err
+	}
+
+	if err := s.Start(); err != nil {
+		return err
+	}
+
+	if err := s.SendA2UI(msgID, map[string]interface{}{
+		"operations": []interface{}{},
+	}); err != nil {
+		return err
+	}
+
+	// Prepare info string from state or action parameters
+	name := ""
+	phone := ""
+
+	// Try to get from state
+	if stateMap, ok := toMap(state); ok {
+		if v, ok := stateMap["name"].(string); ok {
+			name = v
+		}
+		if v, ok := stateMap["phone"].(string); ok {
+			phone = v
+		}
+	}
+
+	// Try to get from action parameters (override state if present)
+	if params, ok := toMap(userAction["parameters"]); ok {
+		if v, ok := params["name"].(string); ok {
+			name = v
+		}
+		if v, ok := params["phone"].(string); ok {
+			phone = v
+		}
+	}
+
+	// Try to get from action context (override parameters if present)
+	if ctxMap, ok := toMap(userAction["context"]); ok {
+		if v, ok := ctxMap["name"].(string); ok {
+			name = v
+		}
+		if v, ok := ctxMap["phone"].(string); ok {
+			phone = v
+		}
+	}
+
+	// Reconstruct nested structure for business logic
+	formData := map[string]string{
+		"name":  name,
+		"phone": phone,
+	}
+
+	// Log the nested structure (simulating business logic usage)
+	log.Printf("Processing form submission with nested data: %+v", formData)
+
+	infoStr := "收到的信息: "
+	if name != "" {
+		infoStr += fmt.Sprintf("姓名: %s, ", name)
+	} else {
+		infoStr += "姓名: (未填写), "
+	}
+
+	if phone != "" {
+		infoStr += fmt.Sprintf("电话: %s", phone)
+	} else {
+		infoStr += "电话: (未填写)"
+	}
+
+	if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+		{
+			Op:   "add",
+			Path: "/operations/-",
+			Value: map[string]interface{}{
+				"surfaceUpdate": map[string]interface{}{
+					"surfaceId":  "default",
+					"components": ui,
+				},
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+		{
+			Op:   "add",
+			Path: "/operations/-",
+			Value: map[string]interface{}{
+				"dataModelUpdate": map[string]interface{}{
+					"surfaceId": "default",
+					"contents": []interface{}{
+						map[string]interface{}{"key": "info", "valueString": infoStr},
+					},
+				},
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	if err := s.UpdateA2UI(msgID, []events.JSONPatchOperation{
+		{
+			Op:   "add",
+			Path: "/operations/-",
+			Value: map[string]interface{}{
+				"beginRendering": map[string]interface{}{
+					"surfaceId": "default",
+					"root":      "root",
+				},
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
 	if err := s.Finish(); err != nil {
 		return err
 	}
