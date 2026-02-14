@@ -4,6 +4,7 @@ import { CopilotKitProvider } from "@copilotkit/react-core/v2";
 import { CopilotChat, useAgent } from "@copilotkit/react-core/v2";
 import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { theme } from "./theme";
 
 // Disable static optimization for this page
@@ -15,6 +16,20 @@ const activityRenderers = [A2UIMessageRenderer];
 function ChatWithMockHistory() {
   const { agent } = useAgent();
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.push("/login");
+    }
+  }, [router]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 
   useEffect(() => {
     if (historyLoaded) return;
@@ -207,7 +222,8 @@ function ChatWithMockHistory() {
       } as const;
 
       // 把文本历史 + ActivityMessage 一次性追加到当前消息列表中
-      agent.setMessages([...agent.messages, ...textHistory, activityMessage]);
+      //agent.setMessages([...agent.messages, ...textHistory, activityMessage]);
+      agent.setMessages([...agent.messages, ...textHistory]);
 
       setHistoryLoaded(true);
     };
@@ -217,9 +233,17 @@ function ChatWithMockHistory() {
 
   return (
     <main
-      className="h-full overflow-auto w-screen"
+      className="h-full overflow-auto w-screen relative"
       style={{ minHeight: "100dvh" }}
     >
+      <div className="absolute top-4 right-4 z-10">
+        <button
+          onClick={handleLogout}
+          className="rounded bg-red-600 px-3 py-1 text-sm text-white hover:bg-red-500"
+        >
+          退出登录
+        </button>
+      </div>
       <CopilotChat
         className="h-full"
         labels={{
