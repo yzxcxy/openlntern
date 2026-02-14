@@ -25,6 +25,45 @@ func CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
+func Register(c *gin.Context) {
+	var user models.User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := services.User.CreateUser(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, user)
+}
+
+func Login(c *gin.Context) {
+	var req struct {
+		Identifier string `json:"identifier"`
+		Password   string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	user, err := services.User.Authenticate(req.Identifier, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+	token, expiresAt, err := services.GenerateToken(user.UserID, user.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"token":      token,
+		"expires_at": expiresAt,
+		"user":       user,
+	})
+}
+
 // GetUser 获取用户
 func GetUser(c *gin.Context) {
 	userID := c.Param("id")

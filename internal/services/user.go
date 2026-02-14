@@ -41,6 +41,21 @@ func (s *UserService) GetUserByUserID(userID string) (*models.User, error) {
 	return &user, nil
 }
 
+func (s *UserService) Authenticate(identifier, password string) (*models.User, error) {
+	if identifier == "" || password == "" {
+		return nil, errors.New("identifier and password are required")
+	}
+	var user models.User
+	err := database.DB.Where("username = ? OR email = ?", identifier, identifier).First(&user).Error
+	if err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+	return &user, nil
+}
+
 // UpdateUser 更新用户信息
 func (s *UserService) UpdateUser(userID string, updates map[string]interface{}) error {
 	// 如果包含密码，需要重新哈希

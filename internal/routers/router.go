@@ -2,6 +2,7 @@ package routers
 
 import (
 	"openIntern/internal/controllers"
+	"openIntern/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,7 +13,7 @@ func SetupRouter() *gin.Engine {
 	r.POST("/v1/chat/sse", controllers.ChatSSE)
 
 	// User routes
-	userGroup := r.Group("/v1/users")
+	userGroup := r.Group("/v1/users", middleware.AuthRequired())
 	{
 		userGroup.POST("", controllers.CreateUser)
 		userGroup.GET("", controllers.ListUsers)
@@ -21,8 +22,14 @@ func SetupRouter() *gin.Engine {
 		userGroup.DELETE("/:id", controllers.DeleteUser)
 	}
 
+	authGroup := r.Group("/v1/auth")
+	{
+		authGroup.POST("/register", controllers.Register)
+		authGroup.POST("/login", controllers.Login)
+	}
+
 	// A2UI routes
-	a2uiGroup := r.Group("/v1/a2uis")
+	a2uiGroup := r.Group("/v1/a2uis", middleware.AuthRequired())
 	{
 		a2uiGroup.POST("", controllers.CreateA2UI)
 		a2uiGroup.GET("", controllers.ListA2UIs)
