@@ -11,6 +11,7 @@ export default function ChatPage() {
     if (historyLoaded) return;
 
     const loadHistory = async () => {
+      setHistoryLoaded(true);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const textHistory = [
@@ -194,8 +195,7 @@ export default function ChatPage() {
         },
       } as const;
 
-      agent.setMessages([...agent.messages, ...textHistory]);
-      setHistoryLoaded(true);
+      agent.setMessages([...agent.messages]);
     };
 
     loadHistory();
