@@ -27,10 +27,21 @@ func CreateUser(c *gin.Context) {
 }
 
 func Register(c *gin.Context) {
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required"`
+		Phone    string `json:"phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c)
 		return
+	}
+	user := models.User{
+		Username: req.Username,
+		Email:    req.Email,
+		Password: req.Password,
+		Phone:    req.Phone,
 	}
 	if err := services.User.CreateUser(&user); err != nil {
 		response.BadRequest(c)
