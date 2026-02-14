@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"agent_backend/internal/agui"
+	"openIntern/internal/agui"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"agent_backend/internal/config"
-	"agent_backend/internal/routers"
+	"openIntern/internal/config"
+	"openIntern/internal/routers"
 )
 
 func main() {

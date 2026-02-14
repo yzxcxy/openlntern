@@ -1,4 +1,4 @@
-module agent_backend
+module openIntern
 
 go 1.25.5
 

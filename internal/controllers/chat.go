@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"agent_backend/internal/services"
+	"openIntern/internal/services"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	"github.com/gin-gonic/gin"
