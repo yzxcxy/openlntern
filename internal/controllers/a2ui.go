@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"openIntern/internal/models"
+	"openIntern/internal/response"
 	"openIntern/internal/services"
 	"strconv"
 
@@ -13,16 +14,16 @@ import (
 func CreateA2UI(c *gin.Context) {
 	var a2ui models.A2UI
 	if err := c.ShouldBindJSON(&a2ui); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 
 	if err := services.A2UI.CreateA2UI(&a2ui); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusCreated, a2ui)
+	response.JSONSuccess(c, http.StatusCreated, a2ui)
 }
 
 // GetA2UI 获取 A2UI
@@ -30,10 +31,10 @@ func GetA2UI(c *gin.Context) {
 	id := c.Param("id")
 	a2ui, err := services.A2UI.GetA2UIByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "a2ui not found"})
+		response.NotFound(c, "a2ui not found")
 		return
 	}
-	c.JSON(http.StatusOK, a2ui)
+	response.JSONSuccess(c, http.StatusOK, a2ui)
 }
 
 // UpdateA2UI 更新 A2UI
@@ -41,7 +42,7 @@ func UpdateA2UI(c *gin.Context) {
 	id := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 
@@ -52,14 +53,14 @@ func UpdateA2UI(c *gin.Context) {
 		if err.Error() == "permission denied: only admin can update official a2ui" ||
 			err.Error() == "permission denied: authentication required for official a2ui" ||
 			err.Error() == "permission denied: invalid user" {
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			response.Forbidden(c)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "a2ui updated successfully"})
+	response.JSONMessage(c, http.StatusOK, "a2ui updated successfully")
 }
 
 // DeleteA2UI 删除 A2UI
@@ -71,13 +72,13 @@ func DeleteA2UI(c *gin.Context) {
 		if err.Error() == "permission denied: only admin can delete official a2ui" ||
 			err.Error() == "permission denied: authentication required for official a2ui" ||
 			err.Error() == "permission denied: invalid user" {
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			response.Forbidden(c)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "a2ui deleted successfully"})
+	response.JSONMessage(c, http.StatusOK, "a2ui deleted successfully")
 }
 
 // ListA2UIs 获取 A2UI 列表
@@ -94,14 +95,15 @@ func ListA2UIs(c *gin.Context) {
 
 	a2uis, total, err := services.A2UI.ListA2UIs(page, pageSize, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"data":  a2uis,
 		"total": total,
 		"page":  page,
+		"size":  pageSize,
 	})
 }
 
@@ -112,14 +114,15 @@ func ListOfficialA2UIs(c *gin.Context) {
 
 	a2uis, total, err := services.A2UI.ListOfficialA2UIs(page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"data":  a2uis,
 		"total": total,
 		"page":  page,
+		"size":  pageSize,
 	})
 }
 
@@ -137,13 +140,14 @@ func ListCustomA2UIs(c *gin.Context) {
 
 	a2uis, total, err := services.A2UI.ListCustomA2UIs(page, pageSize, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"data":  a2uis,
 		"total": total,
 		"page":  page,
+		"size":  pageSize,
 	})
 }

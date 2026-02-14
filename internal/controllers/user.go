@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"openIntern/internal/models"
+	"openIntern/internal/response"
 	"openIntern/internal/services"
 	"strconv"
 
@@ -13,29 +14,29 @@ import (
 func CreateUser(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 
 	if err := services.User.CreateUser(&user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusCreated, user)
+	response.JSONSuccess(c, http.StatusCreated, user)
 }
 
 func Register(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 	if err := services.User.CreateUser(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
-	c.JSON(http.StatusCreated, user)
+	response.JSONSuccess(c, http.StatusCreated, user)
 }
 
 func Login(c *gin.Context) {
@@ -44,20 +45,20 @@ func Login(c *gin.Context) {
 		Password   string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 	user, err := services.User.Authenticate(req.Identifier, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		response.Unauthorized(c)
 		return
 	}
 	token, expiresAt, err := services.GenerateToken(user.UserID, user.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
+	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"token":      token,
 		"expires_at": expiresAt,
 		"user":       user,
@@ -69,10 +70,10 @@ func GetUser(c *gin.Context) {
 	userID := c.Param("id")
 	user, err := services.User.GetUserByUserID(userID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		response.NotFound(c, "user not found")
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	response.JSONSuccess(c, http.StatusOK, user)
 }
 
 // UpdateUser 更新用户
@@ -80,26 +81,26 @@ func UpdateUser(c *gin.Context) {
 	userID := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 
 	if err := services.User.UpdateUser(userID, updates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "user updated successfully"})
+	response.JSONMessage(c, http.StatusOK, "user updated successfully")
 }
 
 // DeleteUser 删除用户
 func DeleteUser(c *gin.Context) {
 	userID := c.Param("id")
 	if err := services.User.DeleteUser(userID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "user deleted successfully"})
+	response.JSONMessage(c, http.StatusOK, "user deleted successfully")
 }
 
 // ListUsers 获取用户列表
@@ -109,11 +110,11 @@ func ListUsers(c *gin.Context) {
 
 	users, total, err := services.User.ListUsers(page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"data":  users,
 		"total": total,
 		"page":  page,

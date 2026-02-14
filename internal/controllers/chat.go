@@ -2,8 +2,8 @@ package controllers
 
 import (
 	"io"
-	"net/http"
 
+	"openIntern/internal/response"
 	"openIntern/internal/services"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
@@ -13,7 +13,7 @@ import (
 func ChatSSE(c *gin.Context) {
 	var input types.RunAgentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c)
 		return
 	}
 
