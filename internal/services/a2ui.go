@@ -4,6 +4,7 @@ import (
 	"errors"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
+	"strings"
 )
 
 type A2UIService struct{}
@@ -113,12 +114,17 @@ func (s *A2UIService) ListA2UIs(page, pageSize int, userID uint) ([]models.A2UI,
 }
 
 // ListOfficialA2UIs 获取官方 A2UI 列表
-func (s *A2UIService) ListOfficialA2UIs(page, pageSize int) ([]models.A2UI, int64, error) {
+func (s *A2UIService) ListOfficialA2UIs(page, pageSize int, keyword string) ([]models.A2UI, int64, error) {
 	var a2uis []models.A2UI
 	var total int64
 	offset := (page - 1) * pageSize
 
 	db := database.DB.Model(&models.A2UI{}).Where("type = ?", models.A2UITypeOfficial)
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		pattern := "%" + keyword + "%"
+		db = db.Where("(name LIKE ? OR description LIKE ?)", pattern, pattern)
+	}
 
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -132,7 +138,7 @@ func (s *A2UIService) ListOfficialA2UIs(page, pageSize int) ([]models.A2UI, int6
 }
 
 // ListCustomA2UIs 获取自定义 A2UI 列表
-func (s *A2UIService) ListCustomA2UIs(page, pageSize int, userID uint) ([]models.A2UI, int64, error) {
+func (s *A2UIService) ListCustomA2UIs(page, pageSize int, userID uint, keyword string) ([]models.A2UI, int64, error) {
 	var a2uis []models.A2UI
 	var total int64
 	offset := (page - 1) * pageSize
@@ -141,6 +147,11 @@ func (s *A2UIService) ListCustomA2UIs(page, pageSize int, userID uint) ([]models
 
 	if userID != 0 {
 		db = db.Where("user_id = ?", userID)
+	}
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		pattern := "%" + keyword + "%"
+		db = db.Where("(name LIKE ? OR description LIKE ?)", pattern, pattern)
 	}
 
 	if err := db.Count(&total).Error; err != nil {

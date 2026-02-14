@@ -81,38 +81,13 @@ func DeleteA2UI(c *gin.Context) {
 	response.JSONMessage(c, http.StatusOK, "a2ui deleted successfully")
 }
 
-// ListA2UIs 获取 A2UI 列表
-func ListA2UIs(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	userIDStr := c.Query("user_id")
-
-	var userID uint
-	if userIDStr != "" {
-		id, _ := strconv.Atoi(userIDStr)
-		userID = uint(id)
-	}
-
-	a2uis, total, err := services.A2UI.ListA2UIs(page, pageSize, userID)
-	if err != nil {
-		response.InternalError(c)
-		return
-	}
-
-	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"data":  a2uis,
-		"total": total,
-		"page":  page,
-		"size":  pageSize,
-	})
-}
-
 // ListOfficialA2UIs 获取官方 A2UI 列表
 func ListOfficialA2UIs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	keyword := c.Query("keyword")
 
-	a2uis, total, err := services.A2UI.ListOfficialA2UIs(page, pageSize)
+	a2uis, total, err := services.A2UI.ListOfficialA2UIs(page, pageSize, keyword)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -131,6 +106,7 @@ func ListCustomA2UIs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	userIDStr := c.Query("user_id")
+	keyword := c.Query("keyword")
 
 	var userID uint
 	if userIDStr != "" {
@@ -138,7 +114,7 @@ func ListCustomA2UIs(c *gin.Context) {
 		userID = uint(id)
 	}
 
-	a2uis, total, err := services.A2UI.ListCustomA2UIs(page, pageSize, userID)
+	a2uis, total, err := services.A2UI.ListCustomA2UIs(page, pageSize, userID, keyword)
 	if err != nil {
 		response.InternalError(c)
 		return
