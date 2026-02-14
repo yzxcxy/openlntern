@@ -14,6 +14,9 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 	services.InitAuth(cfg.JWT.Secret, cfg.JWT.ExpireMinutes)
+	if err := services.InitFile(cfg.COS); err != nil {
+		log.Fatalf("failed to init file service: %v", err)
+	}
 	r := routers.SetupRouter()
 	r.Run(cfg.Port)
 }

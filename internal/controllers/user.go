@@ -2,12 +2,15 @@ package controllers
 
 import (
 	"net/http"
+	"path"
+	"path/filepath"
 	"openIntern/internal/models"
 	"openIntern/internal/response"
 	"openIntern/internal/services"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // CreateUser 创建用户
@@ -102,6 +105,37 @@ func UpdateUser(c *gin.Context) {
 	}
 
 	response.JSONMessage(c, http.StatusOK, "user updated successfully")
+}
+
+func UploadAvatar(c *gin.Context) {
+	userID := c.Param("id")
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		response.BadRequest(c)
+		return
+	}
+	file, err := fileHeader.Open()
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	defer file.Close()
+
+	ext := filepath.Ext(fileHeader.Filename)
+	key := path.Join("avatar", userID, uuid.NewString()+ext)
+	url, err := services.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	if err := services.User.UpdateUser(userID, map[string]interface{}{"avatar": url}); err != nil {
+		response.InternalError(c)
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, gin.H{
+		"key": key,
+		"url": url,
+	})
 }
 
 // DeleteUser 删除用户

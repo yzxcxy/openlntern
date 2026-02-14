@@ -11,6 +11,7 @@ type Config struct {
 	Port  string      `yaml:"port"`
 	MySQL MySQLConfig `yaml:"mysql"`
 	JWT   JWTConfig   `yaml:"jwt"`
+	COS   COSConfig   `yaml:"cos"`
 }
 
 type MySQLConfig struct {
@@ -20,6 +21,13 @@ type MySQLConfig struct {
 type JWTConfig struct {
 	Secret        string `yaml:"secret"`
 	ExpireMinutes int    `yaml:"expire_minutes"`
+}
+
+type COSConfig struct {
+	SecretID  string `yaml:"secret_id"`
+	SecretKey string `yaml:"secret_key"`
+	Bucket    string `yaml:"bucket"`
+	Region    string `yaml:"region"`
 }
 
 func LoadConfig(configFile string) *Config {

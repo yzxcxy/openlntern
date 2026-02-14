@@ -34,6 +34,7 @@ func SetupRouter() *gin.Engine {
 		userGroup.GET("", controllers.ListUsers)
 		userGroup.GET("/:id", controllers.GetUser)
 		userGroup.PUT("/:id", controllers.UpdateUser)
+		userGroup.POST("/:id/avatar", controllers.UploadAvatar)
 		userGroup.DELETE("/:id", controllers.DeleteUser)
 	}
 
