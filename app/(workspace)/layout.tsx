@@ -3,7 +3,7 @@
 import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
 import { CopilotKitProvider } from "@copilotkit/react-core/v2";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { theme } from "../theme";
 
 const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
@@ -12,7 +12,7 @@ const activityRenderers = [A2UIMessageRenderer];
 type UserInfo = {
   username?: string;
   email?: string;
-  avatarUrl?: string;
+  avatar?: string;
 } | null;
 
 export default function WorkspaceLayout({
@@ -20,7 +20,10 @@ export default function WorkspaceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [userInfo] = useState<UserInfo>(() => {
+  const [userInfo, setUserInfo] = useState<UserInfo>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const readUserFromStorage = useCallback((): UserInfo => {
     if (typeof window === "undefined") return null;
     const storedUser = localStorage.getItem("user");
     if (!storedUser) return null;
@@ -29,9 +32,7 @@ export default function WorkspaceLayout({
     } catch {
       return null;
     }
-  });
-  const router = useRouter();
-  const pathname = usePathname();
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -39,6 +40,23 @@ export default function WorkspaceLayout({
       router.push("/login");
     }
   }, [router]);
+  useEffect(() => {
+    setUserInfo(readUserFromStorage());
+    const handleUserUpdated = () => {
+      setUserInfo(readUserFromStorage());
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "user") {
+        handleUserUpdated();
+      }
+    };
+    window.addEventListener("user-updated", handleUserUpdated);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("user-updated", handleUserUpdated);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [readUserFromStorage]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -120,9 +138,9 @@ export default function WorkspaceLayout({
               onClick={handleUserManage}
               className="flex w-full items-center gap-3 text-left hover:bg-gray-50"
             >
-              {userInfo?.avatarUrl ? (
+              {userInfo?.avatar ? (
                 <img
-                  src={userInfo.avatarUrl}
+                  src={userInfo.avatar}
                   alt={displayName}
                   className="h-9 w-9 rounded-full object-cover"
                 />
