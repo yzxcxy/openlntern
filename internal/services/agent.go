@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"io"
 	"openIntern/internal/agui"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
