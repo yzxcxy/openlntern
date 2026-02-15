@@ -1,9 +1,14 @@
 "use client";
 
-import { CopilotChat, useAgent } from "@copilotkit/react-core/v2";
+import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
+import { CopilotChat, CopilotKitProvider, useAgent } from "@copilotkit/react-core/v2";
 import { useEffect, useState } from "react";
+import { theme } from "../../theme";
 
-export default function ChatPage() {
+const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
+const activityRenderers = [A2UIMessageRenderer];
+
+function ChatContent() {
   const { agent } = useAgent();
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
@@ -208,5 +213,17 @@ export default function ChatPage() {
         chatInputPlaceholder: "请输入你的问题哦",
       }}
     />
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <CopilotKitProvider
+      runtimeUrl="/api/copilotkit"
+      showDevConsole="auto"
+      renderActivityMessages={activityRenderers}
+    >
+      <ChatContent />
+    </CopilotKitProvider>
   );
 }

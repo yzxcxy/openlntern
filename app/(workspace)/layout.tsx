@@ -1,13 +1,7 @@
 "use client";
 
-import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
-import { CopilotKitProvider } from "@copilotkit/react-core/v2";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { theme } from "../theme";
-
-const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
-const activityRenderers = [A2UIMessageRenderer];
 
 type UserInfo = {
   username?: string;
@@ -21,6 +15,7 @@ export default function WorkspaceLayout({
   children: React.ReactNode;
 }) {
   const [userInfo, setUserInfo] = useState<UserInfo>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const readUserFromStorage = useCallback((): UserInfo => {
@@ -77,111 +72,185 @@ export default function WorkspaceLayout({
   const isSkill = pathname.startsWith("/skills");
 
   return (
-    <CopilotKitProvider
-      runtimeUrl="/api/copilotkit"
-      showDevConsole="auto"
-      renderActivityMessages={activityRenderers}
+    <main
+      className="flex h-full w-screen overflow-hidden"
+      style={{ minHeight: "100dvh" }}
     >
-      <main
-        className="flex h-full w-screen overflow-hidden"
-        style={{ minHeight: "100dvh" }}
-      >
-        <aside className="flex h-full w-72 flex-col border-r bg-white">
-          <div className="flex-1 overflow-auto px-4 pb-4 pt-4">
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-white p-3">
-                <div className="text-sm font-semibold text-gray-900">
-                  快捷入口
-                </div>
-                <div className="mt-3 space-y-2 text-sm">
-                  <button
-                    onClick={() => router.push("/a2ui")}
-                    className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
-                      isA2ui ? "bg-gray-50" : ""
-                    }`}
+        <aside
+          className={`flex h-full flex-col border-r bg-white transition-all ${
+            isSidebarCollapsed ? "w-16" : "w-72"
+          }`}
+        >
+          <div className="px-4 pt-4">
+            <div
+              className={`relative flex items-center ${
+                isSidebarCollapsed
+                  ? "flex-col justify-center gap-3"
+                  : "justify-between"
+              }`}
+            >
+              <img
+                src="/openIntern_logo_concept_3_dialogue_flow.svg"
+                alt="openIntern"
+                className="h-8 w-8"
+              />
+              {!isSidebarCollapsed && (
+                <button
+                  onClick={() => setIsSidebarCollapsed(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-md border text-gray-500 hover:bg-gray-50"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    <span>A2UI 管理</span>
-                    <span className="text-xs text-gray-400">查看</span>
-                  </button>
-                  <button
-                    onClick={() => router.push("/chat")}
-                    className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
-                      isChat ? "bg-gray-50" : ""
-                    }`}
+                    <rect x="3" y="4" width="7" height="16" rx="2" />
+                    <path d="M14 8l4 4-4 4" />
+                  </svg>
+                </button>
+              )}
+              {isSidebarCollapsed && (
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-md border text-gray-500 hover:bg-gray-50"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    <span>对话</span>
-                    <span className="text-xs text-gray-400">进入</span>
-                  </button>
-                  <button
-                    onClick={() => router.push("/skills")}
-                    className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
-                      isSkill ? "bg-gray-50" : ""
-                    }`}
-                  >
-                    <span>Skill 市场</span>
-                    <span className="text-xs text-gray-400">查看</span>
-                  </button>
+                    <rect x="14" y="4" width="7" height="16" rx="2" />
+                    <path d="M10 8l-4 4 4 4" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div className={`mt-4 ${isSidebarCollapsed ? "flex justify-center" : ""}`}>
+              <button
+                onClick={() => router.push("/chat")}
+                className={`flex items-center rounded-full border px-3 py-2 text-gray-700 hover:bg-gray-50 ${
+                  isSidebarCollapsed ? "h-10 w-10 justify-center px-0" : "w-full justify-between"
+                } ${isChat ? "bg-gray-50" : ""}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border bg-white text-gray-600">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 8v8M8 12h8" />
+                    </svg>
+                  </span>
+                  {!isSidebarCollapsed && (
+                    <span className="text-sm font-semibold">新建对话</span>
+                  )}
                 </div>
-              </div>
-              <div className="rounded-lg border bg-white p-3">
-                <div className="text-sm font-semibold text-gray-900">
-                  历史会话
-                </div>
-                <div className="mt-3 space-y-3 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">置顶</span>
-                    <span>7-9月HRM系统首页与...</span>
+              </button>
+            </div>
+          </div>
+          {!isSidebarCollapsed && (
+            <div className="flex-1 overflow-auto px-4 pb-4 pt-4">
+              <div className="space-y-4">
+                <div className="rounded-lg border bg-white p-3">
+                  <div className="text-sm font-semibold text-gray-900">
+                    快捷入口
                   </div>
-                  <div>GORM迁移与MySQL文本</div>
-                  <div>MySQL 认证错误</div>
-                  <div>Python GIL逐步移除时间表</div>
-                  <div>技能存储位置</div>
-                  <button className="text-left text-sm font-semibold text-gray-800">
-                    查看全部
-                  </button>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <button
+                      onClick={() => router.push("/a2ui")}
+                      className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
+                        isA2ui ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <span>A2UI 管理</span>
+                      <span className="text-xs text-gray-400">查看</span>
+                    </button>
+                    <button
+                      onClick={() => router.push("/skills")}
+                      className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
+                        isSkill ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <span>Skill 市场</span>
+                      <span className="text-xs text-gray-400">查看</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-white p-3">
+                  <div className="text-sm font-semibold text-gray-900">
+                    历史会话
+                  </div>
+                  <div className="mt-3 space-y-3 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">置顶</span>
+                      <span>7-9月HRM系统首页与...</span>
+                    </div>
+                    <div>GORM迁移与MySQL文本</div>
+                    <div>MySQL 认证错误</div>
+                    <div>Python GIL逐步移除时间表</div>
+                    <div>技能存储位置</div>
+                    <button className="text-left text-sm font-semibold text-gray-800">
+                      查看全部
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div className="mx-4 mb-4 rounded-lg border px-3 py-2">
-            <button
-              onClick={handleUserManage}
-              className="flex w-full items-center gap-3 text-left hover:bg-gray-50"
-            >
-              {userInfo?.avatar ? (
-                <img
-                  src={userInfo.avatar}
-                  alt={displayName}
-                  className="h-9 w-9 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">
-                  {avatarLabel}
-                </div>
-              )}
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-gray-900">
-                  {displayName}
-                </span>
-                {displayEmail && (
-                  <span className="text-xs text-gray-500">{displayEmail}</span>
+          )}
+          {!isSidebarCollapsed && (
+            <div className="mx-4 mb-4 rounded-lg border px-3 py-2">
+              <button
+                onClick={handleUserManage}
+                className="flex w-full items-center gap-3 text-left hover:bg-gray-50"
+              >
+                {userInfo?.avatar ? (
+                  <img
+                    src={userInfo.avatar}
+                    alt={displayName}
+                    className="h-9 w-9 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">
+                    {avatarLabel}
+                  </div>
                 )}
-              </div>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-red-600 hover:bg-gray-50 hover:text-red-700"
-            >
-              退出登录
-            </button>
-          </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-900">
+                    {displayName}
+                  </span>
+                  {displayEmail && (
+                    <span className="text-xs text-gray-500">{displayEmail}</span>
+                  )}
+                </div>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-red-600 hover:bg-gray-50 hover:text-red-700"
+              >
+                退出登录
+              </button>
+            </div>
+          )}
         </aside>
         <section className="relative flex h-full flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-hidden bg-gray-50">
             {children}
           </div>
         </section>
-      </main>
-    </CopilotKitProvider>
+    </main>
   );
 }
