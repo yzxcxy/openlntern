@@ -31,7 +31,7 @@ type UserInfo = {
   role?: string;
 };
 
-const API_BASE = "http://localhost:8080";
+const API_BASE = "/api/backend";
 
 export default function A2uiPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);

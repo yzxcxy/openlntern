@@ -7,15 +7,14 @@ import { HttpAgent } from "@ag-ui/client";
 import { ExperimentalEmptyAdapter } from "@copilotkit/runtime";
 
 
-// 1. You can use any service adapter here for multi-agent support. We use
-//    the empty adapter since we're only using one agent.
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
-// 2. Create the CopilotRuntime instance and utilize the HttpAgent to setup the connection.
+const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
 const runtime = new CopilotRuntime({
   agents: {
     default: new HttpAgent({
-      url: "http://localhost:8080/v1/chat/sse",
+      url: `${apiBaseUrl}/v1/chat/sse`,
     }),
   },
 });

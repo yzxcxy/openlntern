@@ -14,7 +14,7 @@ type UserInfo = {
   updated_at?: string;
 };
 
-const API_BASE = "http://localhost:8080";
+const API_BASE = "/api/backend";
 
 export default function UserPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(() => {
