@@ -11,7 +11,7 @@ const normalizeBaseUrl = (value: string) => {
 
 const proxyRequest = async (
   request: NextRequest,
-  context: { params?: { path?: string[] } }
+  context: { params?: Promise<{ path?: string[] }> }
 ) => {
   if (!apiBaseUrl) {
     return NextResponse.json(
@@ -21,9 +21,9 @@ const proxyRequest = async (
   }
   const pathname = request.nextUrl.pathname;
   const fallbackPath = pathname.replace(/^\/api\/backend\/?/, "");
+  const params = await context.params;
   const pathSegments =
-    context.params?.path ??
-    (fallbackPath ? fallbackPath.split("/") : []);
+    params?.path ?? (fallbackPath ? fallbackPath.split("/") : []);
   const base = normalizeBaseUrl(apiBaseUrl);
   const targetUrl = new URL(`${base}/${pathSegments.join("/")}`);
   targetUrl.search = request.nextUrl.search;
