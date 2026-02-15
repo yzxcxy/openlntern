@@ -362,6 +362,68 @@ func CreateSkillMeta(c *gin.Context) {
 	response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "skill meta is read-only")
 }
 
+func GetOfficialSkillMetaByName(c *gin.Context) {
+	name, err := parseSkillName(c.Param("name"))
+	if err != nil {
+		response.BadRequest(c)
+		return
+	}
+
+	baseDir, err := skillBaseDir()
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	skillDir := filepath.Join(baseDir, officialSkillDirName, name)
+	skillFile := filepath.Join(skillDir, "SKILL.md")
+
+	skill, err := readSkillFromFile(skillFile, path.Join("official", name), "", "official")
+	if err != nil {
+		if os.IsNotExist(err) {
+			response.NotFound(c, "skill not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+
+	response.JSONSuccess(c, http.StatusOK, skill)
+}
+
+func GetCustomSkillMetaByName(c *gin.Context) {
+	name, err := parseSkillName(c.Param("name"))
+	if err != nil {
+		response.BadRequest(c)
+		return
+	}
+
+	userID, _, ok := getAuthUser(c)
+	if !ok {
+		response.Unauthorized(c)
+		return
+	}
+
+	baseDir, err := skillBaseDir()
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	skillDir := filepath.Join(baseDir, userID, name)
+	skillFile := filepath.Join(skillDir, "SKILL.md")
+
+	skill, err := readSkillFromFile(skillFile, path.Join(userID, name), userID, userID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			response.NotFound(c, "skill not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+
+	response.JSONSuccess(c, http.StatusOK, skill)
+}
+
 func GetSkillMeta(c *gin.Context) {
 	id := c.Param("id")
 	if strings.TrimSpace(id) == "" {
@@ -432,6 +494,68 @@ func UpdateSkillMeta(c *gin.Context) {
 
 func DeleteSkillMeta(c *gin.Context) {
 	response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "skill meta is read-only")
+}
+
+func ReadOfficialSkillContent(c *gin.Context) {
+	name, err := parseSkillName(c.Param("name"))
+	if err != nil {
+		response.BadRequest(c)
+		return
+	}
+
+	baseDir, err := skillBaseDir()
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	skillFile := filepath.Join(baseDir, officialSkillDirName, name, "SKILL.md")
+	content, err := os.ReadFile(skillFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			response.NotFound(c, "file not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, gin.H{
+		"name":    name,
+		"content": string(content),
+	})
+}
+
+func ReadCustomSkillContent(c *gin.Context) {
+	name, err := parseSkillName(c.Param("name"))
+	if err != nil {
+		response.BadRequest(c)
+		return
+	}
+
+	userID, _, ok := getAuthUser(c)
+	if !ok {
+		response.Unauthorized(c)
+		return
+	}
+
+	baseDir, err := skillBaseDir()
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	skillFile := filepath.Join(baseDir, userID, name, "SKILL.md")
+	content, err := os.ReadFile(skillFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			response.NotFound(c, "file not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, gin.H{
+		"name":    name,
+		"content": string(content),
+	})
 }
 
 func ListOfficialSkills(c *gin.Context) {
@@ -532,6 +656,21 @@ func cleanSkillPath(p string) (string, error) {
 	}
 	cleaned := path.Clean("/" + p)
 	return cleaned, nil
+}
+
+func parseSkillName(name string) (string, error) {
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		return "", err
+	}
+	decoded = strings.TrimSpace(decoded)
+	if decoded == "" {
+		return "", errors.New("invalid name")
+	}
+	if strings.Contains(decoded, "..") || strings.Contains(decoded, "/") || strings.Contains(decoded, "\\") {
+		return "", errors.New("invalid name")
+	}
+	return decoded, nil
 }
 
 func resolveSkillPath(cleaned string, baseSegment string) (string, string, error) {

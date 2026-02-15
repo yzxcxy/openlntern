@@ -56,17 +56,17 @@ func SetupRouter() *gin.Engine {
 	}
 
 	r.GET("/v1/skills", controllers.ListSkillFiles)
-	r.GET("/v1/skills/content", controllers.ReadSkillFile)
 	r.POST("/v1/skills", controllers.CreateSkillEntry)
 	r.PUT("/v1/skills/content", controllers.UpdateSkillFile)
 	r.DELETE("/v1/skills", controllers.DeleteSkillEntry)
+	r.GET("/v1/skills/content/official/:name", controllers.ReadOfficialSkillContent)
+	r.GET("/v1/skills/content/custom/:name", controllers.ReadCustomSkillContent)
 
 	r.POST("/v1/skills/meta", controllers.CreateSkillMeta)
 	r.GET("/v1/skills/meta/official", controllers.ListOfficialSkills)
 	r.GET("/v1/skills/meta/custom", controllers.ListCustomSkills)
-	r.GET("/v1/skills/meta/:id", controllers.GetSkillMeta)
-	r.PUT("/v1/skills/meta/:id", controllers.UpdateSkillMeta)
-	r.DELETE("/v1/skills/meta/:id", controllers.DeleteSkillMeta)
+	r.GET("/v1/skills/meta/official/:name", controllers.GetOfficialSkillMetaByName)
+	r.GET("/v1/skills/meta/custom/:name", controllers.GetCustomSkillMetaByName)
 
 	return r
 }
