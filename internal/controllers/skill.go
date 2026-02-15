@@ -68,7 +68,7 @@ func ListSkillFiles(c *gin.Context) {
 		return
 	}
 
-	entries, err := os.ReadDir(absPath)
+	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			response.JSONSuccess(c, http.StatusOK, []skillFileItem{})
@@ -77,24 +77,40 @@ func ListSkillFiles(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
+	if !info.IsDir() {
+		response.JSONSuccess(c, http.StatusOK, []skillFileItem{})
+		return
+	}
 
-	items := make([]skillFileItem, 0, len(entries))
-	for _, entry := range entries {
+	items := make([]skillFileItem, 0)
+	err = filepath.WalkDir(absPath, func(currentPath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
 		if entry.IsDir() {
-			continue
+			return nil
 		}
-		info, err := entry.Info()
+		stat, err := entry.Info()
 		if err != nil {
-			response.InternalError(c)
-			return
+			return err
 		}
-		entryPath := "/" + path.Join(relPath, entry.Name())
+		relToRoot, err := filepath.Rel(absPath, currentPath)
+		if err != nil {
+			return err
+		}
+		relToRoot = filepath.ToSlash(relToRoot)
+		entryPath := "/" + path.Join(relPath, relToRoot)
 		items = append(items, skillFileItem{
 			ID:   entryPath,
 			Type: "file",
-			Size: info.Size(),
-			Date: info.ModTime(),
+			Size: stat.Size(),
+			Date: stat.ModTime(),
 		})
+		return nil
+	})
+	if err != nil {
+		response.InternalError(c)
+		return
 	}
 
 	response.JSONSuccess(c, http.StatusOK, items)
