@@ -24,6 +24,8 @@ metadata:
 
 # 🏢 飞书办公套件
 
+[查看测试文档](references/test.txt)
+
 *Feishu/Lark Office Toolkit — 让 Agent 成为你的飞书办公助手*
 
 基于飞书开放平台 API 的全面集成工具包，覆盖日常办公六大核心场景。通过本技能包，你可以帮用户预约会议室、发送消息、发起审批、操作多维表格、查询通讯录和管理考勤。

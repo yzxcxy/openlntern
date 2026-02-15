@@ -27,7 +27,7 @@ type skillFileItem struct {
 	Date time.Time `json:"date"`
 }
 
-const officialSkillDirName = "offical"
+const officialSkillDirName = "official"
 
 type skillFrontmatter struct {
 	Name        string `yaml:"name"`
@@ -508,7 +508,33 @@ func ReadOfficialSkillContent(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	skillFile := filepath.Join(baseDir, officialSkillDirName, name, "SKILL.md")
+	skillDir := filepath.Join(baseDir, officialSkillDirName, name)
+	skillFile, err := resolveSkillContentPath(skillDir, c.Query("path"))
+	if err != nil {
+		if errors.Is(err, errInvalidPath) {
+			response.BadRequest(c)
+			return
+		}
+		if errors.Is(err, errOutOfScope) {
+			response.Forbidden(c)
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	info, err := os.Stat(skillFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			response.NotFound(c, "file not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	if info.IsDir() {
+		response.BadRequest(c)
+		return
+	}
 	content, err := os.ReadFile(skillFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -542,7 +568,33 @@ func ReadCustomSkillContent(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	skillFile := filepath.Join(baseDir, userID, name, "SKILL.md")
+	skillDir := filepath.Join(baseDir, userID, name)
+	skillFile, err := resolveSkillContentPath(skillDir, c.Query("path"))
+	if err != nil {
+		if errors.Is(err, errInvalidPath) {
+			response.BadRequest(c)
+			return
+		}
+		if errors.Is(err, errOutOfScope) {
+			response.Forbidden(c)
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	info, err := os.Stat(skillFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			response.NotFound(c, "file not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	if info.IsDir() {
+		response.BadRequest(c)
+		return
+	}
 	content, err := os.ReadFile(skillFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -624,6 +676,8 @@ func ListCustomSkills(c *gin.Context) {
 }
 
 var errUnauthorized = errors.New("unauthorized")
+var errInvalidPath = errors.New("invalid path")
+var errOutOfScope = errors.New("out of scope")
 
 func getAuthUser(c *gin.Context) (string, string, bool) {
 	authHeader := c.GetHeader("Authorization")
@@ -642,6 +696,18 @@ func getAuthUser(c *gin.Context) (string, string, bool) {
 }
 
 func skillBaseDir() (string, error) {
+	wd, err := os.Getwd()
+	if err == nil {
+		candidates := []string{
+			filepath.Join(wd, "internal", "skills"),
+			filepath.Join(wd, "openIntern_backend", "internal", "skills"),
+		}
+		for _, candidate := range candidates {
+			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
+				return filepath.Abs(candidate)
+			}
+		}
+	}
 	base := filepath.Join("internal", "skills")
 	return filepath.Abs(base)
 }
@@ -656,6 +722,41 @@ func cleanSkillPath(p string) (string, error) {
 	}
 	cleaned := path.Clean("/" + p)
 	return cleaned, nil
+}
+
+func resolveSkillContentPath(skillDir string, rawPath string) (string, error) {
+	if strings.TrimSpace(rawPath) == "" {
+		return filepath.Join(skillDir, "SKILL.md"), nil
+	}
+	decoded, err := url.PathUnescape(rawPath)
+	if err != nil {
+		return "", errInvalidPath
+	}
+	cleaned, err := cleanSkillPath(decoded)
+	if err != nil {
+		return "", errInvalidPath
+	}
+	rel := strings.TrimPrefix(cleaned, "/")
+	if rel == "" {
+		return "", errInvalidPath
+	}
+	target := filepath.Join(skillDir, rel)
+	skillDirAbs, err := filepath.Abs(skillDir)
+	if err != nil {
+		return "", err
+	}
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	relTo, err := filepath.Rel(skillDirAbs, targetAbs)
+	if err != nil {
+		return "", errOutOfScope
+	}
+	if relTo == "." || strings.HasPrefix(relTo, "..") {
+		return "", errOutOfScope
+	}
+	return targetAbs, nil
 }
 
 func parseSkillName(name string) (string, error) {
