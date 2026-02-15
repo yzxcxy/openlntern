@@ -109,8 +109,15 @@ func ListCustomA2UIs(c *gin.Context) {
 	keyword := c.Query("keyword")
 
 	if userID == "" {
-		response.BadRequest(c)
-		return
+		if value, ok := c.Get("user_id"); ok {
+			if id, ok := value.(string); ok {
+				userID = id
+			}
+		}
+		if userID == "" {
+			response.BadRequest(c)
+			return
+		}
 	}
 
 	a2uis, total, err := services.A2UI.ListCustomA2UIs(page, pageSize, userID, keyword)
