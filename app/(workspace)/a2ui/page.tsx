@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { A2UIViewer, type A2UIViewerProps } from "@copilotkit/a2ui-renderer";
 import {
   A2uiEditorModal,
   A2uiFormValues,
 } from "./components/A2uiEditorModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { Modal } from "./components/Modal";
 
 type A2UIType = "official" | "custom";
 
@@ -54,6 +56,7 @@ export default function A2uiPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<A2UI | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [previewTarget, setPreviewTarget] = useState<A2UI | null>(null);
   const router = useRouter();
 
   const isAdmin = userInfo?.role === "admin";
@@ -267,6 +270,91 @@ export default function A2uiPage() {
     }
   };
 
+  const openPreview = (item: A2UI) => {
+    setPreviewTarget(item);
+  };
+
+  const closePreview = () => {
+    setPreviewTarget(null);
+  };
+
+  const previewContent = useMemo(() => {
+    if (!previewTarget) {
+      return {
+        components: null as A2UIViewerProps["components"] | null,
+        root: null as string | null,
+        data: undefined as Record<string, unknown> | undefined,
+        error: "",
+      };
+    }
+
+    let components: A2UIViewerProps["components"] | null = null;
+    let root: string | null = null;
+    let data: Record<string, unknown> | undefined;
+    let error = "";
+
+    try {
+      const uiText = previewTarget.ui_json?.trim();
+      if (!uiText) {
+        error = "UI JSON 为空";
+      } else {
+        const ui = JSON.parse(uiText);
+        if (Array.isArray(ui)) {
+          components = ui;
+          root = ui[0]?.id ?? null;
+        } else if (ui && typeof ui === "object") {
+          const uiObj = ui as Record<string, unknown>;
+          if (Array.isArray(uiObj.components) && typeof uiObj.root === "string") {
+            components = uiObj.components as A2UIViewerProps["components"];
+            root = uiObj.root as string;
+          } else if (
+            Array.isArray(uiObj.components) &&
+            typeof uiObj.rootId === "string"
+          ) {
+            components = uiObj.components as A2UIViewerProps["components"];
+            root = uiObj.rootId as string;
+          } else if (
+            Array.isArray(uiObj.components) &&
+            typeof (uiObj.root as { id?: string } | undefined)?.id === "string"
+          ) {
+            components = uiObj.components as A2UIViewerProps["components"];
+            root = (uiObj.root as { id?: string }).id ?? null;
+          } else if (
+            Array.isArray(uiObj.nodes) &&
+            typeof uiObj.root === "string"
+          ) {
+            components = uiObj.nodes as A2UIViewerProps["components"];
+            root = uiObj.root as string;
+          } else {
+            error = "UI JSON 格式不符合预览要求";
+          }
+        } else {
+          error = "UI JSON 格式不正确";
+        }
+      }
+    } catch {
+      error = "UI JSON 解析失败";
+    }
+
+    try {
+      const dataText = previewTarget.data_json?.trim();
+      if (dataText) {
+        const parsed = JSON.parse(dataText);
+        if (parsed && typeof parsed === "object") {
+          data = parsed as Record<string, unknown>;
+        }
+      }
+    } catch {
+      error = error ? `${error}；数据 JSON 解析失败` : "数据 JSON 解析失败";
+    }
+
+    if (!error && (!components || !root)) {
+      error = "缺少可渲染的组件或根节点";
+    }
+
+    return { components, root, data, error };
+  }, [previewTarget]);
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const formatDateDisplay = (value?: string) => {
     if (!value) {
@@ -365,24 +453,33 @@ export default function A2uiPage() {
                         {item.description || "暂无描述"}
                       </div>
                     </div>
-                    {canManage && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          className="rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
-                          type="button"
-                          onClick={() => openEdit(item)}
-                        >
-                          编辑
-                        </button>
-                        <button
-                          className="rounded-md border px-3 py-1 text-xs text-red-600 hover:bg-red-50"
-                          type="button"
-                          onClick={() => openDelete(item)}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                        type="button"
+                        onClick={() => openPreview(item)}
+                      >
+                        预览
+                      </button>
+                      {canManage && (
+                        <>
+                          <button
+                            className="rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                            type="button"
+                            onClick={() => openEdit(item)}
+                          >
+                            编辑
+                          </button>
+                          <button
+                            className="rounded-md border px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+                            type="button"
+                            onClick={() => openDelete(item)}
+                          >
+                            删除
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
                     <div title={createdAt.full}>创建：{createdAt.label}</div>
@@ -444,6 +541,44 @@ export default function A2uiPage() {
         onConfirm={handleDelete}
         onCancel={closeDelete}
       />
+      <Modal
+        open={Boolean(previewTarget)}
+        title={previewTarget?.name ? `预览：${previewTarget.name}` : "预览"}
+        onClose={closePreview}
+      >
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className="rounded-lg border bg-white p-3">
+            {previewContent.error ? (
+              <div className="text-sm text-red-600">{previewContent.error}</div>
+            ) : previewContent.components && previewContent.root ? (
+              <div className="min-h-[220px]">
+                <A2UIViewer
+                  root={previewContent.root}
+                  components={previewContent.components}
+                  data={previewContent.data}
+                  className="w-full"
+                />
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">暂无可预览内容</div>
+            )}
+          </div>
+          <div className="space-y-3">
+            <label className="block text-xs text-gray-500">UI JSON</label>
+            <textarea
+              className="min-h-[160px] w-full rounded-md border px-3 py-2 text-xs text-gray-700"
+              value={previewTarget?.ui_json ?? ""}
+              readOnly
+            />
+            <label className="block text-xs text-gray-500">数据 JSON</label>
+            <textarea
+              className="min-h-[120px] w-full rounded-md border px-3 py-2 text-xs text-gray-700"
+              value={previewTarget?.data_json ?? ""}
+              readOnly
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
