@@ -28,7 +28,7 @@ type A2UI struct {
 	UIJSON   string `gorm:"type:text;not null" json:"ui_json"` // UI 组件结构的 JSON 字符串
 	DataJSON string `gorm:"type:text" json:"data_json"`        // 初始数据的 JSON 字符串
 
-	UserID uint `gorm:"index" json:"user_id"` // 所属用户 ID
+	UserID string `gorm:"index;size:36" json:"user_id"` // 所属用户 ID
 
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 

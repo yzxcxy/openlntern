@@ -105,13 +105,12 @@ func ListOfficialA2UIs(c *gin.Context) {
 func ListCustomA2UIs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	userIDStr := c.Query("user_id")
+	userID := c.Query("user_id")
 	keyword := c.Query("keyword")
 
-	var userID uint
-	if userIDStr != "" {
-		id, _ := strconv.Atoi(userIDStr)
-		userID = uint(id)
+	if userID == "" {
+		response.BadRequest(c)
+		return
 	}
 
 	a2uis, total, err := services.A2UI.ListCustomA2UIs(page, pageSize, userID, keyword)

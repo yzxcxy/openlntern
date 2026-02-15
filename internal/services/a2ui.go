@@ -91,14 +91,14 @@ func (s *A2UIService) DeleteA2UI(id string, operatorID string) error {
 }
 
 // ListA2UIs 获取 A2UI 列表（分页）
-func (s *A2UIService) ListA2UIs(page, pageSize int, userID uint) ([]models.A2UI, int64, error) {
+func (s *A2UIService) ListA2UIs(page, pageSize int, userID string) ([]models.A2UI, int64, error) {
 	var a2uis []models.A2UI
 	var total int64
 
 	offset := (page - 1) * pageSize
 
 	db := database.DB.Model(&models.A2UI{})
-	if userID != 0 {
+	if userID != "" {
 		db = db.Where("user_id = ?", userID)
 	}
 
@@ -138,14 +138,14 @@ func (s *A2UIService) ListOfficialA2UIs(page, pageSize int, keyword string) ([]m
 }
 
 // ListCustomA2UIs 获取自定义 A2UI 列表
-func (s *A2UIService) ListCustomA2UIs(page, pageSize int, userID uint, keyword string) ([]models.A2UI, int64, error) {
+func (s *A2UIService) ListCustomA2UIs(page, pageSize int, userID string, keyword string) ([]models.A2UI, int64, error) {
 	var a2uis []models.A2UI
 	var total int64
 	offset := (page - 1) * pageSize
 
 	db := database.DB.Model(&models.A2UI{}).Where("type = ?", models.A2UITypeCustom)
 
-	if userID != 0 {
+	if userID != "" {
 		db = db.Where("user_id = ?", userID)
 	}
 	keyword = strings.TrimSpace(keyword)
