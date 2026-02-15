@@ -55,5 +55,18 @@ func SetupRouter() *gin.Engine {
 		a2uiGroup.DELETE("/:id", controllers.DeleteA2UI)
 	}
 
+	r.GET("/v1/skills", controllers.ListSkillFiles)
+	r.GET("/v1/skills/content", controllers.ReadSkillFile)
+	r.POST("/v1/skills", controllers.CreateSkillEntry)
+	r.PUT("/v1/skills/content", controllers.UpdateSkillFile)
+	r.DELETE("/v1/skills", controllers.DeleteSkillEntry)
+
+	r.POST("/v1/skills/meta", controllers.CreateSkillMeta)
+	r.GET("/v1/skills/meta/official", controllers.ListOfficialSkills)
+	r.GET("/v1/skills/meta/custom", controllers.ListCustomSkills)
+	r.GET("/v1/skills/meta/:id", controllers.GetSkillMeta)
+	r.PUT("/v1/skills/meta/:id", controllers.UpdateSkillMeta)
+	r.DELETE("/v1/skills/meta/:id", controllers.DeleteSkillMeta)
+
 	return r
 }
