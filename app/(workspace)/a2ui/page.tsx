@@ -276,28 +276,11 @@ export default function A2uiPage() {
     if (Number.isNaN(date.getTime())) {
       return { label: value, full: value };
     }
-    const now = Date.now();
-    const diff = now - date.getTime();
-    if (diff < 60_000) {
-      return { label: "刚刚", full: date.toISOString() };
-    }
-    const minutes = Math.floor(diff / 60_000);
-    if (minutes < 60) {
-      return { label: `${minutes} 分钟前`, full: date.toISOString() };
-    }
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) {
-      return { label: `${hours} 小时前`, full: date.toISOString() };
-    }
-    const days = Math.floor(hours / 24);
-    if (days <= 7) {
-      return { label: `${days} 天前`, full: date.toISOString() };
-    }
     const pad = (num: number) => String(num).padStart(2, "0");
-    const full = `${date.getFullYear()}-${pad(
-      date.getMonth() + 1
-    )}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
-      date.getMinutes()
+    const full = `${date.getFullYear()}:${pad(date.getMonth() + 1)}:${pad(
+      date.getDate()
+    )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+      date.getSeconds()
     )}`;
     return { label: full, full };
   };
@@ -324,7 +307,7 @@ export default function A2uiPage() {
             <option value="custom">自定义 A2UI</option>
           </select>
           <button
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500"
+            className="rounded-md border bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
             type="button"
             onClick={handleSearch}
           >
@@ -412,7 +395,7 @@ export default function A2uiPage() {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-gray-600">
-          <div className="mr-auto flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <span>每页</span>
             <select
               className="rounded-md border px-2 py-1 text-sm"
