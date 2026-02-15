@@ -74,6 +74,7 @@ export default function WorkspaceLayout({
   const avatarLabel = displayName ? displayName.slice(0, 1) : "U";
   const isA2ui = pathname === "/a2ui";
   const isChat = pathname === "/chat";
+  const isSkill = pathname.startsWith("/skills");
 
   return (
     <CopilotKitProvider
@@ -110,6 +111,15 @@ export default function WorkspaceLayout({
                   >
                     <span>对话</span>
                     <span className="text-xs text-gray-400">进入</span>
+                  </button>
+                  <button
+                    onClick={() => router.push("/skills")}
+                    className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
+                      isSkill ? "bg-gray-50" : ""
+                    }`}
+                  >
+                    <span>Skill 市场</span>
+                    <span className="text-xs text-gray-400">查看</span>
                   </button>
                 </div>
               </div>

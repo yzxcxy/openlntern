@@ -15,10 +15,13 @@
     "@copilotkit/a2ui-renderer": "1.51.3",
     "@copilotkit/react-core": "1.51.3",
     "@copilotkit/runtime": "1.51.3",
+    "gray-matter": "^4.0.3",
     "hono": "^4.6.18",
     "next": "^16.0.10",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^3.25.75"
   },
   "devDependencies": {
