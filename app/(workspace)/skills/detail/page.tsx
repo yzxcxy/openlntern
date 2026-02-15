@@ -333,6 +333,130 @@ export default function SkillDetailPage() {
     },
     [skillPath]
   );
+  const getFileExtension = (value: string) => {
+    const name = value.split("/").filter(Boolean).pop() ?? "";
+    const dotIndex = name.lastIndexOf(".");
+    if (dotIndex <= 0 || dotIndex === name.length - 1) return "";
+    return name.slice(dotIndex + 1).toLowerCase();
+  };
+  const renderFileIcon = (item: SkillFileItem, fileId: string) => {
+    const type = (item.type ?? "").toLowerCase();
+    if (type === "dir" || type === "directory") {
+      return (
+        <svg
+          className="h-4 w-4 text-amber-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H3z" />
+          <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2" />
+        </svg>
+      );
+    }
+    const ext = getFileExtension(fileId);
+    if (["md", "markdown"].includes(ext)) {
+      return (
+        <svg
+          className="h-4 w-4 text-indigo-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+          <path d="M14 3v5h5" />
+          <path d="M9 13h6M9 17h6" />
+        </svg>
+      );
+    }
+    if (["json", "yaml", "yml", "toml", "ini"].includes(ext)) {
+      return (
+        <svg
+          className="h-4 w-4 text-emerald-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 4h6l2 2h8v14H4z" />
+          <path d="M8 12h8M8 16h8M8 8h2" />
+        </svg>
+      );
+    }
+    if (["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "rb"].includes(ext)) {
+      return (
+        <svg
+          className="h-4 w-4 text-blue-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M7 8l-4 4 4 4" />
+          <path d="M17 8l4 4-4 4" />
+          <path d="M10 20l4-16" />
+        </svg>
+      );
+    }
+    if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"].includes(ext)) {
+      return (
+        <svg
+          className="h-4 w-4 text-pink-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <circle cx="8" cy="10" r="1.5" />
+          <path d="M21 16l-5-5-6 6-3-3-4 4" />
+        </svg>
+      );
+    }
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) {
+      return (
+        <svg
+          className="h-4 w-4 text-orange-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+          <path d="M14 3v5h5" />
+          <path d="M11 10h2M11 13h2M11 16h2" />
+        </svg>
+      );
+    }
+    return (
+      <svg
+        className="h-4 w-4 text-gray-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+        <path d="M14 3v5h5" />
+      </svg>
+    );
+  };
   const openFileModal = async (fileId: string) => {
     const relativePath = toRelativeFilePath(fileId);
     setSelectedFile(fileId);
@@ -665,8 +789,11 @@ export default function SkillDetailPage() {
                       <div className="mt-2 space-y-1">
                         {(fileItems ?? []).map((item, index) => {
                           const fileId = item.id ?? "";
-                          const fileName =
-                            fileId.split("/").filter(Boolean).pop() || "未知文件";
+                          const relativePath = toRelativeFilePath(fileId);
+                          const displayName =
+                            relativePath ||
+                            fileId.split("/").filter(Boolean).pop() ||
+                            "未知文件";
                           const isActive = fileId === selectedFile;
                           return (
                             <button
@@ -679,19 +806,10 @@ export default function SkillDetailPage() {
                               }`}
                               onClick={() => openFileModal(fileId)}
                             >
-                              <svg
-                                className="h-4 w-4 text-gray-500"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-                                <path d="M14 3v5h5" />
-                              </svg>
-                              <span className="truncate">{fileName}</span>
+                              {renderFileIcon(item, fileId)}
+                              <span className="whitespace-normal break-all">
+                                {displayName}
+                              </span>
                             </button>
                           );
                         })}
