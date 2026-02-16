@@ -5,10 +5,16 @@ go 1.25.5
 require (
 	github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260208083914-f2ebe6b1e49d
 	github.com/gin-gonic/gin v1.11.0
+	github.com/redis/go-redis/v9 v9.7.0
 	golang.org/x/crypto v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.1
+)
+
+require (
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 )
 
 require (

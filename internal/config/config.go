@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Port  string      `yaml:"port"`
 	MySQL MySQLConfig `yaml:"mysql"`
+	Redis RedisConfig `yaml:"redis"`
 	JWT   JWTConfig   `yaml:"jwt"`
 	COS   COSConfig   `yaml:"cos"`
 }
@@ -21,6 +22,12 @@ type MySQLConfig struct {
 type JWTConfig struct {
 	Secret        string `yaml:"secret"`
 	ExpireMinutes int    `yaml:"expire_minutes"`
+}
+
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
 }
 
 type COSConfig struct {

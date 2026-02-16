@@ -44,6 +44,13 @@ func SetupRouter() *gin.Engine {
 		authGroup.POST("/login", controllers.Login)
 	}
 
+	threadGroup := r.Group("/v1/threads", middleware.AuthRequired())
+	{
+		threadGroup.GET("", controllers.ListThreads)
+		threadGroup.GET("/:thread_id", controllers.GetThread)
+		threadGroup.GET("/:thread_id/messages", controllers.ListMessages)
+	}
+
 	// A2UI routes
 	a2uiGroup := r.Group("/v1/a2uis", middleware.AuthRequired())
 	{

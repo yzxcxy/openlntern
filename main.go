@@ -13,6 +13,9 @@ func main() {
 	if err := database.Init(cfg.MySQL.DSN); err != nil {
 		log.Fatalf("failed to connect database: %v", err)
 	}
+	if err := database.InitRedis(cfg.Redis); err != nil {
+		log.Fatalf("failed to init redis: %v", err)
+	}
 	services.InitAuth(cfg.JWT.Secret, cfg.JWT.ExpireMinutes)
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
