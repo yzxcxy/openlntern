@@ -1,6 +1,6 @@
 import {
   CopilotRuntime,
-  createCopilotEndpoint,
+  createCopilotEndpointSingleRoute,
 } from "@copilotkit/runtime/v2";
 import { handle } from "hono/vercel";
 import { HttpAgent } from "@ag-ui/client";
@@ -20,7 +20,7 @@ const runtime = new CopilotRuntime({
 });
 
 
-const app = createCopilotEndpoint({
+const app = createCopilotEndpointSingleRoute({
   runtime,
   basePath: "/api/copilotkit",
 });

@@ -9,6 +9,13 @@ type UserInfo = {
   avatar?: string;
 } | null;
 
+const createThreadId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 export default function WorkspaceLayout({
   children,
 }: {
@@ -16,6 +23,13 @@ export default function WorkspaceLayout({
 }) {
   const [userInfo, setUserInfo] = useState<UserInfo>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [historyItems] = useState(() => [
+    { id: createThreadId(), title: "7-9月HRM系统首页与...", pinned: true },
+    { id: createThreadId(), title: "GORM迁移与MySQL文本", pinned: false },
+    { id: createThreadId(), title: "MySQL 认证错误", pinned: false },
+    { id: createThreadId(), title: "Python GIL逐步移除时间表", pinned: false },
+    { id: createThreadId(), title: "技能存储位置", pinned: false },
+  ]);
   const router = useRouter();
   const pathname = usePathname();
   const readUserFromStorage = useCallback((): UserInfo => {
@@ -135,7 +149,7 @@ export default function WorkspaceLayout({
             </div>
             <div className={`mt-4 ${isSidebarCollapsed ? "flex justify-center" : ""}`}>
               <button
-                onClick={() => router.push("/chat")}
+                onClick={() => router.push(`/chat?threadId=${createThreadId()}`)}
                 className={`flex items-center rounded-full border px-3 py-2 text-gray-700 hover:bg-gray-50 ${
                   isSidebarCollapsed ? "h-10 w-10 justify-center px-0" : "w-full justify-between"
                 } ${isChat ? "bg-gray-50" : ""}`}
@@ -274,14 +288,18 @@ export default function WorkspaceLayout({
                     历史会话
                   </div>
                   <div className="mt-3 space-y-3 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">置顶</span>
-                      <span>7-9月HRM系统首页与...</span>
-                    </div>
-                    <div>GORM迁移与MySQL文本</div>
-                    <div>MySQL 认证错误</div>
-                    <div>Python GIL逐步移除时间表</div>
-                    <div>技能存储位置</div>
+                    {historyItems.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => router.push(`/chat?threadId=${item.id}`)}
+                        className="flex w-full items-center gap-2 text-left"
+                      >
+                        {item.pinned && (
+                          <span className="text-xs text-gray-400">置顶</span>
+                        )}
+                        <span>{item.title}</span>
+                      </button>
+                    ))}
                     <button className="flex items-center gap-2 text-left text-sm font-semibold text-gray-800">
                       查看全部
                       <svg
