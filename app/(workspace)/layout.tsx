@@ -85,7 +85,7 @@ export default function WorkspaceLayout({
             <div
               className={`relative flex items-center ${
                 isSidebarCollapsed
-                  ? "flex-col justify-center gap-3"
+                  ? "flex-col-reverse justify-center gap-3"
                   : "justify-between"
               }`}
             >
@@ -166,7 +166,21 @@ export default function WorkspaceLayout({
             <div className="flex-1 overflow-auto px-4 pb-4 pt-4">
               <div className="space-y-4">
                 <div className="rounded-lg border bg-white p-3">
-                  <div className="text-sm font-semibold text-gray-900">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                    <svg
+                      className="h-4 w-4 text-gray-500"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+                      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+                      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+                      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+                    </svg>
                     快捷入口
                   </div>
                   <div className="mt-3 space-y-2 text-sm">
@@ -176,8 +190,35 @@ export default function WorkspaceLayout({
                         isA2ui ? "bg-gray-50" : ""
                       }`}
                     >
-                      <span>A2UI 管理</span>
-                      <span className="text-xs text-gray-400">查看</span>
+                      <span className="flex items-center gap-2">
+                        <svg
+                          className="h-4 w-4 text-gray-500"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="3" y="5" width="18" height="14" rx="2" />
+                          <path d="M7 9h10M7 13h6" />
+                        </svg>
+                        A2UI 管理
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        查看
+                        <svg
+                          className="h-3.5 w-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 5l6 7-6 7" />
+                        </svg>
+                      </span>
                     </button>
                     <button
                       onClick={() => router.push("/skills")}
@@ -185,13 +226,51 @@ export default function WorkspaceLayout({
                         isSkill ? "bg-gray-50" : ""
                       }`}
                     >
-                      <span>Skill 市场</span>
-                      <span className="text-xs text-gray-400">查看</span>
+                      <span className="flex items-center gap-2">
+                        <svg
+                          className="h-4 w-4 text-gray-500"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.7-4.9 2.7.9-5.5-4-3.9 5.5-.8L12 3z" />
+                        </svg>
+                        Skill 市场
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        查看
+                        <svg
+                          className="h-3.5 w-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 5l6 7-6 7" />
+                        </svg>
+                      </span>
                     </button>
                   </div>
                 </div>
                 <div className="rounded-lg border bg-white p-3">
-                  <div className="text-sm font-semibold text-gray-900">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                    <svg
+                      className="h-4 w-4 text-gray-500"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="8" />
+                      <path d="M12 8v4l3 2" />
+                    </svg>
                     历史会话
                   </div>
                   <div className="mt-3 space-y-3 text-sm text-gray-600">
@@ -203,8 +282,19 @@ export default function WorkspaceLayout({
                     <div>MySQL 认证错误</div>
                     <div>Python GIL逐步移除时间表</div>
                     <div>技能存储位置</div>
-                    <button className="text-left text-sm font-semibold text-gray-800">
+                    <button className="flex items-center gap-2 text-left text-sm font-semibold text-gray-800">
                       查看全部
+                      <svg
+                        className="h-4 w-4 text-gray-500"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M9 5l6 7-6 7" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -239,8 +329,21 @@ export default function WorkspaceLayout({
               </button>
               <button
                 onClick={handleLogout}
-                className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-red-600 hover:bg-gray-50 hover:text-red-700"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm text-red-600 hover:bg-gray-50 hover:text-red-700"
               >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <path d="M16 17l5-5-5-5" />
+                  <path d="M21 12H9" />
+                </svg>
                 退出登录
               </button>
             </div>

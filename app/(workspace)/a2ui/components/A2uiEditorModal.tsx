@@ -34,18 +34,41 @@ export function A2uiEditorModal({
       footer={
         <>
           <button
-            className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             type="button"
             onClick={onClose}
           >
+            <svg
+              className="h-4 w-4 text-gray-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 6l12 12" />
+              <path d="M6 18L18 6" />
+            </svg>
             取消
           </button>
           <button
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-60"
             type="button"
             onClick={onSave}
             disabled={saving}
           >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M5 12l4 4L19 6" />
+            </svg>
             {saving ? "保存中..." : "保存"}
           </button>
         </>

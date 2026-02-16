@@ -28,9 +28,21 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
           <div className="text-sm font-semibold text-gray-900">{title}</div>
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+            className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
             onClick={onClose}
           >
+            <svg
+              className="h-3.5 w-3.5 text-gray-400"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 6l12 12" />
+              <path d="M6 18L18 6" />
+            </svg>
             关闭
           </button>
         </div>

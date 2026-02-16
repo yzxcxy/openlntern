@@ -643,10 +643,21 @@ export default function SkillDetailPage() {
     <div className="h-full overflow-auto p-6">
       <div className="rounded-xl border bg-white p-6 shadow-sm">
         <button
-          className="mb-4 text-sm text-gray-500 hover:text-gray-700"
+          className="mb-4 flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
           type="button"
           onClick={() => router.push("/skills")}
         >
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
           返回 Skill 市场
         </button>
         {loading ? (
@@ -767,9 +778,21 @@ export default function SkillDetailPage() {
                       <span>文件列表</span>
                       <button
                         type="button"
-                        className="text-gray-400 hover:text-gray-600"
+                        className="flex items-center gap-1 text-gray-400 hover:text-gray-600"
                         onClick={fetchFileList}
                       >
+                        <svg
+                          className="h-3.5 w-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M20 11a8 8 0 1 1-2.3-5.7" />
+                          <path d="M20 4v7h-7" />
+                        </svg>
                         刷新
                       </button>
                     </div>

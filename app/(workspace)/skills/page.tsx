@@ -118,7 +118,7 @@ export default function SkillsPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className={`rounded-md border px-4 py-2 text-sm ${
+              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm ${
                 category === "official"
                   ? "border-gray-400 bg-gray-50 text-gray-900"
                   : "border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -128,11 +128,22 @@ export default function SkillsPage() {
                 setPage(1);
               }}
             >
+              <svg
+                className="h-4 w-4 text-gray-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.7-4.9 2.7.9-5.5-4-3.9 5.5-.8L12 3z" />
+              </svg>
               官方 Skill
             </button>
             <button
               type="button"
-              className={`rounded-md border px-4 py-2 text-sm ${
+              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm ${
                 category === "custom"
                   ? "border-gray-400 bg-gray-50 text-gray-900"
                   : "border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -142,14 +153,37 @@ export default function SkillsPage() {
                 setPage(1);
               }}
             >
+              <svg
+                className="h-4 w-4 text-gray-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M8 3a3 3 0 0 1 6 0v1h1.2a2.8 2.8 0 1 1 0 5.6H14V12h2.2a2.8 2.8 0 1 1 0 5.6H14V20a3 3 0 0 1-6 0v-1H6.8a2.8 2.8 0 1 1 0-5.6H8V9.6H5.8a2.8 2.8 0 1 1 0-5.6H8V3z" />
+              </svg>
               自定义 Skill
             </button>
           </div>
           <button
-            className="rounded-md border bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
+            className="flex items-center gap-2 rounded-md border bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
             type="button"
             onClick={handleSearch}
           >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
             搜索
           </button>
         </div>
@@ -229,23 +263,45 @@ export default function SkillsPage() {
             </select>
           </div>
           <button
-            className="rounded-md border px-3 py-1 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md border px-3 py-1 disabled:opacity-50"
             type="button"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={page <= 1}
           >
+            <svg
+              className="h-4 w-4 text-gray-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
             上一页
           </button>
           <span>
             {page} / {totalPages}
           </span>
           <button
-            className="rounded-md border px-3 py-1 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md border px-3 py-1 disabled:opacity-50"
             type="button"
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={page >= totalPages}
           >
             下一页
+            <svg
+              className="h-4 w-4 text-gray-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 6l6 6-6 6" />
+            </svg>
           </button>
         </div>
       </div>

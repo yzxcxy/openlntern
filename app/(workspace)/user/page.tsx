@@ -261,9 +261,21 @@ export default function UserPage() {
             <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={handleAvatarClick}
-                className="rounded-md border px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
                 type="button"
               >
+                <svg
+                  className="h-3.5 w-3.5 text-gray-500"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 7h4l2-2h4l2 2h4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z" />
+                  <circle cx="12" cy="13" r="3" />
+                </svg>
                 更换头像
               </button>
               <input
@@ -283,7 +295,21 @@ export default function UserPage() {
             {editing ? (
               <div className="grid gap-4">
                 <label className="space-y-1 text-sm text-gray-600">
-                  <span>用户名</span>
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="h-3.5 w-3.5 text-gray-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 20a8 8 0 0 1 16 0" />
+                    </svg>
+                    用户名
+                  </span>
                   <input
                     className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
                     value={formValues.username}
@@ -296,7 +322,21 @@ export default function UserPage() {
                   />
                 </label>
                 <label className="space-y-1 text-sm text-gray-600">
-                  <span>邮箱</span>
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="h-3.5 w-3.5 text-gray-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 6h16v12H4z" />
+                      <path d="M4 7l8 6 8-6" />
+                    </svg>
+                    邮箱
+                  </span>
                   <input
                     className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
                     value={formValues.email}
@@ -309,7 +349,21 @@ export default function UserPage() {
                   />
                 </label>
                 <label className="space-y-1 text-sm text-gray-600">
-                  <span>手机号</span>
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="h-3.5 w-3.5 text-gray-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="7" y="2" width="10" height="20" rx="2" />
+                      <path d="M11 18h2" />
+                    </svg>
+                    手机号
+                  </span>
                   <input
                     className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
                     value={formValues.phone}
@@ -322,7 +376,22 @@ export default function UserPage() {
                   />
                 </label>
                 <label className="space-y-1 text-sm text-gray-600">
-                  <span>密码</span>
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="h-3.5 w-3.5 text-gray-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M7 10V7a5 5 0 0 1 10 0v3" />
+                      <rect x="5" y="10" width="14" height="10" rx="2" />
+                      <circle cx="12" cy="15" r="1" />
+                    </svg>
+                    密码
+                  </span>
                   <input
                     type="password"
                     className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
@@ -335,25 +404,80 @@ export default function UserPage() {
             ) : (
               <div className="grid gap-3 text-sm text-gray-600">
                 <div className="rounded-lg border px-3 py-2">
-                  <div className="text-xs text-gray-400">用户名</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 20a8 8 0 0 1 16 0" />
+                    </svg>
+                    用户名
+                  </div>
                   <div className="text-gray-900">
                     {userInfo?.username || "-"}
                   </div>
                 </div>
                 <div className="rounded-lg border px-3 py-2">
-                  <div className="text-xs text-gray-400">邮箱</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 6h16v12H4z" />
+                      <path d="M4 7l8 6 8-6" />
+                    </svg>
+                    邮箱
+                  </div>
                   <div className="text-gray-900">
                     {userInfo?.email || "-"}
                   </div>
                 </div>
                 <div className="rounded-lg border px-3 py-2">
-                  <div className="text-xs text-gray-400">手机号</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="7" y="2" width="10" height="20" rx="2" />
+                      <path d="M11 18h2" />
+                    </svg>
+                    手机号
+                  </div>
                   <div className="text-gray-900">
                     {userInfo?.phone || "-"}
                   </div>
                 </div>
                 <div className="rounded-lg border px-3 py-2">
-                  <div className="text-xs text-gray-400">角色</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 2l3 6 6 .8-4.5 4.2 1 6-5.5-3-5.5 3 1-6L3 8.8 9 8l3-6z" />
+                    </svg>
+                    角色
+                  </div>
                   <div className="text-gray-900">
                     {userInfo?.role || "-"}
                   </div>
@@ -371,36 +495,84 @@ export default function UserPage() {
             <>
               <button
                 onClick={cancelEdit}
-                className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 type="button"
                 disabled={saving}
               >
+                <svg
+                  className="h-4 w-4 text-gray-500"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M6 6l12 12" />
+                  <path d="M6 18L18 6" />
+                </svg>
                 取消
               </button>
               <button
                 onClick={handleSave}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-60"
                 type="button"
                 disabled={saving}
               >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12l4 4L19 6" />
+                </svg>
                 {saving ? "保存中..." : "保存"}
               </button>
             </>
           ) : (
             <button
               onClick={startEdit}
-              className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
               type="button"
               disabled={loading}
             >
+              <svg
+                className="h-4 w-4 text-gray-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
               编辑信息
             </button>
           )}
           <button
             onClick={() => router.push("/")}
-            className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
             type="button"
           >
+            <svg
+              className="h-4 w-4 text-gray-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 11l9-7 9 7" />
+              <path d="M5 10v10h14V10" />
+              <path d="M9 20v-6h6v6" />
+            </svg>
             返回首页
           </button>
         </div>
