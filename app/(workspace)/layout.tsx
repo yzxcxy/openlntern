@@ -121,6 +121,16 @@ export default function WorkspaceLayout({
   }, [fetchThreads]);
 
   useEffect(() => {
+    const handleThreadsRefresh = () => {
+      fetchThreads();
+    };
+    window.addEventListener("threads-refresh", handleThreadsRefresh);
+    return () => {
+      window.removeEventListener("threads-refresh", handleThreadsRefresh);
+    };
+  }, [fetchThreads]);
+
+  useEffect(() => {
     if (!contextMenu) return;
     const handleClose = () => setContextMenu(null);
     window.addEventListener("click", handleClose);

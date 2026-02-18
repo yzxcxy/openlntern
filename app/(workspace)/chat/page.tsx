@@ -234,6 +234,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
       role: "user",
       content,
     });
+    window.dispatchEvent(new Event("threads-refresh"));
     setInputValue("");
   };
 
