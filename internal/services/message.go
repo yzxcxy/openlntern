@@ -76,3 +76,21 @@ func (s *MessageService) ListMessages(ownerID, threadID string, page, pageSize i
 
 	return messages, total, nil
 }
+
+func (s *MessageService) ListThreadMessages(threadID string) ([]models.Message, error) {
+	if threadID == "" {
+		return nil, errors.New("thread_id is required")
+	}
+	var messages []models.Message
+	if err := database.DB.Where("thread_id = ?", threadID).Order("created_at asc").Find(&messages).Error; err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
+func (s *MessageService) CreateMessages(messages []models.Message) error {
+	if len(messages) == 0 {
+		return nil
+	}
+	return database.DB.Create(&messages).Error
+}

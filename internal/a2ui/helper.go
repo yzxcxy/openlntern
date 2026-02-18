@@ -19,7 +19,7 @@ type A2UIResponse struct {
 }
 
 // SendA2UIResponse 统一封装 A2UI 消息的发送流程
-func SendA2UIResponse(s *agui.Sender, resp A2UIResponse) error {
+func SendA2UIResponse(s agui.A2UISender, resp A2UIResponse) error {
 	// 默认 SurfaceID 处理
 	if resp.SurfaceID == "" {
 		resp.SurfaceID = "default"

@@ -105,3 +105,40 @@ func (s *ThreadService) GetThread(ownerID, threadID string) (*models.Thread, err
 
 	return &thread, nil
 }
+
+func (s *ThreadService) EnsureThread(ownerID, threadID, title string) (*models.Thread, error) {
+	if ownerID == "" || threadID == "" {
+		return nil, errors.New("owner_id and thread_id are required")
+	}
+	var thread models.Thread
+	err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error
+	if err == nil {
+		updates := map[string]any{}
+		if thread.OwnerID == "" && ownerID != "" {
+			updates["owner_id"] = ownerID
+			thread.OwnerID = ownerID
+		}
+		if thread.Title == "" && title != "" {
+			updates["title"] = title
+			thread.Title = title
+		}
+		if len(updates) > 0 {
+			if err := database.DB.Model(&thread).Updates(updates).Error; err != nil {
+				return nil, err
+			}
+		}
+		return &thread, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		thread = models.Thread{
+			ThreadID: threadID,
+			OwnerID:  ownerID,
+			Title:    title,
+		}
+		if err := database.DB.Create(&thread).Error; err != nil {
+			return nil, err
+		}
+		return &thread, nil
+	}
+	return nil, err
+}

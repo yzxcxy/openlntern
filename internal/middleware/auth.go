@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"log"
+	"strconv"
 	"strings"
 
 	"openIntern/internal/response"
@@ -12,6 +14,7 @@ import (
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
+		log.Printf("interface %s,Authorization header: %s",c.FullPath(), authHeader)
 		if authHeader == "" {
 			response.Unauthorized(c)
 			c.Abort()
@@ -28,6 +31,11 @@ func AuthRequired() gin.HandlerFunc {
 			response.Unauthorized(c)
 			c.Abort()
 			return
+		}
+		refreshedToken, expiresAt, err := services.GenerateToken(claims.UserID, claims.Role)
+		if err == nil {
+			c.Header("X-Access-Token", refreshedToken)
+			c.Header("X-Token-Expires", strconv.FormatInt(expiresAt, 10))
 		}
 		c.Set("user_id", claims.UserID)
 		c.Set("role", claims.Role)

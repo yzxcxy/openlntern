@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"io"
+	"log"
 
 	"openIntern/internal/response"
 	"openIntern/internal/services"
 
+	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	"github.com/gin-gonic/gin"
 )
@@ -13,9 +15,26 @@ import (
 func ChatSSE(c *gin.Context) {
 	var input types.RunAgentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Printf("ChatSSE bind failed client_ip=%s err=%v", c.ClientIP(), err)
 		response.BadRequest(c)
 		return
 	}
+
+	if input.ThreadID == "" {
+		input.ThreadID = events.GenerateThreadID()
+	}
+	ownerID := c.GetString("user_id")
+	if ownerID == "" {
+		response.Unauthorized(c)
+		return
+	}
+	if _, err := services.Thread.EnsureThread(ownerID, input.ThreadID, ""); err != nil {
+		log.Printf("ChatSSE ensure thread failed thread_id=%s client_ip=%s err=%v", input.ThreadID, c.ClientIP(), err)
+		response.InternalError(c)
+		return
+	}
+
+	log.Printf("ChatSSE start thread_id=%s run_id=%s messages=%d client_ip=%s", input.ThreadID, input.RunID, len(input.Messages), c.ClientIP())
 
 	// Set headers for SSE
 	c.Header("Content-Type", "text/event-stream")
@@ -24,7 +43,11 @@ func ChatSSE(c *gin.Context) {
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	c.Stream(func(w io.Writer) bool {
-		services.RunAgent(c.Request.Context(), w, &input)
+		if err := services.RunAgent(c.Request.Context(), w, &input); err != nil {
+			log.Printf("ChatSSE run failed thread_id=%s run_id=%s client_ip=%s err=%v", input.ThreadID, input.RunID, c.ClientIP(), err)
+		} else {
+			log.Printf("ChatSSE run success thread_id=%s run_id=%s client_ip=%s", input.ThreadID, input.RunID, c.ClientIP())
+		}
 		return false
 	})
 }

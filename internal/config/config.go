@@ -13,6 +13,7 @@ type Config struct {
 	Redis RedisConfig `yaml:"redis"`
 	JWT   JWTConfig   `yaml:"jwt"`
 	COS   COSConfig   `yaml:"cos"`
+	LLM   LLMConfig   `yaml:"llm"`
 }
 
 type MySQLConfig struct {
@@ -35,6 +36,11 @@ type COSConfig struct {
 	SecretKey string `yaml:"secret_key"`
 	Bucket    string `yaml:"bucket"`
 	Region    string `yaml:"region"`
+}
+
+type LLMConfig struct {
+	Model            string   `yaml:"model"`
+	APIKey           string   `yaml:"api_key"`
 }
 
 func LoadConfig(configFile string) *Config {

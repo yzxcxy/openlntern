@@ -20,6 +20,9 @@ func main() {
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
+	if err := services.InitEino(cfg.LLM); err != nil {
+		log.Fatalf("failed to init eino: %v", err)
+	}
 	r := routers.SetupRouter()
 	r.Run(cfg.Port)
 }

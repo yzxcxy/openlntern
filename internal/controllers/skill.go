@@ -708,6 +708,11 @@ func getAuthUser(c *gin.Context) (string, string, bool) {
 	if err != nil {
 		return "", "", false
 	}
+	refreshedToken, expiresAt, err := services.GenerateToken(claims.UserID, claims.Role)
+	if err == nil {
+		c.Header("X-Access-Token", refreshedToken)
+		c.Header("X-Token-Expires", strconv.FormatInt(expiresAt, 10))
+	}
 	return claims.UserID, claims.Role, true
 }
 

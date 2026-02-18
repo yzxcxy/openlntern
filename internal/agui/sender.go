@@ -17,6 +17,14 @@ type Sender struct {
 	threadID string
 }
 
+func (s *Sender) ThreadID() string {
+	return s.threadID
+}
+
+func (s *Sender) RunID() string {
+	return s.runID
+}
+
 // NewSender creates a new Sender instance with injected context, writer, runID and threadID
 func NewSender(ctx context.Context, w io.Writer, runID, threadID string) *Sender {
 	return &Sender{
