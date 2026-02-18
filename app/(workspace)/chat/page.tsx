@@ -44,6 +44,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const previousThreadId = useRef<string | undefined>(threadId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isPrependingRef = useRef(false);
+  const messagesRef = useRef(messages);
   const router = useRouter();
   const ActivityRenderer = A2UIMessageRenderer.render;
 
@@ -71,6 +72,10 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
     }
   }, [threadId, setMessages]);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   const parseMetadata = useCallback((metadata?: string) => {
     if (!metadata) return {};
     try {
@@ -88,12 +93,21 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
       return content;
     }
   }, []);
+  const parseMessagePayload = useCallback((content?: string) => {
+    if (!content) return {};
+    try {
+      return JSON.parse(content) as { role?: string; content?: unknown };
+    } catch {
+      return {};
+    }
+  }, []);
   const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   const mapHistoryMessage = useCallback(
     (item: {
       msg_id?: string;
       type?: string;
+      role?: string;
       content?: string;
       metadata?: string;
     }) => {
@@ -105,10 +119,24 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
       const roleFromMeta =
         typeof metadata.role === "string" ? metadata.role : undefined;
       const isActivity = item.type === "activity" || Boolean(activityType);
-      const role = isActivity ? "activity" : roleFromMeta ?? "assistant";
+      const payload = isActivity ? {} : parseMessagePayload(item.content);
+      const roleFromPayload =
+        typeof payload.role === "string" ? payload.role : undefined;
+      const roleFromItem = typeof item.role === "string" ? item.role : undefined;
+      const roleFromType = typeof item.type === "string" ? item.type : undefined;
+      const roleCandidate =
+        roleFromPayload ?? roleFromItem ?? roleFromMeta ?? roleFromType;
+      const normalizedRole =
+        roleCandidate === "user" ||
+        roleCandidate === "assistant" ||
+        roleCandidate === "system" ||
+        roleCandidate === "tool"
+          ? roleCandidate
+          : "assistant";
+      const role = isActivity ? "activity" : normalizedRole;
       const content = isActivity
         ? parseActivityContent(item.content ?? "")
-        : item.content ?? "";
+        : (payload.content ?? "");
       return {
         id: item.msg_id ?? createThreadId(),
         role,
@@ -116,7 +144,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         ...(activityType ? { activityType } : {}),
       };
     },
-    [parseActivityContent, parseMetadata]
+    [parseActivityContent, parseMessagePayload, parseMetadata]
   );
 
   const fetchHistoryPage = useCallback(
@@ -141,7 +169,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         const message = typeof data?.message === "string" ? data.message : "";
         if (!res.ok) {
           if (res.status === 404 && message === "thread not found") {
-            setMessages(replace ? [] : messages);
+            setMessages(replace ? [] : messagesRef.current);
             setHistoryLoaded(true);
             setHistoryPage(pageToLoad);
             setHistoryHasMore(false);
@@ -151,7 +179,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         }
         if (data.code !== 0) {
           if (message === "thread not found") {
-            setMessages(replace ? [] : messages);
+            setMessages(replace ? [] : messagesRef.current);
             setHistoryLoaded(true);
             setHistoryPage(pageToLoad);
             setHistoryHasMore(false);
@@ -162,7 +190,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         const items = Array.isArray(data.data?.data) ? data.data.data : [];
         const total = typeof data.data?.total === "number" ? data.data.total : 0;
         const normalized = items.map(mapHistoryMessage).reverse();
-        setMessages(replace ? normalized : [...normalized, ...messages]);
+        setMessages(replace ? normalized : [...normalized, ...messagesRef.current]);
         setHistoryLoaded(true);
         setHistoryPage(pageToLoad);
         setHistoryHasMore(pageToLoad * historyPageSize < total);
@@ -176,7 +204,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         setHistoryLoading(false);
       }
     },
-    [getValidToken, historyPageSize, mapHistoryMessage, messages, setMessages, threadId]
+    [getValidToken, historyPageSize, mapHistoryMessage, setMessages, threadId]
   );
 
   useEffect(() => {
