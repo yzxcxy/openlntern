@@ -49,6 +49,8 @@ func SetupRouter() *gin.Engine {
 	{
 		threadGroup.GET("", controllers.ListThreads)
 		threadGroup.GET("/:thread_id", controllers.GetThread)
+		threadGroup.PUT("/:thread_id", controllers.UpdateThread)
+		threadGroup.DELETE("/:thread_id", controllers.DeleteThread)
 		threadGroup.GET("/:thread_id/messages", controllers.ListMessages)
 	}
 

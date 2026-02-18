@@ -142,3 +142,33 @@ func (s *ThreadService) EnsureThread(ownerID, threadID, title string) (*models.T
 	}
 	return nil, err
 }
+
+func (s *ThreadService) UpdateThreadTitle(ownerID, threadID, title string) error {
+	if ownerID == "" || threadID == "" {
+		return errors.New("owner_id and thread_id are required")
+	}
+	if title == "" {
+		return errors.New("title is required")
+	}
+	var thread models.Thread
+	if err := database.DB.Where("owner_id = ? AND thread_id = ?", ownerID, threadID).First(&thread).Error; err != nil {
+		return err
+	}
+	return database.DB.Model(&thread).Update("title", title).Error
+}
+
+func (s *ThreadService) DeleteThread(ownerID, threadID string) error {
+	if ownerID == "" || threadID == "" {
+		return errors.New("owner_id and thread_id are required")
+	}
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var thread models.Thread
+		if err := tx.Where("owner_id = ? AND thread_id = ?", ownerID, threadID).First(&thread).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("thread_id = ?", threadID).Delete(&models.Message{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&thread).Error
+	})
+}

@@ -19,6 +19,7 @@ type Message struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (m *Message) BeforeCreate(tx *gorm.DB) (err error) {

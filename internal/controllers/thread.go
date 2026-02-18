@@ -44,3 +44,38 @@ func GetThread(c *gin.Context) {
 	}
 	response.JSONSuccess(c, http.StatusOK, thread)
 }
+
+func UpdateThread(c *gin.Context) {
+	ownerID := c.GetString("user_id")
+	threadID := c.Param("thread_id")
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Title == "" {
+		response.BadRequest(c)
+		return
+	}
+	if err := services.Thread.UpdateThreadTitle(ownerID, threadID, req.Title); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "thread not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	response.JSONMessage(c, http.StatusOK, "thread updated successfully")
+}
+
+func DeleteThread(c *gin.Context) {
+	ownerID := c.GetString("user_id")
+	threadID := c.Param("thread_id")
+	if err := services.Thread.DeleteThread(ownerID, threadID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "thread not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	response.JSONMessage(c, http.StatusOK, "thread deleted successfully")
+}
