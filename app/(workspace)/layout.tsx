@@ -2,6 +2,8 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "./a2ui/components/ConfirmDialog";
+import { Modal } from "./a2ui/components/Modal";
 import {
   buildAuthHeaders,
   getUserIdFromToken,
@@ -40,6 +42,17 @@ export default function WorkspaceLayout({
   const [historyItems, setHistoryItems] = useState<ThreadItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    item: ThreadItem;
+  } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ThreadItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<ThreadItem | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameError, setRenameError] = useState("");
   const router = useRouter();
   const pathname = usePathname();
   const readUserFromStorage = useCallback((): UserInfo => readStoredUser(), []);
@@ -107,6 +120,19 @@ export default function WorkspaceLayout({
     fetchThreads();
   }, [fetchThreads]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener("click", handleClose);
+    window.addEventListener("contextmenu", handleClose);
+    window.addEventListener("scroll", handleClose, true);
+    return () => {
+      window.removeEventListener("click", handleClose);
+      window.removeEventListener("contextmenu", handleClose);
+      window.removeEventListener("scroll", handleClose, true);
+    };
+  }, [contextMenu]);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -115,6 +141,128 @@ export default function WorkspaceLayout({
 
   const handleUserManage = () => {
     router.push("/user");
+  };
+
+  const openContextMenu = (event: React.MouseEvent, item: ThreadItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 160;
+    const menuHeight = 92;
+    const padding = 12;
+    const maxX = window.innerWidth - menuWidth - padding;
+    const maxY = window.innerHeight - menuHeight - padding;
+    const x = Math.min(event.clientX, Math.max(padding, maxX));
+    const y = Math.min(event.clientY, Math.max(padding, maxY));
+    setContextMenu({ x, y, item });
+  };
+
+  const openDelete = (item: ThreadItem) => {
+    setContextMenu(null);
+    setDeleteTarget(item);
+  };
+
+  const closeDelete = () => {
+    setDeleteTarget(null);
+    setDeleting(false);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget?.thread_id) return;
+    const token = getValidToken();
+    if (!token) return;
+    const user = readUserFromStorage();
+    const userId =
+      typeof user?.user_id === "string" || typeof user?.user_id === "number"
+        ? String(user.user_id)
+        : getUserIdFromToken(token);
+    setDeleting(true);
+    setHistoryError("");
+    try {
+      const res = await fetch(`/api/backend/v1/threads/${deleteTarget.thread_id}`, {
+        method: "DELETE",
+        headers: buildAuthHeaders(token, userId),
+      });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "删除会话失败");
+      }
+      setHistoryItems((items) =>
+        items.filter((item) => item.thread_id !== deleteTarget.thread_id)
+      );
+      closeDelete();
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setHistoryError(err.message);
+      } else {
+        setHistoryError("删除会话失败");
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openRename = (item: ThreadItem) => {
+    setContextMenu(null);
+    setRenameTarget(item);
+    setRenameValue(item.title ?? "");
+    setRenameError("");
+  };
+
+  const closeRename = () => {
+    setRenameTarget(null);
+    setRenameValue("");
+    setRenameError("");
+    setRenaming(false);
+  };
+
+  const handleRename = async () => {
+    if (!renameTarget?.thread_id) return;
+    const title = renameValue.trim();
+    if (!title) {
+      setRenameError("请输入会话名称");
+      return;
+    }
+    const token = getValidToken();
+    if (!token) return;
+    const user = readUserFromStorage();
+    const userId =
+      typeof user?.user_id === "string" || typeof user?.user_id === "number"
+        ? String(user.user_id)
+        : getUserIdFromToken(token);
+    setRenaming(true);
+    setRenameError("");
+    try {
+      const res = await fetch(`/api/backend/v1/threads/${renameTarget.thread_id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...buildAuthHeaders(token, userId),
+        },
+        body: JSON.stringify({ title }),
+      });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "重命名失败");
+      }
+      setHistoryItems((items) =>
+        items.map((item) =>
+          item.thread_id === renameTarget.thread_id
+            ? { ...item, title }
+            : item
+        )
+      );
+      closeRename();
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setRenameError(err.message);
+      } else {
+        setRenameError("重命名失败");
+      }
+    } finally {
+      setRenaming(false);
+    }
   };
 
   const displayName =
@@ -345,6 +493,7 @@ export default function WorkspaceLayout({
                         onClick={() =>
                           router.push(`/chat?threadId=${item.thread_id}`)
                         }
+                        onContextMenu={(event) => openContextMenu(event, item)}
                         className="flex w-full items-center gap-2 text-left"
                       >
                         <span>{item.title || item.thread_id || "未命名会话"}</span>
@@ -422,6 +571,74 @@ export default function WorkspaceLayout({
             {children}
           </div>
         </section>
+        {contextMenu && (
+          <div
+            className="fixed z-50 w-40 rounded-lg border bg-white py-1 text-sm shadow-lg"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => openRename(contextMenu.item)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+            >
+              重命名
+            </button>
+            <button
+              type="button"
+              onClick={() => openDelete(contextMenu.item)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
+            >
+              删除
+            </button>
+          </div>
+        )}
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          title="确认删除"
+          description={`确定要删除会话“${
+            deleteTarget?.title || deleteTarget?.thread_id || "未命名会话"
+          }”吗？此操作不可撤销。`}
+          confirmText="删除"
+          cancelText="取消"
+          confirming={deleting}
+          onConfirm={handleDelete}
+          onCancel={closeDelete}
+        />
+        <Modal
+          open={Boolean(renameTarget)}
+          title="重命名会话"
+          onClose={closeRename}
+          footer={
+            <>
+              <button
+                type="button"
+                className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={closeRename}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60"
+                onClick={handleRename}
+                disabled={renaming}
+              >
+                {renaming ? "保存中..." : "保存"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2">
+            <input
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              placeholder="请输入会话名称"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+            {renameError && <div className="text-xs text-red-500">{renameError}</div>}
+          </div>
+        </Modal>
     </main>
   );
 }
