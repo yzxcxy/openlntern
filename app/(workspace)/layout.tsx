@@ -2,12 +2,27 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import {
+  buildAuthHeaders,
+  getUserIdFromToken,
+  readStoredUser,
+  readValidToken,
+  updateTokenFromResponse,
+} from "./auth";
 
 type UserInfo = {
   username?: string;
   email?: string;
   avatar?: string;
+  user_id?: string | number;
 } | null;
+
+type ThreadItem = {
+  thread_id?: string;
+  title?: string;
+  updated_at?: string;
+  created_at?: string;
+};
 
 const createThreadId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -15,7 +30,6 @@ const createThreadId = () => {
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
-
 export default function WorkspaceLayout({
   children,
 }: {
@@ -23,28 +37,15 @@ export default function WorkspaceLayout({
 }) {
   const [userInfo, setUserInfo] = useState<UserInfo>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [historyItems] = useState(() => [
-    { id: createThreadId(), title: "7-9月HRM系统首页与...", pinned: true },
-    { id: createThreadId(), title: "GORM迁移与MySQL文本", pinned: false },
-    { id: createThreadId(), title: "MySQL 认证错误", pinned: false },
-    { id: createThreadId(), title: "Python GIL逐步移除时间表", pinned: false },
-    { id: createThreadId(), title: "技能存储位置", pinned: false },
-  ]);
+  const [historyItems, setHistoryItems] = useState<ThreadItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const router = useRouter();
   const pathname = usePathname();
-  const readUserFromStorage = useCallback((): UserInfo => {
-    if (typeof window === "undefined") return null;
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return null;
-    try {
-      return JSON.parse(storedUser);
-    } catch {
-      return null;
-    }
-  }, []);
+  const readUserFromStorage = useCallback((): UserInfo => readStoredUser(), []);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = readValidToken(router);
     if (!token) {
       router.push("/login");
     }
@@ -66,6 +67,45 @@ export default function WorkspaceLayout({
       window.removeEventListener("storage", handleStorage);
     };
   }, [readUserFromStorage]);
+
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
+  const fetchThreads = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) return;
+    const user = readUserFromStorage();
+    const userId =
+      typeof user?.user_id === "string" || typeof user?.user_id === "number"
+        ? String(user.user_id)
+        : getUserIdFromToken(token);
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("page_size", "5");
+    const res = await fetch(`/api/backend/v1/threads?${params.toString()}`, {
+      headers: buildAuthHeaders(token, userId),
+    });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "获取历史会话失败");
+      }
+      setHistoryItems(Array.isArray(data.data?.data) ? data.data.data : []);
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setHistoryError(err.message);
+      } else {
+        setHistoryError("获取历史会话失败");
+      }
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [getValidToken, readUserFromStorage]);
+
+  useEffect(() => {
+    fetchThreads();
+  }, [fetchThreads]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -149,7 +189,9 @@ export default function WorkspaceLayout({
             </div>
             <div className={`mt-4 ${isSidebarCollapsed ? "flex justify-center" : ""}`}>
               <button
-                onClick={() => router.push(`/chat?threadId=${createThreadId()}`)}
+                onClick={() =>
+                  router.push(`/chat?threadId=${createThreadId()}&new=1`)
+                }
                 className={`flex items-center rounded-full border px-3 py-2 text-gray-700 hover:bg-gray-50 ${
                   isSidebarCollapsed ? "h-10 w-10 justify-center px-0" : "w-full justify-between"
                 } ${isChat ? "bg-gray-50" : ""}`}
@@ -288,16 +330,24 @@ export default function WorkspaceLayout({
                     历史会话
                   </div>
                   <div className="mt-3 space-y-3 text-sm text-gray-600">
+                    {historyLoading && (
+                      <div className="text-xs text-gray-400">加载中...</div>
+                    )}
+                    {historyError && (
+                      <div className="text-xs text-red-500">{historyError}</div>
+                    )}
+                    {!historyLoading && !historyError && historyItems.length === 0 && (
+                      <div className="text-xs text-gray-400">暂无历史会话</div>
+                    )}
                     {historyItems.map((item) => (
                       <button
-                        key={item.id}
-                        onClick={() => router.push(`/chat?threadId=${item.id}`)}
+                        key={item.thread_id}
+                        onClick={() =>
+                          router.push(`/chat?threadId=${item.thread_id}`)
+                        }
                         className="flex w-full items-center gap-2 text-left"
                       >
-                        {item.pinned && (
-                          <span className="text-xs text-gray-400">置顶</span>
-                        )}
-                        <span>{item.title}</span>
+                        <span>{item.title || item.thread_id || "未命名会话"}</span>
                       </button>
                     ))}
                     <button className="flex items-center gap-2 text-left text-sm font-semibold text-gray-800">

@@ -4,19 +4,26 @@ import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
 import { CopilotKit, useCopilotChatInternal } from "@copilotkit/react-core";
 import { useCopilotKit } from "@copilotkit/react-core/v2";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { theme } from "../../theme";
+import {
+  buildAuthHeaders,
+  getUserIdFromToken,
+  readStoredUser,
+  readValidToken,
+  updateTokenFromResponse,
+} from "../auth";
 
 const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
 const activityRenderers = [A2UIMessageRenderer];
+const API_BASE = "/api/backend";
 const createThreadId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
-
-function ChatContent() {
+function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const { copilotkit } = useCopilotKit();
   const {
     messages,
@@ -28,9 +35,16 @@ function ChatContent() {
     threadId,
   } = useCopilotChatInternal();
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize] = useState(20);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const previousThreadId = useRef<string | undefined>(threadId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const isPrependingRef = useRef(false);
+  const router = useRouter();
   const ActivityRenderer = A2UIMessageRenderer.render;
 
   useEffect(() => {
@@ -49,37 +63,132 @@ function ChatContent() {
     if (previousThreadId.current !== threadId) {
       previousThreadId.current = threadId;
       setHistoryLoaded(false);
+      setHistoryLoading(false);
+      setHistoryError("");
+      setHistoryPage(1);
+      setHistoryHasMore(false);
       setMessages([]);
     }
   }, [threadId, setMessages]);
 
+  const parseMetadata = useCallback((metadata?: string) => {
+    if (!metadata) return {};
+    try {
+      return JSON.parse(metadata);
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const parseActivityContent = useCallback((content: string) => {
+    if (!content) return content;
+    try {
+      return JSON.parse(content);
+    } catch {
+      return content;
+    }
+  }, []);
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
+
+  const mapHistoryMessage = useCallback(
+    (item: {
+      msg_id?: string;
+      type?: string;
+      content?: string;
+      metadata?: string;
+    }) => {
+      const metadata = parseMetadata(item.metadata);
+      const activityType =
+        typeof metadata.activity_type === "string"
+          ? metadata.activity_type
+          : undefined;
+      const roleFromMeta =
+        typeof metadata.role === "string" ? metadata.role : undefined;
+      const isActivity = item.type === "activity" || Boolean(activityType);
+      const role = isActivity ? "activity" : roleFromMeta ?? "assistant";
+      const content = isActivity
+        ? parseActivityContent(item.content ?? "")
+        : item.content ?? "";
+      return {
+        id: item.msg_id ?? createThreadId(),
+        role,
+        content,
+        ...(activityType ? { activityType } : {}),
+      };
+    },
+    [parseActivityContent, parseMetadata]
+  );
+
+  const fetchHistoryPage = useCallback(
+    async (pageToLoad: number, replace: boolean) => {
+      if (!threadId) return;
+      const token = getValidToken();
+      if (!token) return;
+      setHistoryLoading(true);
+      setHistoryError("");
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(pageToLoad));
+        params.set("page_size", String(historyPageSize));
+        const res = await fetch(
+          `${API_BASE}/v1/threads/${threadId}/messages?${params.toString()}`,
+          {
+            headers: buildAuthHeaders(token),
+          }
+        );
+        updateTokenFromResponse(res);
+        const data = await res.json();
+        const message = typeof data?.message === "string" ? data.message : "";
+        if (!res.ok) {
+          if (res.status === 404 && message === "thread not found") {
+            setMessages(replace ? [] : messages);
+            setHistoryLoaded(true);
+            setHistoryPage(pageToLoad);
+            setHistoryHasMore(false);
+            return;
+          }
+          throw new Error(message || "获取历史消息失败");
+        }
+        if (data.code !== 0) {
+          if (message === "thread not found") {
+            setMessages(replace ? [] : messages);
+            setHistoryLoaded(true);
+            setHistoryPage(pageToLoad);
+            setHistoryHasMore(false);
+            return;
+          }
+          throw new Error(message || "获取历史消息失败");
+        }
+        const items = Array.isArray(data.data?.data) ? data.data.data : [];
+        const total = typeof data.data?.total === "number" ? data.data.total : 0;
+        const normalized = items.map(mapHistoryMessage).reverse();
+        setMessages(replace ? normalized : [...normalized, ...messages]);
+        setHistoryLoaded(true);
+        setHistoryPage(pageToLoad);
+        setHistoryHasMore(pageToLoad * historyPageSize < total);
+      } catch (err) {
+        if (err instanceof Error && err.message) {
+          setHistoryError(err.message);
+        } else {
+          setHistoryError("获取历史消息失败");
+        }
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [getValidToken, historyPageSize, mapHistoryMessage, messages, setMessages, threadId]
+  );
+
   useEffect(() => {
-    if (historyLoaded || !threadId) return;
-
-    const loadHistory = async () => {
-      setHistoryLoaded(true);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const textHistory = [
-        {
-          id: "h1",
-          role: "user" as const,
-          content: "菜单",
-        },
-        {
-          id: "h2",
-          role: "assistant" as const,
-          content: "这是之前帮你生成的菜品列表界面。",
-        },
-      ];
-
-      setMessages([...textHistory]);
-    };
-
-    loadHistory();
-  }, [historyLoaded, setMessages, threadId]);
+    if (isNewThread || historyLoaded || !threadId) return;
+    fetchHistoryPage(1, true);
+  }, [fetchHistoryPage, historyLoaded, isNewThread, threadId]);
 
   useEffect(() => {
+    if (isPrependingRef.current) {
+      isPrependingRef.current = false;
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isLoading]);
 
@@ -103,8 +212,28 @@ function ChatContent() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-auto p-6 pb-36 scroll-pb-[140px]">
+        {historyHasMore && (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              disabled={historyLoading}
+              onClick={() => {
+                isPrependingRef.current = true;
+                fetchHistoryPage(historyPage + 1, false);
+              }}
+              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {historyLoading ? "加载中..." : "加载更多"}
+            </button>
+          </div>
+        )}
+        {historyError && (
+          <div className="text-sm text-red-500">{historyError}</div>
+        )}
         {messages.length === 0 ? (
-          <div className="text-sm text-gray-400">开始对话吧</div>
+          <div className="text-sm text-gray-400">
+            {historyLoading ? "加载中..." : "开始对话吧"}
+          </div>
         ) : (
           messages.map((message) => {
             if (
@@ -222,16 +351,51 @@ export default function ChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [resolvedThreadId, setResolvedThreadId] = useState<string | null>(null);
+  const [isNewThread, setIsNewThread] = useState(false);
+  const [copilotHeaders, setCopilotHeaders] = useState<
+    Record<string, string> | undefined
+  >(undefined);
+  const createdThreadIdRef = useRef<string | null>(null);
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
+
+  useEffect(() => {
+    const token = getValidToken();
+    if (token) {
+      const storedUser = readStoredUser();
+      const storedUserId =
+        typeof storedUser?.user_id === "string" || typeof storedUser?.user_id === "number"
+          ? String(storedUser.user_id)
+          : "";
+      const userId = storedUserId || getUserIdFromToken(token);
+      setCopilotHeaders(buildAuthHeaders(token, userId));
+    } else {
+      setCopilotHeaders(undefined);
+    }
+  }, [getValidToken]);
 
   useEffect(() => {
     const existingThreadId = searchParams.get("threadId");
+    const isNewParam = searchParams.get("new") === "1";
     if (existingThreadId) {
       setResolvedThreadId(existingThreadId);
+      if (isNewParam) {
+        createdThreadIdRef.current = existingThreadId;
+        setIsNewThread(true);
+        router.replace(`/chat?threadId=${existingThreadId}`);
+        return;
+      }
+      if (createdThreadIdRef.current === existingThreadId) {
+        setIsNewThread(true);
+        return;
+      }
+      setIsNewThread(false);
       return;
     }
     const newThreadId = createThreadId();
     setResolvedThreadId(newThreadId);
-    router.replace(`/chat?threadId=${newThreadId}`);
+    setIsNewThread(true);
+    createdThreadIdRef.current = newThreadId;
+    router.replace(`/chat?threadId=${newThreadId}&new=1`);
   }, [router, searchParams]);
 
   if (!resolvedThreadId) {
@@ -243,8 +407,9 @@ export default function ChatPage() {
       runtimeUrl="/api/copilotkit"
       renderActivityMessages={activityRenderers}
       threadId={resolvedThreadId}
+      headers={copilotHeaders}
     >
-      <ChatContent />
+      <ChatContent isNewThread={isNewThread} />
     </CopilotKit>
   );
 }

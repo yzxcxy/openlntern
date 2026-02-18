@@ -11,6 +11,11 @@ import {
 } from "react";
 import remarkGfm from "remark-gfm";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  buildAuthHeaders,
+  readValidToken,
+  updateTokenFromResponse,
+} from "../../auth";
 
 type SkillType = "official" | "custom";
 
@@ -33,7 +38,6 @@ type SkillFileItem = {
 };
 
 const API_BASE = "/api/backend";
-
 const markdownComponents = {
   h1: (props: ComponentPropsWithoutRef<"h1">) => (
     <h1 className="mb-4 text-2xl font-semibold text-gray-900" {...props} />
@@ -125,6 +129,7 @@ const markdownComponents = {
 export default function SkillDetailPage() {
   const params = useSearchParams();
   const router = useRouter();
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
   const [skill, setSkill] = useState<Skill | null>(null);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -245,7 +250,7 @@ export default function SkillDetailPage() {
   }, [normalizedName, scope, skill?.path, skill?.user_id]);
   const listScope = scope === "official" ? "official" : "user";
   const fetchFileList = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = getValidToken();
     if (!token) {
       setFileError("请先登录");
       return;
@@ -261,10 +266,9 @@ export default function SkillDetailPage() {
       params.set("scope", listScope);
       params.set("path", skillPath);
       const res = await fetch(`${API_BASE}/v1/skills?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: buildAuthHeaders(token),
       });
+      updateTokenFromResponse(res);
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
         const text = (await res.text()).trim();
@@ -286,9 +290,9 @@ export default function SkillDetailPage() {
     } finally {
       setFileLoading(false);
     }
-  }, [listScope, skillPath]);
+  }, [getValidToken, listScope, skillPath]);
   const fetchFileContent = async (path: string) => {
-    const token = localStorage.getItem("token");
+    const token = getValidToken();
     if (!token) {
       setFileContentError("请先登录");
       return;
@@ -304,10 +308,9 @@ export default function SkillDetailPage() {
       const pathParam = encodeURIComponent(path);
       const apiUrl = `${API_BASE}/v1/skills/content/${scope}/${nameParam}?path=${pathParam}`;
       const res = await fetch(apiUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: buildAuthHeaders(token),
       });
+      updateTokenFromResponse(res);
       const text = await readContent(res);
       setFileContent(text);
     } catch (err) {
@@ -474,7 +477,7 @@ export default function SkillDetailPage() {
     setFileContentLoading(false);
   };
   const fetchDocContent = async (href: string) => {
-    const token = localStorage.getItem("token");
+    const token = getValidToken();
     if (!token) {
       setDocModalError("请先登录");
       setDocModalLoading(false);
@@ -490,10 +493,9 @@ export default function SkillDetailPage() {
     const apiUrl = `${API_BASE}/v1/skills/content/${scope}/${nameParam}?path=${pathParam}`;
     try {
       const res = await fetch(apiUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: buildAuthHeaders(token),
       });
+      updateTokenFromResponse(res);
       const text = await readContent(res);
       setDocModalContent(text);
       setDocModalLoading(false);
@@ -552,11 +554,8 @@ export default function SkillDetailPage() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
     if (!normalizedName) {
       setError("缺少技能名称");
       setLoading(false);
@@ -578,11 +577,10 @@ export default function SkillDetailPage() {
         const metaRes = await fetch(
           `${API_BASE}/v1/skills/meta/${scope}/${nameParam}`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: buildAuthHeaders(token),
           }
         );
+        updateTokenFromResponse(metaRes);
         const metaData = await readJson(metaRes);
         if (!metaRes.ok || metaData.code !== 0) {
           throw new Error(metaData.message || "获取技能信息失败");
@@ -591,11 +589,10 @@ export default function SkillDetailPage() {
         const contentRes = await fetch(
           `${API_BASE}/v1/skills/content/${scope}/${nameParam}`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: buildAuthHeaders(token),
           }
         );
+        updateTokenFromResponse(contentRes);
         const contentData = await readJson(contentRes);
         if (!contentRes.ok || contentData.code !== 0) {
           throw new Error(contentData.message || "获取技能文档失败");
@@ -612,7 +609,7 @@ export default function SkillDetailPage() {
       }
     };
     fetchDetail();
-  }, [normalizedName, rawName, router, scope]);
+  }, [getValidToken, normalizedName, rawName, scope]);
   useEffect(() => {
     setFileItems(null);
     setFileListLoaded(false);

@@ -9,6 +9,13 @@ import {
 } from "./components/A2uiEditorModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { Modal } from "./components/Modal";
+import {
+  buildAuthHeaders,
+  getUserIdFromToken,
+  readStoredUser,
+  readValidToken,
+  updateTokenFromResponse,
+} from "../auth";
 
 type A2UIType = "official" | "custom";
 
@@ -25,14 +32,13 @@ type A2UI = {
 };
 
 type UserInfo = {
-  user_id?: string;
+  user_id?: string | number;
   username?: string;
   email?: string;
   role?: string;
 };
 
 const API_BASE = "/api/backend";
-
 export default function A2uiPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [category, setCategory] = useState<A2UIType>("official");
@@ -65,32 +71,30 @@ export default function A2uiPage() {
     [category, isAdmin]
   );
 
-  const applyUser = useCallback(() => {
-    if (typeof window === "undefined") return null;
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return null;
-    try {
-      return JSON.parse(storedUser);
-    } catch {
-      return null;
+  const applyUser = useCallback(() => readStoredUser<UserInfo>(), []);
+  const getUserId = useCallback((token: string) => {
+    const user = readStoredUser<UserInfo>();
+    const userId = user?.user_id;
+    if (typeof userId === "string" || typeof userId === "number") {
+      return String(userId);
     }
+    return getUserIdFromToken(token);
   }, []);
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getValidToken();
     if (!token) {
       router.push("/login");
       return;
     }
     setUserInfo(applyUser());
-  }, [applyUser, router]);
+  }, [applyUser, getValidToken, router]);
 
   const fetchList = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
+    const userId = getUserId(token);
     setLoading(true);
     setError("");
     try {
@@ -105,10 +109,9 @@ export default function A2uiPage() {
           ? `${API_BASE}/v1/a2uis/official?${params.toString()}`
           : `${API_BASE}/v1/a2uis/custom?${params.toString()}`;
       const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: buildAuthHeaders(token, userId),
       });
+      updateTokenFromResponse(res);
       const data = await res.json();
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "获取 A2UI 列表失败");
@@ -124,7 +127,7 @@ export default function A2uiPage() {
     } finally {
       setLoading(false);
     }
-  }, [category, page, pageSize, router, searchKeyword]);
+  }, [category, getUserId, getValidToken, page, pageSize, searchKeyword]);
 
   useEffect(() => {
     fetchList();
@@ -169,11 +172,9 @@ export default function A2uiPage() {
       setError("请填写名称");
       return;
     }
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
+    const userId = getUserId(token);
     setSaving(true);
     setError("");
     try {
@@ -188,13 +189,14 @@ export default function A2uiPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            ...buildAuthHeaders(token, userId),
           },
           body: JSON.stringify({
             ...payload,
             type: category,
           }),
         });
+        updateTokenFromResponse(res);
         const data = await res.json();
         if (!res.ok || data.code !== 0) {
           throw new Error(data.message || "新增 A2UI 失败");
@@ -204,11 +206,11 @@ export default function A2uiPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            "X-User-ID": userInfo?.user_id || "",
+            ...buildAuthHeaders(token, userId),
           },
           body: JSON.stringify(payload),
         });
+        updateTokenFromResponse(res);
         const data = await res.json();
         if (!res.ok || data.code !== 0) {
           throw new Error(data.message || "更新 A2UI 失败");
@@ -238,21 +240,17 @@ export default function A2uiPage() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
+    const userId = getUserId(token);
     setError("");
     setDeleting(true);
     try {
       const res = await fetch(`${API_BASE}/v1/a2uis/${deleteTarget.a2ui_id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-User-ID": userInfo?.user_id || "",
-        },
+        headers: buildAuthHeaders(token, userId),
       });
+      updateTokenFromResponse(res);
       const data = await res.json();
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "删除 A2UI 失败");

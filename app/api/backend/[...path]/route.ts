@@ -31,6 +31,10 @@ const proxyRequest = async (
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");
+  const authorization = request.headers.get("authorization");
+  if (authorization) {
+    headers.set("authorization", authorization);
+  }
 
   const init: RequestInit = {
     method: request.method,

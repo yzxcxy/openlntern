@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  buildAuthHeaders,
+  readStoredUser,
+  readValidToken,
+  updateTokenFromResponse,
+} from "../auth";
 
 type UserInfo = {
   user_id?: string;
@@ -15,18 +21,10 @@ type UserInfo = {
 };
 
 const API_BASE = "/api/backend";
-
 export default function UserPage() {
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(() => {
-    if (typeof window === "undefined") return null;
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return null;
-    try {
-      return JSON.parse(storedUser);
-    } catch {
-      return null;
-    }
-  });
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(() =>
+    readStoredUser<UserInfo>()
+  );
   const [formValues, setFormValues] = useState(() => ({
     username: userInfo?.username ?? "",
     email: userInfo?.email ?? "",
@@ -40,6 +38,7 @@ export default function UserPage() {
   const [success, setSuccess] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   const applyUser = useCallback((user: UserInfo | null) => {
     setUserInfo(user);
@@ -65,10 +64,9 @@ export default function UserPage() {
       setError("");
       try {
         const res = await fetch(`${API_BASE}/v1/users/${userId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: buildAuthHeaders(token),
         });
+        updateTokenFromResponse(res);
         const data = await res.json();
         if (!res.ok || data.code !== 0) {
           throw new Error(data.message || "获取用户信息失败");
@@ -88,11 +86,8 @@ export default function UserPage() {
   );
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
@@ -107,7 +102,7 @@ export default function UserPage() {
       }
     }
     setLoading(false);
-  }, [applyUser, fetchUser, router]);
+  }, [applyUser, fetchUser, getValidToken]);
 
   const handleAvatarClick = () => {
     setSuccess("");
@@ -125,26 +120,19 @@ export default function UserPage() {
       setError("无法获取用户ID");
       return;
     }
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
     setError("");
     setSuccess("");
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(
-        `${API_BASE}/v1/users/${userInfo.user_id}/avatar`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
+      const res = await fetch(`${API_BASE}/v1/users/${userInfo.user_id}/avatar`, {
+        method: "POST",
+        headers: buildAuthHeaders(token),
+        body: formData,
+      });
+      updateTokenFromResponse(res);
       const data = await res.json();
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "头像上传失败");
@@ -182,11 +170,8 @@ export default function UserPage() {
       setError("无法获取用户ID");
       return;
     }
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
     setSaving(true);
     setError("");
     setSuccess("");
@@ -214,10 +199,11 @@ export default function UserPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...buildAuthHeaders(token),
         },
         body: JSON.stringify(updates),
       });
+      updateTokenFromResponse(res);
       const data = await res.json();
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "更新失败");

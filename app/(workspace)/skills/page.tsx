@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  buildAuthHeaders,
+  readValidToken,
+  updateTokenFromResponse,
+} from "../auth";
 
 type SkillType = "official" | "custom";
 
@@ -17,7 +22,6 @@ type Skill = {
 };
 
 const API_BASE = "/api/backend";
-
 export default function SkillsPage() {
   const [category, setCategory] = useState<SkillType>("official");
   const [keyword, setKeyword] = useState("");
@@ -30,17 +34,11 @@ export default function SkillsPage() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const applyToken = useCallback(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("token") ?? "";
-  }, []);
+  const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   const fetchList = useCallback(async () => {
-    const token = applyToken();
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = getValidToken();
+    if (!token) return;
     setLoading(true);
     setError("");
     try {
@@ -55,10 +53,9 @@ export default function SkillsPage() {
           ? `${API_BASE}/v1/skills/meta/official?${params.toString()}`
           : `${API_BASE}/v1/skills/meta/custom?${params.toString()}`;
       const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: buildAuthHeaders(token),
       });
+      updateTokenFromResponse(res);
       const data = await res.json();
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "获取 Skill 列表失败");
@@ -74,7 +71,7 @@ export default function SkillsPage() {
     } finally {
       setLoading(false);
     }
-  }, [applyToken, category, page, pageSize, router, searchKeyword]);
+  }, [category, getValidToken, page, pageSize, searchKeyword]);
 
   useEffect(() => {
     fetchList();
