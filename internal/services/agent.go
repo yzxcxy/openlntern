@@ -84,6 +84,10 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent persist failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
+	if err := Thread.TouchThread(threadID); err != nil {
+		log.Printf("RunAgent touch thread failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+		return err
+	}
 
 	log.Printf("RunAgent success thread_id=%s run_id=%s", threadID, runID)
 	return nil
