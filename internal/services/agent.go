@@ -20,6 +20,7 @@ import (
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 )
 
 func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) error {
@@ -450,8 +451,10 @@ func persistUserLastMessage(threadID string, messages []types.Message) error {
 	if lastUser == nil {
 		return nil
 	}
-	msgID := lastUser.ID
-	b, err := json.Marshal(lastUser)
+	msgID := normalizeMsgID(lastUser.ID)
+	normalized := *lastUser
+	normalized.ID = msgID
+	b, err := json.Marshal(normalized)
 	if err != nil {
 		return err
 	}
@@ -472,6 +475,7 @@ func persistAccumulatedMessages(threadID string, messages []agui.AccumulatedMess
 	}
 	modelsMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
+		msg.MsgID = normalizeMsgID(msg.MsgID)
 		content, metadata := buildMessageContentAndMetadata(msg)
 		if content == "" {
 			continue
@@ -488,13 +492,28 @@ func persistAccumulatedMessages(threadID string, messages []agui.AccumulatedMess
 	return Message.CreateMessages(modelsMessages)
 }
 
+func normalizeMsgID(input string) string {
+	id := strings.TrimSpace(input)
+	id = strings.TrimPrefix(id, "msg-")
+	if id == "" {
+		return uuid.NewString()
+	}
+	if _, err := uuid.Parse(id); err == nil {
+		return id
+	}
+	if len(id) > 36 {
+		return uuid.NewString()
+	}
+	return id
+}
+
 func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string) {
 	message := types.Message{ID: msg.MsgID}
 	switch msg.Type {
 	case "text":
 		message.Role = types.Role(msg.Role)
 		message.Content = msg.Content
-	case "thinking", "thinking_message":
+	case "thinking_message":
 		message.Role = types.Role("reasoning")
 		message.Content = msg.Content
 	case "tool_call":

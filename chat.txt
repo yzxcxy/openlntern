@@ -1,0 +1,1202 @@
+data: {"type":"RUN_STARTED","timestamp":1771513529217,"threadId":"2d3c4039-67d8-4d38-98b2-ea0975ff1632","runId":"run-115f6131-4592-4ee2-9b62-7181f54dbdba","input":{"threadId":"2d3c4039-67d8-4d38-98b2-ea0975ff1632","runId":"550a34fe-6484-46bd-aef8-0348e934ec40","state":{},"messages":[{"id":"ed9a32a2-3523-4a8d-be9e-9d5c01283b4d","role":"user","content":"使用A2UI发送欢迎卡片"}],"tools":[],"context":[],"forwardedProps":{}}}
+
+data: {"type":"THINKING_START","timestamp":1771513529966,"title":""}
+
+data: {"type":"THINKING_TEXT_MESSAGE_START","timestamp":1771513529966}
+
+data: {"timestamp":1771513529966,"delta":"\n","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530376,"delta":"用户","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530376,"delta":"现在","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530376,"delta":"需要","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530387,"delta":"用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530387,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530388,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530388,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530400,"delta":"发送","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530400,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530400,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530400,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530433,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530433,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530433,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530433,"delta":"我","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530518,"delta":"得","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530518,"delta":"先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530518,"delta":"知道","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530518,"delta":"有","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530607,"delta":"哪些","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530607,"delta":"可用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530608,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530608,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530695,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530695,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530695,"delta":"啊","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530695,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530781,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530781,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530781,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530781,"delta":"第一步","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530867,"delta":"应该","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530867,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530867,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530867,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530953,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530953,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530953,"delta":"函数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513530953,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531044,"delta":"先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531044,"delta":"列出","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531044,"delta":"所有","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531044,"delta":"能","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531134,"delta":"访问","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531135,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531135,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531135,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531256,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531257,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531257,"delta":"这样","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531257,"delta":"才能","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531355,"delta":"找到","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531355,"delta":"对应的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531355,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531355,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531444,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531444,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531444,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531444,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531537,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531537,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531537,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531537,"delta":"哦","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531622,"delta":"不对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531622,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531622,"delta":"不对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531622,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531714,"delta":"等","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531714,"delta":"下","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531714,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531714,"delta":"或者","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531798,"delta":"是不是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531798,"delta":"我","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531798,"delta":"得","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531798,"delta":"先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531927,"delta":"调","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531927,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531927,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513531927,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532007,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532007,"delta":"来","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532007,"delta":"获取","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532007,"delta":"相关","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532094,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532094,"delta":"ID","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532094,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532094,"delta":"对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532177,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532177,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532177,"delta":"用户","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532177,"delta":"要","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532302,"delta":"发","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532302,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532302,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532302,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532392,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532392,"delta":"得","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532392,"delta":"知道","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532392,"delta":"对应的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532518,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532518,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532518,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532518,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532598,"delta":"是什么","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532598,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532598,"delta":"所以","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532598,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532721,"delta":"得","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532722,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532722,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532722,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532811,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532811,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532811,"delta":"这个","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532811,"delta":"函数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532933,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532933,"delta":"先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532936,"delta":"列出","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513532936,"delta":"所有","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533020,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533021,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533021,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533021,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533102,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533103,"delta":"找到","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533104,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533104,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533223,"delta":"对应的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533223,"delta":"那个","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533224,"delta":"ID","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533224,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533351,"delta":"然后","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533351,"delta":"才能","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533351,"delta":"用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533351,"delta":"send","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533430,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533430,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533430,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533431,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533508,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533508,"delta":"不对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533508,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533508,"delta":"等","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533592,"delta":"下","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533592,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533592,"delta":"有没有","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533592,"delta":"可能","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533750,"delta":"我","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533750,"delta":"是不是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533750,"delta":"漏","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533750,"delta":"了","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533871,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533871,"delta":"哦","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533871,"delta":"对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533871,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533953,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533953,"delta":"第一步","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533953,"delta":"必须","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513533953,"delta":"先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534025,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534025,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534025,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534025,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534110,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534110,"delta":"来","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534110,"delta":"获取","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534110,"delta":"所有","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534191,"delta":"可用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534191,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534192,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534192,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534269,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534269,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534269,"delta":"这样","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534269,"delta":"才能","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534352,"delta":"找到","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534353,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534353,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534353,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534429,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534429,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534429,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534430,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534510,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534510,"delta":"所以","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534510,"delta":"现在","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534510,"delta":"应该","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534594,"delta":"先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534594,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534594,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534594,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534677,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534677,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534677,"delta":"函数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534677,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534760,"delta":"参数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534760,"delta":"是空","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534760,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534760,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534836,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534836,"delta":"对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534836,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534836,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534916,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534916,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534917,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513534917,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535047,"delta":"parameters","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535047,"delta":"是空","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535047,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535047,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535123,"delta":"所以","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535123,"delta":"直接","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535123,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535123,"delta":"就行","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513535641,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"type":"TOOL_CALL_START","timestamp":1771513535641,"toolCallId":"call_tni8hb4uarvn03nqw6rreotu","toolCallName":"list_a2uis"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513535641,"toolCallId":"call_tni8hb4uarvn03nqw6rreotu","delta":"{}"}
+
+data: {"type":"THINKING_TEXT_MESSAGE_END","timestamp":1771513535641}
+
+data: {"type":"THINKING_END","timestamp":1771513535641}
+
+data: {"type":"TOOL_CALL_END","timestamp":1771513535641,"toolCallId":"call_tni8hb4uarvn03nqw6rreotu"}
+
+data: {"type":"TOOL_CALL_RESULT","timestamp":1771513535664,"messageId":"50e2431f-2438-48fa-bbc3-bb3a10d7a1c2","toolCallId":"call_tni8hb4uarvn03nqw6rreotu","content":"[{\"a2ui_id\":\"ad1f14c9-1f53-48df-ae62-021035c260ec\",\"name\":\"欢迎卡片\",\"description\":\"欢迎你\",\"type\":\"official\"},{\"a2ui_id\":\"ffe9029e-afca-4a2f-8722-05ed846dfdd7\",\"name\":\"菜单卡片\",\"description\":\"展示菜单\",\"type\":\"official\"},{\"a2ui_id\":\"f0c9dd1a-c00f-49d6-a3c3-ce0e31cd8f36\",\"name\":\"展示航班\",\"description\":\"展示航班信息\",\"type\":\"custom\"}]","role":"tool"}
+
+data: {"type":"THINKING_START","timestamp":1771513536178,"title":""}
+
+data: {"type":"THINKING_TEXT_MESSAGE_START","timestamp":1771513536178}
+
+data: {"timestamp":1771513536178,"delta":"\n","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536344,"delta":"用户","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536344,"delta":"现在","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536344,"delta":"需要","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536427,"delta":"用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536427,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536427,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536427,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536511,"delta":"发送","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536511,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536511,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536511,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536595,"delta":"刚才","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536595,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536595,"delta":"list","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536596,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536686,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536686,"delta":"uis","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536686,"delta":"已经","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536686,"delta":"拿到","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536770,"delta":"了","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536770,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536770,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536770,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536853,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536853,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536853,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536853,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536939,"delta":"是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536939,"delta":"ad","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536939,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513536939,"delta":"f","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537023,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537023,"delta":"4","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537023,"delta":"c","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537023,"delta":"9","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537107,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537107,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537107,"delta":"f","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537107,"delta":"5","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537192,"delta":"3","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537192,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537192,"delta":"4","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537192,"delta":"8","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537275,"delta":"df","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537275,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537275,"delta":"ae","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537276,"delta":"6","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537365,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537365,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537365,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537365,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537447,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537447,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537447,"delta":"3","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537447,"delta":"5","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537531,"delta":"c","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537531,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537531,"delta":"6","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537531,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537659,"delta":"ec","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537659,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537659,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537659,"delta":"接下来","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537745,"delta":"要","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537745,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537745,"delta":"send","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537745,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537834,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537834,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537834,"delta":"函数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537834,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537962,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537963,"delta":"首先","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537963,"delta":"得","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513537963,"delta":"填","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538095,"delta":"必填","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538095,"delta":"参数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538095,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538095,"delta":"msg","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538175,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538175,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538175,"delta":"话","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538175,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538261,"delta":"随便","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538261,"delta":"生成","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538261,"delta":"一个","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538261,"delta":"就行","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538393,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538393,"delta":"比如","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538393,"delta":"就","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538393,"delta":"用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538472,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538472,"delta":"msg","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538473,"delta":"_","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538473,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538561,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538561,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538561,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538561,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538642,"delta":"surface","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538642,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538642,"delta":"默认","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538642,"delta":"是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538728,"delta":"default","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538728,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538728,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538728,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538821,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538821,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538821,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538821,"delta":"就是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538901,"delta":"刚才","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538901,"delta":"拿到","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538901,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513538901,"delta":"那个","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539032,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539032,"delta":"data","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539032,"delta":"_json","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539032,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539124,"delta":"话","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539124,"delta":"，如果","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539124,"delta":"没有","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539124,"delta":"自定义","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539209,"delta":"数据","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539209,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539209,"delta":"话","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539209,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539294,"delta":"就","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539294,"delta":"传","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539294,"delta":"个","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539294,"delta":"空","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539381,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539381,"delta":"JSON","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539381,"delta":"字符串","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539381,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539475,"delta":"比如","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539475,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539475,"delta":"{}","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539475,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539557,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539557,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539557,"delta":"对","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539557,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539689,"delta":"检查","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539689,"delta":"下","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539689,"delta":"必填","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539689,"delta":"参数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539777,"delta":"：","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539777,"delta":"msg","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539777,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539777,"delta":"、","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539864,"delta":"surface","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539864,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539864,"delta":"、","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539864,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539948,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539948,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539948,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513539948,"delta":"、","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540040,"delta":"data","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540040,"delta":"_json","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540040,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540040,"delta":"这","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540126,"delta":"四个","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540126,"delta":"都是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540126,"delta":"必填","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540126,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540255,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540255,"delta":"所以","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540255,"delta":"都","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540255,"delta":"要","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540343,"delta":"填","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540343,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540343,"delta":"那","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540343,"delta":"参数","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540472,"delta":"就是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540472,"delta":"msg","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540472,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540472,"delta":"是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540557,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540557,"delta":"msg","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540557,"delta":"_","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540557,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540650,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540650,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540650,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540650,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540735,"delta":"surface","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540735,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540735,"delta":"是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540735,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540818,"delta":"default","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540818,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540818,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540818,"delta":"a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540908,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540908,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540908,"delta":"_id","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540908,"delta":"是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540997,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540997,"delta":"ad","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540997,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513540997,"delta":"f","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541079,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541079,"delta":"4","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541079,"delta":"c","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541079,"delta":"9","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541169,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541169,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541169,"delta":"f","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541169,"delta":"5","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541253,"delta":"3","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541254,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541254,"delta":"4","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541254,"delta":"8","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541341,"delta":"df","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541341,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541341,"delta":"ae","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541341,"delta":"6","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541429,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541429,"delta":"-","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541429,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541429,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541513,"delta":"1","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541513,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541513,"delta":"3","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541513,"delta":"5","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541602,"delta":"c","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541603,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541603,"delta":"6","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541603,"delta":"0","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541691,"delta":"ec","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541692,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541692,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541692,"delta":"data","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541773,"delta":"_json","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541773,"delta":"是","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541773,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541773,"delta":"{}","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541860,"delta":"\"","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541860,"delta":"对吧","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541860,"delta":"？","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541860,"delta":"那","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541989,"delta":"现在","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541989,"delta":"就","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541989,"delta":"构造","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513541989,"delta":"send","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542091,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542091,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542091,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542091,"delta":"的","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542207,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542207,"delta":"就","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542207,"delta":"好了","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513542207,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"type":"TOOL_CALL_START","timestamp":1771513542802,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","toolCallName":"send_a2ui"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513542802,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"{\"msg_id\": \""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513542802,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"msg"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513542805,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"_"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513542934,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"0"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513542935,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"1"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513542935,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"\""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543500,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":", \"surface_id\": \""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543500,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"default"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543500,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"\""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543500,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":", \"a2ui_id\": \""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543586,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"ad"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543586,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"1"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543586,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"f"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543586,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"1"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543678,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"4"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543678,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"c"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543678,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"9"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543678,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"-"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543760,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"1"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543760,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"f"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543760,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"5"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543760,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"3"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543849,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"-"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543849,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"4"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543849,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"8"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543849,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"df"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543936,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"-"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543937,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"ae"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543937,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"6"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513543937,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"2"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544025,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"-"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544025,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"0"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544025,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"2"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544025,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"1"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544110,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"0"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544110,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"3"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544110,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"5"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544110,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"c"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544198,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"2"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544198,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"6"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544198,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"0"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544198,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"ec"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544879,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"\""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544879,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":", \"data_json\": \"{"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544879,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"}"}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544880,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"\""}
+
+data: {"type":"TOOL_CALL_ARGS","timestamp":1771513544991,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","delta":"}"}
+
+data: {"type":"THINKING_TEXT_MESSAGE_END","timestamp":1771513544992}
+
+data: {"type":"THINKING_END","timestamp":1771513544992}
+
+data: {"type":"TOOL_CALL_END","timestamp":1771513544992,"toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9"}
+
+data: {"type":"ACTIVITY_SNAPSHOT","timestamp":1771513544995,"messageId":"msg_001","activityType":"a2ui-surface","content":{"operations":[]},"replace":true}
+
+data: {"type":"ACTIVITY_DELTA","timestamp":1771513544995,"messageId":"msg_001","activityType":"a2ui-surface","patch":[{"op":"add","path":"/operations/-","value":{"surfaceUpdate":{"components":[{"component":{"Card":{"child":"content"}},"id":"root"},{"component":{"Column":{"alignment":"center","children":{"explicitList":["welcomeText"]},"distribution":"center"}},"id":"content"},{"component":{"Text":{"text":{"literalString":"welcome to use openIntern"},"usageHint":"h2"}},"id":"welcomeText"}],"surfaceId":"default"}}}]}
+
+data: {"type":"ACTIVITY_DELTA","timestamp":1771513544996,"messageId":"msg_001","activityType":"a2ui-surface","patch":[{"op":"add","path":"/operations/-","value":{"dataModelUpdate":{"contents":[],"surfaceId":"default"}}}]}
+
+data: {"type":"ACTIVITY_DELTA","timestamp":1771513544996,"messageId":"msg_001","activityType":"a2ui-surface","patch":[{"op":"add","path":"/operations/-","value":{"beginRendering":{"root":"root","surfaceId":"default"}}}]}
+
+data: {"type":"TOOL_CALL_RESULT","timestamp":1771513544996,"messageId":"a6a83aff-615a-4fe7-8961-ffeb4eb2b54b","toolCallId":"call_c67fy9jvah7z2y1d6yeuhgx9","content":"{\"status\":\"ok\",\"message\":\"A2UI 已发送\"}","role":"tool"}
+
+data: {"type":"THINKING_START","timestamp":1771513545934,"title":""}
+
+data: {"type":"THINKING_TEXT_MESSAGE_START","timestamp":1771513545934}
+
+data: {"timestamp":1771513545935,"delta":"\n","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546082,"delta":"用户","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546082,"delta":"让","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546082,"delta":"我","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546170,"delta":"用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546170,"delta":"A","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546170,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546170,"delta":"UI","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546255,"delta":"发送","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546255,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546255,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546255,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546337,"delta":"现在","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546337,"delta":"已经","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546337,"delta":"调用","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546337,"delta":"了","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546424,"delta":"send","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546424,"delta":"_a","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546424,"delta":"2","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546424,"delta":"ui","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546547,"delta":"成功","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546547,"delta":"了","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546547,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546547,"delta":"返回","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546678,"delta":"状态","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546678,"delta":"ok","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546678,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546678,"delta":"说明","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546799,"delta":"欢迎","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546799,"delta":"卡片","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546799,"delta":"已经","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546799,"delta":"发送","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546886,"delta":"完成","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546886,"delta":"了","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546886,"delta":"，","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546886,"delta":"直接","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546980,"delta":"告诉","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546980,"delta":"用户","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546980,"delta":"结果","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513546980,"delta":"就行","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"timestamp":1771513547161,"delta":"。","type":"THINKING_TEXT_MESSAGE_CONTENT"}
+
+data: {"type":"TEXT_MESSAGE_START","timestamp":1771513547162,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","role":"assistant"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547162,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"已"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547162,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"成功"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547162,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"为"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547234,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"您"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547234,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"发送"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547234,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"欢迎"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547234,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"卡片"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547313,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"，请"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547313,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"在"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547313,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"会话"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547313,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"中"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547409,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"查看"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":1771513547409,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8","delta":"~"}
+
+data: {"type":"THINKING_TEXT_MESSAGE_END","timestamp":1771513547409}
+
+data: {"type":"THINKING_END","timestamp":1771513547409}
+
+data: {"type":"TEXT_MESSAGE_END","timestamp":1771513547409,"messageId":"msg-0eb61eb1-841a-44e0-a060-3d236028c7a8"}
+
+data: {"type":"RUN_FINISHED","timestamp":1771513547409,"threadId":"2d3c4039-67d8-4d38-98b2-ea0975ff1632","runId":"run-115f6131-4592-4ee2-9b62-7181f54dbdba"}
+

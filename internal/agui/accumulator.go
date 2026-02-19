@@ -103,17 +103,6 @@ func (a *Accumulator) OnThinkingContent(delta string) {
 }
 
 func (a *Accumulator) OnThinkingEnd() {
-	if a.thinkingMessageID == "" {
-		return
-	}
-	msg := a.ensureMessage(a.thinkingMessageID, "thinking")
-	msg.Content = a.thinkingContent
-	if msg.Metadata == nil {
-		msg.Metadata = map[string]any{}
-	}
-	if a.thinkingTitle != "" {
-		msg.Metadata["title"] = a.thinkingTitle
-	}
 	a.thinkingMessageID = ""
 	a.thinkingTitle = ""
 	a.thinkingContent = ""
