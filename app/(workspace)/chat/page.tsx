@@ -371,13 +371,13 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const handleSend = async () => {
     const content = inputValue.trim();
     if (!content) return;
+    setInputValue("");
     await sendMessage({
       id: createThreadId(),
       role: "user",
       content,
     });
     window.dispatchEvent(new Event("threads-refresh"));
-    setInputValue("");
   };
 
   const groupedItems = useMemo(() => {
