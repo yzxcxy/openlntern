@@ -26,9 +26,19 @@ func SendA2UIResponse(s agui.A2UISender, resp A2UIResponse) error {
 	}
 
 	// 1. 解析 UI JSON
-	var ui []interface{}
-	if err := json.Unmarshal([]byte(resp.UIJSON), &ui); err != nil {
-		return fmt.Errorf("unmarshal UI JSON failed: %w", err)
+	// 兼容两种形式：
+	// - 顶层为数组：[{...}, {...}]
+	// - 顶层为单个对象：{...}（此时自动包一层数组）
+	var uiComponents []interface{}
+	rawUI := []byte(resp.UIJSON)
+	if err := json.Unmarshal(rawUI, &uiComponents); err != nil {
+		// 如果按数组解析失败，再尝试按单个对象解析
+		var single map[string]interface{}
+		if err2 := json.Unmarshal(rawUI, &single); err2 != nil {
+			// 保留第一次错误信息，方便定位「原本期望的是数组」
+			return fmt.Errorf("unmarshal UI JSON failed: %w", err)
+		}
+		uiComponents = []interface{}{single}
 	}
 
 	// 2. 解析 Data JSON (如果有) 并转换为 A2UI 数据模型
@@ -73,7 +83,7 @@ func SendA2UIResponse(s agui.A2UISender, resp A2UIResponse) error {
 			Value: map[string]interface{}{
 				"surfaceUpdate": map[string]interface{}{
 					"surfaceId":  resp.SurfaceID,
-					"components": ui,
+					"components": uiComponents,
 				},
 			},
 		},

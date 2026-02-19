@@ -59,6 +59,9 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent agui to eino failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
+	// 注入 A2UI 工具所需的 context：service 与 sender（user_id 由 controller 注入）
+	ctx = context.WithValue(ctx, tools.ContextKeyA2UIService, A2UI)
+	ctx = context.WithValue(ctx, tools.ContextKeyA2UISender, s)
 	err = runEinoStreaming(ctx, s, einoMessages)
 	if err != nil {
 		_ = s.Error(err.Error(), "eino_run_failed")
@@ -120,13 +123,18 @@ func InitEino(cfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.A
 	if err != nil {
 		return nil, err
 	}
+	a2uiTools, err := tools.GetA2UITools(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allTools := append(sandboxTools, a2uiTools...)
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "openintern_agent",
 		Description: "openintern agent",
 		Model:       chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: sandboxTools,
+				Tools: allTools,
 			},
 		},
 	})

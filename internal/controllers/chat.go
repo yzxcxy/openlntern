@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"context"
 	"io"
 	"log"
 
 	"openIntern/internal/response"
 	"openIntern/internal/services"
+	"openIntern/internal/services/tools"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
@@ -28,6 +30,8 @@ func ChatSSE(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
+	// 注入 user_id 供 agent 内 A2UI 等工具使用
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), tools.ContextKeyUserID, ownerID))
 	if _, err := services.Thread.EnsureThread(ownerID, input.ThreadID, ""); err != nil {
 		log.Printf("ChatSSE ensure thread failed thread_id=%s client_ip=%s err=%v", input.ThreadID, c.ClientIP(), err)
 		response.InternalError(c)

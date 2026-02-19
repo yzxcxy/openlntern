@@ -18,6 +18,15 @@ func CreateA2UI(c *gin.Context) {
 		return
 	}
 
+	// 自定义 A2UI 必须关联当前用户，否则列表接口按 user_id 过滤会查不到
+	userID := c.GetString("user_id")
+	if userID != "" {
+		a2ui.UserID = userID
+	}
+	if a2ui.Type == "" {
+		a2ui.Type = models.A2UITypeCustom
+	}
+
 	if err := services.A2UI.CreateA2UI(&a2ui); err != nil {
 		response.InternalError(c)
 		return
