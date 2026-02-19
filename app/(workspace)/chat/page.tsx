@@ -4,7 +4,7 @@ import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
 import { CopilotKit, useCopilotChatInternal } from "@copilotkit/react-core";
 import { useCopilotKit } from "@copilotkit/react-core/v2";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { theme } from "../../theme";
 import {
   buildAuthHeaders,
@@ -13,6 +13,7 @@ import {
   readValidToken,
   updateTokenFromResponse,
 } from "../auth";
+import { RunFold } from "./components/RunFold";
 
 const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
 const activityRenderers = [A2UIMessageRenderer];
@@ -22,6 +23,115 @@ const createThreadId = () => {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+type ActivityMessageLike = {
+  id: string;
+  role: "activity";
+  content: Record<string, unknown>;
+  activityType: string;
+};
+
+const safeStringify = (value: unknown) => {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const normalizeContentItems = (content: unknown) => {
+  if (typeof content === "string") return [content];
+  if (Array.isArray(content)) return content;
+  if (content && typeof content === "object") {
+    const container = content as { content?: unknown; text?: unknown };
+    if (Array.isArray(container.content)) return container.content;
+    if (typeof container.text === "string") return [container];
+    if (typeof container.content === "string") return [container.content];
+  }
+  if (content === null || content === undefined) return [];
+  return [content];
+};
+
+const collectMessageParts = (message: {
+  role?: string;
+  content?: unknown;
+  toolCalls?: unknown[];
+}) => {
+  const textParts: string[] = [];
+  const toolParts: string[] = [];
+  const reasoningParts: string[] = [];
+  const role = message.role;
+  const items = normalizeContentItems(message.content);
+
+  const pushValue = (target: string[], value: string) => {
+    if (!value) return;
+    target.push(value);
+  };
+
+  for (const item of items) {
+    if (typeof item === "string") {
+      if (role === "tool") {
+        pushValue(toolParts, item);
+      } else if (role === "system" || role === "developer") {
+        pushValue(reasoningParts, item);
+      } else {
+        pushValue(textParts, item);
+      }
+      continue;
+    }
+    if (typeof item === "number" || typeof item === "boolean") {
+      const value = String(item);
+      if (role === "tool") {
+        pushValue(toolParts, value);
+      } else if (role === "system" || role === "developer") {
+        pushValue(reasoningParts, value);
+      } else {
+        pushValue(textParts, value);
+      }
+      continue;
+    }
+    if (item && typeof item === "object") {
+      const entry = item as {
+        type?: string;
+        text?: string;
+        content?: string;
+        reasoning?: string;
+      };
+      const type = typeof entry.type === "string" ? entry.type.toLowerCase() : "";
+      const value =
+        (typeof entry.text === "string" && entry.text) ||
+        (typeof entry.content === "string" && entry.content) ||
+        (typeof entry.reasoning === "string" && entry.reasoning) ||
+        safeStringify(item);
+      if (type.includes("reasoning") || type.includes("thinking")) {
+        pushValue(reasoningParts, value);
+      } else if (type.includes("tool")) {
+        pushValue(toolParts, value);
+      } else if (type.includes("text")) {
+        pushValue(textParts, value);
+      } else if (role === "tool") {
+        pushValue(toolParts, value);
+      } else if (role === "system" || role === "developer") {
+        pushValue(reasoningParts, value);
+      } else {
+        pushValue(textParts, value);
+      }
+    }
+  }
+
+  if (Array.isArray(message.toolCalls)) {
+    for (const toolCall of message.toolCalls) {
+      pushValue(toolParts, safeStringify(toolCall));
+    }
+  }
+
+  return { textParts, toolParts, reasoningParts };
+};
+
+const getTextFromContent = (content: unknown) => {
+  const { textParts } = collectMessageParts({ content, role: "user" });
+  return textParts.join("\n").trim();
 };
 function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const { copilotkit } = useCopilotKit();
@@ -116,6 +226,12 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         typeof metadata.activity_type === "string"
           ? metadata.activity_type
           : undefined;
+      const runId =
+        typeof metadata.run_id === "string"
+          ? metadata.run_id
+          : typeof metadata.runId === "string"
+          ? metadata.runId
+          : undefined;
       const roleFromMeta =
         typeof metadata.role === "string" ? metadata.role : undefined;
       const isActivity = item.type === "activity" || Boolean(activityType);
@@ -142,6 +258,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         role,
         content,
         ...(activityType ? { activityType } : {}),
+        ...(runId ? { runId } : {}),
       };
     },
     [parseActivityContent, parseMessagePayload, parseMetadata]
@@ -238,6 +355,65 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
     setInputValue("");
   };
 
+  const groupedItems = useMemo(() => {
+    const items: Array<{
+      kind: "user" | "assistant";
+      id: string;
+      content?: string;
+      textParts?: string[];
+      toolParts?: string[];
+      reasoningParts?: string[];
+      activities?: ActivityMessageLike[];
+    }> = [];
+    const groups = new Map<string, (typeof items)[number]>();
+    let currentRunKey: string | null = null;
+
+    for (const message of messages) {
+      if (message.role === "user") {
+        const userText = getTextFromContent(message.content);
+        items.push({
+          kind: "user",
+          id: message.id,
+          content: userText || safeStringify(message.content),
+        });
+        currentRunKey = message.id;
+        continue;
+      }
+
+      const runId = (message as { runId?: string }).runId;
+      const key = runId || currentRunKey || message.id;
+      if (runId) currentRunKey = runId;
+
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          kind: "assistant",
+          id: key,
+          textParts: [],
+          toolParts: [],
+          reasoningParts: [],
+          activities: [],
+        };
+        groups.set(key, group);
+        items.push(group);
+      }
+
+      if (message.role === "activity") {
+        if (message.activityType === A2UIMessageRenderer.activityType) {
+          group.activities?.push(message as ActivityMessageLike);
+        }
+        continue;
+      }
+
+      const parts = collectMessageParts(message);
+      group.textParts?.push(...parts.textParts);
+      group.toolParts?.push(...parts.toolParts);
+      group.reasoningParts?.push(...parts.reasoningParts);
+    }
+
+    return items;
+  }, [messages]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-auto p-6 pb-36 scroll-pb-[140px]">
@@ -264,39 +440,48 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
             {historyLoading ? "加载中..." : "开始对话吧"}
           </div>
         ) : (
-          messages.map((message) => {
-            if (
-              message.role === "activity" &&
-              message.activityType === A2UIMessageRenderer.activityType
-            ) {
+          groupedItems.map((item) => {
+            if (item.kind === "user") {
               return (
-                <div key={message.id} className="rounded-xl border bg-white p-4">
-                  <ActivityRenderer
-                    activityType={message.activityType}
-                    content={message.content}
-                    message={message}
-                    agent={agent}
-                  />
+                <div key={item.id} className="flex justify-end">
+                  <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-gray-900 px-4 py-3 text-sm text-white">
+                    {item.content}
+                  </div>
                 </div>
               );
             }
 
-            const isUser = message.role === "user";
-            const content =
-              typeof message.content === "string"
-                ? message.content
-                : JSON.stringify(message.content, null, 2);
+            const text = item.textParts?.join("\n").trim() ?? "";
+            const activities = item.activities ?? [];
             return (
-              <div
-                key={message.id}
-                className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm ${
-                    isUser ? "bg-gray-900 text-white" : "bg-white text-gray-900 shadow"
-                  }`}
-                >
-                  {content}
+              <div key={item.id} className="flex justify-start">
+                <div className="max-w-[80%] space-y-3">
+                  <RunFold
+                    toolItems={item.toolParts}
+                    reasoningItems={item.reasoningParts}
+                  />
+                  {(text || activities.length > 0) && (
+                    <div className="space-y-3">
+                      {text && (
+                        <div className="whitespace-pre-wrap rounded-2xl bg-white px-4 py-3 text-sm text-gray-900 shadow">
+                          {text}
+                        </div>
+                      )}
+                      {activities.map((message) => (
+                        <div
+                          key={message.id}
+                          className="rounded-xl border bg-white p-4"
+                        >
+                          <ActivityRenderer
+                            activityType={message.activityType}
+                            content={message.content}
+                            message={message}
+                            agent={agent}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );
