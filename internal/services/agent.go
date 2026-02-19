@@ -9,12 +9,16 @@ import (
 	"openIntern/internal/agui"
 	"openIntern/internal/config"
 	"openIntern/internal/models"
+	"openIntern/internal/services/tools"
 	"strings"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
+	"github.com/cloudwego/eino-ext/callbacks/apmplus"
 	"github.com/cloudwego/eino-ext/components/model/ark"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -32,8 +36,6 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	s := agui.NewAccumulatingSender(baseSender, acc)
 	runID := baseSender.RunID()
 
-	log.Printf("RunAgent start thread_id=%s run_id=%s input_messages=%d", threadID, runID, len(input.Messages))
-
 	if err := s.Start(); err != nil {
 		log.Printf("RunAgent start failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
@@ -45,28 +47,24 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent history load failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	log.Printf("RunAgent history loaded thread_id=%s run_id=%s count=%d", threadID, runID, len(historyMessages))
 	mergedInput, err := mergeRunAgentInputHistory(input, historyMessages)
 	if err != nil {
 		_ = s.Error(err.Error(), "history_unmarshal_failed")
 		log.Printf("RunAgent history merge failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	log.Printf("RunAgent history merged thread_id=%s run_id=%s messages=%d", threadID, runID, len(mergedInput.Messages))
 	einoMessages, err := agui.AGUIRunInputToEinoMessages(mergedInput)
 	if err != nil {
 		_ = s.Error(err.Error(), "agui_to_eino_failed")
 		log.Printf("RunAgent agui to eino failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	log.Printf("RunAgent eino input prepared thread_id=%s run_id=%s messages=%d", threadID, runID, len(einoMessages))
 	err = runEinoStreaming(ctx, s, einoMessages)
 	if err != nil {
 		_ = s.Error(err.Error(), "eino_run_failed")
 		log.Printf("RunAgent eino run failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	log.Printf("RunAgent eino outputs stream completed thread_id=%s run_id=%s", threadID, runID)
 
 	if err := s.Finish(); err != nil {
 		log.Printf("RunAgent finish failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
@@ -78,8 +76,6 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent persist user message failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	log.Printf("RunAgent persist user message success thread_id=%s run_id=%s", threadID, runID)
-	log.Printf("RunAgent persist start thread_id=%s run_id=%s count=%d", threadID, runID, len(flushed))
 	if err := persistAccumulatedMessages(threadID, flushed); err != nil {
 		log.Printf("RunAgent persist failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
@@ -89,31 +85,56 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		return err
 	}
 
-	log.Printf("RunAgent success thread_id=%s run_id=%s", threadID, runID)
 	return nil
 }
 
 var einoRunner *adk.Runner
+var apmplusShutdown func(context.Context) error
 
-func InitEino(cfg config.LLMConfig) error {
+func InitEino(cfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
+	if apmCfg.Host != "" && apmCfg.AppKey != "" && apmCfg.ServiceName != "" {
+		cbh, shutdown, err := apmplus.NewApmplusHandler(&apmplus.Config{
+			Host:        apmCfg.Host,
+			AppKey:      apmCfg.AppKey,
+			ServiceName: apmCfg.ServiceName,
+			Release:     apmCfg.Release,
+		})
+		if err != nil {
+			return nil, err
+		}
+		callbacks.AppendGlobalHandlers(cbh)
+		apmplusShutdown = shutdown
+	}
+	if apmplusShutdown == nil {
+		apmplusShutdown = func(context.Context) error { return nil }
+	}
 	chatModel, err := ark.NewChatModel(ctx, &ark.ChatModelConfig{
 		APIKey: cfg.APIKey,
 		Model:  cfg.Model,
 	})
 	if err != nil {
-		return err
+		return nil, err
+	}
+	sandboxTools, err := tools.GetSandboxTools(ctx, toolsCfg.Sandbox.Url)
+	if err != nil {
+		return nil, err
 	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "openintern_agent",
 		Description: "openintern agent",
 		Model:       chatModel,
+		ToolsConfig: adk.ToolsConfig{
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools: sandboxTools,
+			},
+		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	einoRunner = adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent})
-	return nil
+	einoRunner = adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
+	return apmplusShutdown, nil
 }
 
 func mergeRunAgentInputHistory(input *types.RunAgentInput, history []models.Message) (*types.RunAgentInput, error) {
@@ -243,6 +264,7 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 	messageID := ""
 	messageStarted := false
 	thinkingStarted := false
+	thinkingSessionStarted := false
 	toolCallStarted := map[string]bool{}
 	toolCallArgs := map[string]string{}
 	for {
@@ -258,18 +280,36 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 		}
 		if len(msg.ToolCalls) > 0 {
 			for _, call := range msg.ToolCalls {
+				log.Printf("tool call: %v", call)
 				callID := call.ID
+				// 流式可能在同一批里先发带 id+name 的项，再发无 id、无 name 仅带 args 的项（解析产物），
+				// 需在「处理当前项时」再算 onlyStartedID，这样同一批里后一项才能归到已开始的那一个。
+				if callID == "" && call.Function.Name == "" {
+					var onlyStartedID string
+					if len(toolCallStarted) == 1 {
+						for id := range toolCallStarted {
+							onlyStartedID = id
+							break
+						}
+					}
+					if onlyStartedID != "" {
+						callID = onlyStartedID
+					}
+				}
 				if callID == "" {
 					callID = events.GenerateToolCallID()
 				}
-				if !toolCallStarted[callID] {
+				// 流式解析可能先发出带 name 的 chunk，再发出仅带 partial args 的 chunk（name 为空），
+				// 若对 name 为空的 chunk 调用 StartToolCall 会触发 "toolCallName field is required" 校验失败。
+				if call.Function.Name != "" && !toolCallStarted[callID] {
 					if err := sender.StartToolCall(callID, call.Function.Name); err != nil {
 						return err
 					}
 					toolCallStarted[callID] = true
 				}
 				args := call.Function.Arguments
-				if args != "" {
+				// 仅对已发起过的 tool call 追加 args，避免流式里仅带 partial args 且无 name 的 chunk 产生未开始的 call
+				if args != "" && toolCallStarted[callID] {
 					prev := toolCallArgs[callID]
 					delta := args
 					if prev != "" && strings.HasPrefix(args, prev) {
@@ -312,6 +352,12 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 			}
 		}
 		if msg.ReasoningContent != "" {
+			if !thinkingSessionStarted {
+				if err := sender.StartThinking(""); err != nil {
+					return err
+				}
+				thinkingSessionStarted = true
+			}
 			if !thinkingStarted {
 				if err := sender.StartThinkingMessage(); err != nil {
 					return err
@@ -328,7 +374,20 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 			return err
 		}
 	}
+	if thinkingSessionStarted {
+		if err := sender.EndThinking(); err != nil {
+			return err
+		}
+	}
 	for callID := range toolCallStarted {
+		args := toolCallArgs[callID]
+		if args != "" && isLikelyTruncatedJSON(args) {
+			log.Printf("tool call args likely truncated (invalid JSON) call_id=%s args=%q", callID, args)
+			_ = sender.Custom("agui:tool_call_args_truncated", map[string]any{
+				"tool_call_id": callID,
+				"raw_preview":  truncatePreview(args, 200),
+			})
+		}
 		if err := sender.EndToolCall(callID); err != nil {
 			return err
 		}
@@ -495,4 +554,24 @@ func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string
 		}
 	}
 	return content, metadata
+}
+
+// isLikelyTruncatedJSON 判断字符串是否像被截断的 JSON（非空、形似 JSON 但解析失败）。
+func isLikelyTruncatedJSON(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	// 工具参数一般为 JSON 对象
+	if !strings.HasPrefix(s, "{") {
+		return false
+	}
+	return !json.Valid([]byte(s))
+}
+
+func truncatePreview(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"openIntern/internal/config"
 	"openIntern/internal/database"
@@ -20,8 +21,14 @@ func main() {
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
-	if err := services.InitEino(cfg.LLM); err != nil {
+	shutdown, err := services.InitEino(cfg.LLM, cfg.Tools, cfg.APMPlus)
+	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)
+	}
+	if shutdown != nil {
+		defer func() {
+			_ = shutdown(context.Background())
+		}()
 	}
 	r := routers.SetupRouter()
 	r.Run(cfg.Port)

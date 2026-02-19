@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log"
 	"strconv"
 	"strings"
 
@@ -14,7 +13,6 @@ import (
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		log.Printf("interface %s,Authorization header: %s",c.FullPath(), authHeader)
 		if authHeader == "" {
 			response.Unauthorized(c)
 			c.Abort()

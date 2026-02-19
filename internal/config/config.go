@@ -8,12 +8,14 @@ import (
 )
 
 type Config struct {
-	Port  string      `yaml:"port"`
-	MySQL MySQLConfig `yaml:"mysql"`
-	Redis RedisConfig `yaml:"redis"`
-	JWT   JWTConfig   `yaml:"jwt"`
-	COS   COSConfig   `yaml:"cos"`
-	LLM   LLMConfig   `yaml:"llm"`
+	Port    string        `yaml:"port"`
+	MySQL   MySQLConfig   `yaml:"mysql"`
+	Redis   RedisConfig   `yaml:"redis"`
+	JWT     JWTConfig     `yaml:"jwt"`
+	COS     COSConfig     `yaml:"cos"`
+	LLM     LLMConfig     `yaml:"llm"`
+	Tools   ToolsConfig   `yaml:"tools"`
+	APMPlus APMPlusConfig `yaml:"apmplus"`
 }
 
 type MySQLConfig struct {
@@ -39,8 +41,23 @@ type COSConfig struct {
 }
 
 type LLMConfig struct {
-	Model            string   `yaml:"model"`
-	APIKey           string   `yaml:"api_key"`
+	Model  string `yaml:"model"`
+	APIKey string `yaml:"api_key"`
+}
+
+type ToolsConfig struct {
+	Sandbox SandboxConfig `yaml:"sandbox"`
+}
+
+type SandboxConfig struct {
+	Url string `yaml:"url"`
+}
+
+type APMPlusConfig struct {
+	Host        string `yaml:"host"`
+	AppKey      string `yaml:"app_key"`
+	ServiceName string `yaml:"service_name"`
+	Release     string `yaml:"release"`
 }
 
 func LoadConfig(configFile string) *Config {

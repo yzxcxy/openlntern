@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
+	"github.com/google/uuid"
 )
 
 type AccumulatedMessage struct {
@@ -63,7 +63,7 @@ func (a *Accumulator) OnRunFinished(threadID, runID string) {
 
 func (a *Accumulator) OnTextMessageStart(msgID, role string) {
 	if msgID == "" {
-		msgID = a.newEventID("text")
+		msgID = a.newEventID()
 	}
 	msg := a.ensureMessage(msgID, "text")
 	msg.Role = role
@@ -71,7 +71,7 @@ func (a *Accumulator) OnTextMessageStart(msgID, role string) {
 
 func (a *Accumulator) OnTextMessageContent(msgID, delta string) {
 	if msgID == "" {
-		msgID = a.newEventID("text")
+		msgID = a.newEventID()
 	}
 	msg := a.ensureMessage(msgID, "text")
 	if msg.Content == nil {
@@ -94,7 +94,7 @@ func (a *Accumulator) OnTextMessageEnd(msgID string) {
 func (a *Accumulator) OnThinkingStart(title string) {
 	a.thinkingTitle = title
 	if a.thinkingMessageID == "" {
-		a.thinkingMessageID = a.newEventID("thinking")
+		a.thinkingMessageID = a.newEventID()
 	}
 }
 
@@ -121,13 +121,13 @@ func (a *Accumulator) OnThinkingEnd() {
 
 func (a *Accumulator) OnThinkingMessageStart() {
 	if a.thinkingMsgMessage == "" {
-		a.thinkingMsgMessage = a.newEventID("thinking_message")
+		a.thinkingMsgMessage = a.newEventID()
 	}
 }
 
 func (a *Accumulator) OnThinkingMessageContent(delta string) {
 	if a.thinkingMsgMessage == "" {
-		a.thinkingMsgMessage = a.newEventID("thinking_message")
+		a.thinkingMsgMessage = a.newEventID()
 	}
 	msg := a.ensureMessage(a.thinkingMsgMessage, "thinking_message")
 	if msg.Content == nil {
@@ -146,7 +146,7 @@ func (a *Accumulator) OnThinkingMessageEnd() {
 
 func (a *Accumulator) OnToolCallStart(toolCallID, toolName string) {
 	if toolCallID == "" {
-		toolCallID = a.newEventID("tool_call")
+		toolCallID = a.newEventID()
 	}
 	msg := a.ensureMessage(toolCallID, "tool_call")
 	msg.ToolCallID = toolCallID
@@ -155,7 +155,7 @@ func (a *Accumulator) OnToolCallStart(toolCallID, toolName string) {
 
 func (a *Accumulator) OnToolCallArgs(toolCallID, delta string) {
 	if toolCallID == "" {
-		toolCallID = a.newEventID("tool_call")
+		toolCallID = a.newEventID()
 	}
 	msg := a.ensureMessage(toolCallID, "tool_call")
 	msg.ToolCallID = toolCallID
@@ -178,7 +178,7 @@ func (a *Accumulator) OnToolCallEnd(toolCallID string) {
 
 func (a *Accumulator) OnToolCallResult(msgID, toolCallID, content string) {
 	if msgID == "" {
-		msgID = a.newEventID("tool_result")
+		msgID = a.newEventID()
 	}
 	msg := a.ensureMessage(msgID, "tool_result")
 	msg.ToolCallID = toolCallID
@@ -195,7 +195,7 @@ func (a *Accumulator) OnStateUpdate(delta []events.JSONPatchOperation) {
 
 func (a *Accumulator) OnActivitySnapshot(messageID, activityType string, content any) {
 	if messageID == "" {
-		messageID = a.newEventID("activity")
+		messageID = a.newEventID()
 	}
 	msg := a.ensureMessage(messageID, "activity")
 	msg.ActivityType = activityType
@@ -204,7 +204,7 @@ func (a *Accumulator) OnActivitySnapshot(messageID, activityType string, content
 
 func (a *Accumulator) OnActivityUpdate(messageID, activityType string, patch []events.JSONPatchOperation) {
 	if messageID == "" {
-		messageID = a.newEventID("activity")
+		messageID = a.newEventID()
 	}
 	msg := a.ensureMessage(messageID, "activity")
 	msg.ActivityType = activityType
@@ -213,7 +213,7 @@ func (a *Accumulator) OnActivityUpdate(messageID, activityType string, patch []e
 
 func (a *Accumulator) OnCustom(name string, value any) {
 	event := AccumulatedMessage{
-		MsgID:    a.newEventID("custom"),
+		MsgID:    a.newEventID(),
 		Type:     "custom",
 		Content:  value,
 		Metadata: map[string]any{"name": name},
@@ -223,7 +223,7 @@ func (a *Accumulator) OnCustom(name string, value any) {
 
 func (a *Accumulator) OnRaw(event any, source string) {
 	eventMsg := AccumulatedMessage{
-		MsgID:    a.newEventID("raw"),
+		MsgID:    a.newEventID(),
 		Type:     "raw",
 		Content:  event,
 		Metadata: map[string]any{},
@@ -236,7 +236,7 @@ func (a *Accumulator) OnRaw(event any, source string) {
 
 func (a *Accumulator) OnRunError(message string, code string) {
 	event := AccumulatedMessage{
-		MsgID:    a.newEventID("error"),
+		MsgID:    a.newEventID(),
 		Type:     "error",
 		Content:  message,
 		Metadata: map[string]any{},
@@ -258,7 +258,7 @@ func (a *Accumulator) Flush() []AccumulatedMessage {
 	}
 	if a.state != nil {
 		result = append(result, AccumulatedMessage{
-			MsgID:   a.newEventID("state"),
+			MsgID:   a.newEventID(),
 			Type:    "state",
 			Content: a.state,
 		})
@@ -271,7 +271,7 @@ func (a *Accumulator) Flush() []AccumulatedMessage {
 
 func (a *Accumulator) ensureMessage(msgID, msgType string) *AccumulatedMessage {
 	if msgID == "" {
-		msgID = a.newEventID(msgType)
+		msgID = a.newEventID()
 	}
 	if msg, ok := a.messages[msgID]; ok && msg != nil {
 		if msg.Type == "" {
@@ -288,8 +288,8 @@ func (a *Accumulator) ensureMessage(msgID, msgType string) *AccumulatedMessage {
 	return msg
 }
 
-func (a *Accumulator) newEventID(prefix string) string {
-	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
+func (a *Accumulator) newEventID() string {
+	return uuid.NewString()
 }
 
 func deepCopy(v any) any {
