@@ -50,7 +50,7 @@ type SendA2UIInput struct {
 	MsgID     string `json:"msg_id" jsonschema_description:"消息 ID，用于关联 A2UI 活动"`
 	SurfaceID string `json:"surface_id" jsonschema_description:"Surface ID，如 default，可选"`
 	A2UIID    string `json:"a2ui_id" jsonschema_description:"A2UI 的业务 ID"`
-	DataJSON  string `json:"data_json" jsonschema_description:"数据模型更新内容的 JSON 字符串，可选"`
+	DataJSON  string `json:"data_json" jsonschema_description:"数据模型更新内容的 JSON 字符串，注意如果查询对应A2UI返回的data_json为空，说明其是一个纯展示的A2UI，该字段就不应该被传入，可选"`
 }
 
 const listA2UIsLimit = 10000 // 一次拉取上限，视为「全部」
