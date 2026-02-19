@@ -8,8 +8,8 @@ type RunFoldProps = {
 };
 
 export function RunFold({ toolItems, reasoningItems }: RunFoldProps) {
-  const tools = toolItems?.filter(Boolean) ?? [];
-  const reasoning = reasoningItems?.filter(Boolean) ?? [];
+  const tools = (toolItems?.filter(Boolean) ?? []).slice().reverse();
+  const reasoning = (reasoningItems?.filter(Boolean) ?? []).slice().reverse();
   const hasContent = tools.length > 0 || reasoning.length > 0;
   const [open, setOpen] = useState(false);
 
@@ -39,7 +39,7 @@ export function RunFold({ toolItems, reasoningItems }: RunFoldProps) {
             <div className="space-y-1">
               <div className="text-[11px] text-gray-500">工具</div>
               <div className="whitespace-pre-wrap rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700">
-                {tools.join("\n")}
+                {tools.join("\n\n")}
               </div>
             </div>
           )}

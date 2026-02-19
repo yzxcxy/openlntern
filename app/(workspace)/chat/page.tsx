@@ -206,7 +206,14 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const parseMessagePayload = useCallback((content?: string) => {
     if (!content) return {};
     try {
-      return JSON.parse(content) as { role?: string; content?: unknown };
+      return JSON.parse(content) as {
+        role?: string;
+        content?: unknown;
+        tool_calls?: unknown[];
+        toolCalls?: unknown[];
+        activityType?: string;
+        activity_type?: string;
+      };
     } catch {
       return {};
     }
@@ -235,7 +242,13 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
       const roleFromMeta =
         typeof metadata.role === "string" ? metadata.role : undefined;
       const isActivity = item.type === "activity" || Boolean(activityType);
-      const payload = isActivity ? {} : parseMessagePayload(item.content);
+      const payload = parseMessagePayload(item.content);
+      const activityTypeFromPayload =
+        typeof payload.activityType === "string"
+          ? payload.activityType
+          : typeof payload.activity_type === "string"
+          ? payload.activity_type
+          : undefined;
       const roleFromPayload =
         typeof payload.role === "string" ? payload.role : undefined;
       const roleFromItem = typeof item.role === "string" ? item.role : undefined;
@@ -248,17 +261,29 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         roleCandidate === "system" ||
         roleCandidate === "tool"
           ? roleCandidate
+          : roleCandidate === "reasoning"
+          ? "system"
           : "assistant";
       const role = isActivity ? "activity" : normalizedRole;
       const content = isActivity
-        ? parseActivityContent(item.content ?? "")
+        ? payload.content ?? parseActivityContent(item.content ?? "")
         : (payload.content ?? "");
+      const toolCalls =
+        payload.tool_calls ??
+        payload.toolCalls ??
+        (typeof payload.tool_calls === "undefined" &&
+        typeof payload.toolCalls === "undefined"
+          ? undefined
+          : []);
       return {
         id: item.msg_id ?? createThreadId(),
         role,
         content,
-        ...(activityType ? { activityType } : {}),
+        ...(activityType || activityTypeFromPayload
+          ? { activityType: activityType ?? activityTypeFromPayload }
+          : {}),
         ...(runId ? { runId } : {}),
+        ...(toolCalls ? { toolCalls } : {}),
       };
     },
     [parseActivityContent, parseMessagePayload, parseMetadata]
@@ -440,10 +465,10 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
             {historyLoading ? "加载中..." : "开始对话吧"}
           </div>
         ) : (
-          groupedItems.map((item) => {
+          groupedItems.map((item, index) => {
             if (item.kind === "user") {
               return (
-                <div key={item.id} className="flex justify-end">
+                <div key={`user-${item.id}-${index}`} className="flex justify-end">
                   <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-gray-900 px-4 py-3 text-sm text-white">
                     {item.content}
                   </div>
@@ -454,7 +479,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
             const text = item.textParts?.join("\n").trim() ?? "";
             const activities = item.activities ?? [];
             return (
-              <div key={item.id} className="flex justify-start">
+              <div key={`assistant-${item.id}-${index}`} className="flex justify-start">
                 <div className="max-w-[80%] space-y-3">
                   <RunFold
                     toolItems={item.toolParts}
