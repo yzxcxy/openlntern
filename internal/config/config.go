@@ -14,6 +14,7 @@ type Config struct {
 	JWT     JWTConfig     `yaml:"jwt"`
 	COS     COSConfig     `yaml:"cos"`
 	LLM     LLMConfig     `yaml:"llm"`
+	SummaryLLM LLMConfig `yaml:"summary_llm"`
 	Tools   ToolsConfig   `yaml:"tools"`
 	APMPlus APMPlusConfig `yaml:"apmplus"`
 }

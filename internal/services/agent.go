@@ -16,6 +16,7 @@ import (
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	"github.com/cloudwego/eino-ext/callbacks/apmplus"
 	"github.com/cloudwego/eino-ext/components/model/ark"
+	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/compose"
@@ -88,14 +89,18 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent touch thread failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
+	if err := ensureThreadTitle(ctx, threadID, input.Messages); err != nil {
+		log.Printf("RunAgent generate title failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+	}
 
 	return nil
 }
 
 var einoRunner *adk.Runner
 var apmplusShutdown func(context.Context) error
+var titleModel *deepseek.ChatModel
 
-func InitEino(cfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
+func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
 	if apmCfg.Host != "" && apmCfg.AppKey != "" && apmCfg.ServiceName != "" {
 		cbh, shutdown, err := apmplus.NewApmplusHandler(&apmplus.Config{
@@ -119,6 +124,16 @@ func InitEino(cfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.A
 	})
 	if err != nil {
 		return nil, err
+	}
+	titleModel = nil
+	if summaryCfg.APIKey != "" && summaryCfg.Model != "" {
+		titleModel, err = deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+			APIKey: summaryCfg.APIKey,
+			Model:  summaryCfg.Model,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	sandboxTools, err := tools.GetSandboxTools(ctx, toolsCfg.Sandbox.Url)
 	if err != nil {
@@ -244,6 +259,95 @@ func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, mess
 		}
 	}
 	return nil
+}
+
+func ensureThreadTitle(ctx context.Context, threadID string, messages []types.Message) error {
+	if threadID == "" {
+		return nil
+	}
+	thread, err := Thread.GetThreadByThreadID(threadID)
+	if err != nil || thread == nil {
+		return err
+	}
+	if strings.TrimSpace(thread.Title) != "" {
+		return nil
+	}
+	if thread.OwnerID == "" {
+		return nil
+	}
+	source := extractTitleSource(messages)
+	if source == "" {
+		return nil
+	}
+	title, err := generateTitle(ctx, source)
+	if err != nil {
+		return err
+	}
+	title = sanitizeTitle(title)
+	if title == "" {
+		return nil
+	}
+	return Thread.UpdateThreadTitle(thread.OwnerID, thread.ThreadID, title)
+}
+
+func extractTitleSource(messages []types.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Role == types.RoleUser {
+			switch v := msg.Content.(type) {
+			case string:
+				return strings.TrimSpace(v)
+			case nil:
+				return ""
+			default:
+				return strings.TrimSpace(fmt.Sprintf("%v", v))
+			}
+		}
+	}
+	return ""
+}
+
+func generateTitle(ctx context.Context, content string) (string, error) {
+	if titleModel == nil {
+		return "", nil
+	}
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return "", nil
+	}
+	if len(trimmed) > 600 {
+		trimmed = trimmed[:600]
+	}
+	messages := []*schema.Message{
+		{
+			Role:    schema.System,
+			Content: "请为用户对话生成简短中文标题，不超过20字，只输出标题本身。",
+		},
+		{
+			Role:    schema.User,
+			Content: trimmed,
+		},
+	}
+	resp, err := titleModel.Generate(ctx, messages)
+	if err != nil || resp == nil {
+		return "", err
+	}
+	return resp.Content, nil
+}
+
+func sanitizeTitle(title string) string {
+	cleaned := strings.TrimSpace(title)
+	cleaned = strings.Trim(cleaned, "“”\"'")
+	cleaned = strings.ReplaceAll(cleaned, "\n", " ")
+	cleaned = strings.TrimSpace(cleaned)
+	if cleaned == "" {
+		return ""
+	}
+	runes := []rune(cleaned)
+	if len(runes) > 40 {
+		return string(runes[:40])
+	}
+	return cleaned
 }
 
 func streamMessageVariant(sender *agui.AccumulatingSender, mv *adk.MessageVariant) error {

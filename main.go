@@ -21,7 +21,7 @@ func main() {
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
-	shutdown, err := services.InitEino(cfg.LLM, cfg.Tools, cfg.APMPlus)
+	shutdown, err := services.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)
 	}

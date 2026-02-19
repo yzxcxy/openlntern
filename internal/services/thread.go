@@ -106,6 +106,17 @@ func (s *ThreadService) GetThread(ownerID, threadID string) (*models.Thread, err
 	return &thread, nil
 }
 
+func (s *ThreadService) GetThreadByThreadID(threadID string) (*models.Thread, error) {
+	if threadID == "" {
+		return nil, errors.New("thread_id is required")
+	}
+	var thread models.Thread
+	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
+		return nil, err
+	}
+	return &thread, nil
+}
+
 func (s *ThreadService) EnsureThread(ownerID, threadID, title string) (*models.Thread, error) {
 	if ownerID == "" || threadID == "" {
 		return nil, errors.New("owner_id and thread_id are required")
