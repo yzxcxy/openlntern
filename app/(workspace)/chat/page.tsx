@@ -15,6 +15,7 @@ import {
   updateTokenFromResponse,
 } from "../auth";
 import { RunFold } from "./components/RunFold";
+import { MarkdownMessage } from "./components/MarkdownMessage";
 
 const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
 const activityRenderers = [A2UIMessageRenderer];
@@ -573,8 +574,11 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
             if (item.kind === "user") {
               return (
                 <div key={`user-${item.id}-${index}`} className="flex justify-end">
-                  <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-gray-900 px-4 py-3 text-sm text-white">
-                    {item.content}
+                  <div className="max-w-[80%] rounded-2xl bg-gray-900 px-4 py-3 text-sm text-white">
+                    <MarkdownMessage
+                      variant="user"
+                      content={item.content ?? ""}
+                    />
                   </div>
                 </div>
               );
@@ -592,8 +596,8 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
                   {(text || activities.length > 0) && (
                     <div className="space-y-3">
                       {text && (
-                        <div className="whitespace-pre-wrap rounded-2xl bg-white px-4 py-3 text-sm text-gray-900 shadow">
-                          {text}
+                        <div className="rounded-2xl bg-white px-4 py-3 text-sm text-gray-900 shadow">
+                          <MarkdownMessage content={text} />
                         </div>
                       )}
                       {activities.map((message) => (
