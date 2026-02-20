@@ -37,6 +37,9 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	baseSender := agui.NewSenderWithThreadID(ctx, w, threadID)
 	s := agui.NewAccumulatingSender(baseSender, acc)
 	runID := baseSender.RunID()
+	if runID == "" {
+		return fmt.Errorf("run_id is required")
+	}
 
 	if err := s.Start(); err != nil {
 		log.Printf("RunAgent start failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
@@ -77,11 +80,11 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	}
 
 	flushed := acc.Flush()
-	if err := persistUserLastMessage(threadID, input.Messages); err != nil {
+	if err := persistUserLastMessage(threadID, runID, input.Messages); err != nil {
 		log.Printf("RunAgent persist user message failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	if err := persistAccumulatedMessages(threadID, flushed); err != nil {
+	if err := persistAccumulatedMessages(threadID, runID, flushed); err != nil {
 		log.Printf("RunAgent persist failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
@@ -540,9 +543,12 @@ func streamToolMessage(sender *agui.AccumulatingSender, stream *schema.StreamRea
 	return sender.ToolCallResult(events.GenerateMessageID(), toolCallID, contentBuilder.String())
 }
 
-func persistUserLastMessage(threadID string, messages []types.Message) error {
+func persistUserLastMessage(threadID, runID string, messages []types.Message) error {
 	if len(messages) == 0 {
 		return nil
+	}
+	if runID == "" {
+		return fmt.Errorf("run_id is required")
 	}
 	var lastUser *types.Message
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -566,6 +572,7 @@ func persistUserLastMessage(threadID string, messages []types.Message) error {
 		{
 			MsgID:    msgID,
 			ThreadID: threadID,
+			RunID:    runID,
 			Type:     "text",
 			Content:  string(b),
 			Status:   "completed",
@@ -573,9 +580,12 @@ func persistUserLastMessage(threadID string, messages []types.Message) error {
 	})
 }
 
-func persistAccumulatedMessages(threadID string, messages []agui.AccumulatedMessage) error {
+func persistAccumulatedMessages(threadID, runID string, messages []agui.AccumulatedMessage) error {
 	if len(messages) == 0 {
 		return nil
+	}
+	if runID == "" {
+		return fmt.Errorf("run_id is required")
 	}
 	modelsMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -587,6 +597,7 @@ func persistAccumulatedMessages(threadID string, messages []agui.AccumulatedMess
 		modelsMessages = append(modelsMessages, models.Message{
 			MsgID:    msg.MsgID,
 			ThreadID: threadID,
+			RunID:    runID,
 			Type:     msg.Type,
 			Content:  content,
 			Status:   "completed",
