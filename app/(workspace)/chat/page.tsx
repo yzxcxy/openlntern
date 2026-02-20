@@ -3,6 +3,7 @@
 import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
 import { CopilotKit, useCopilotChatInternal } from "@copilotkit/react-core";
 import { useCopilotKit } from "@copilotkit/react-core/v2";
+import { EventType } from "@ag-ui/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { theme } from "../../theme";
@@ -151,10 +152,18 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const [historyPageSize] = useState(20);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [liveThinkingByRunId, setLiveThinkingByRunId] = useState<
+    Record<string, string>
+  >({});
+  const [completedThinkingByRunId, setCompletedThinkingByRunId] = useState<
+    Record<string, string[]>
+  >({});
   const previousThreadId = useRef<string | undefined>(threadId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isPrependingRef = useRef(false);
   const messagesRef = useRef(messages);
+  const thinkingBufferRef = useRef("");
+  const currentRunIdRef = useRef<string | null>(null);
   const router = useRouter();
   const ActivityRenderer = A2UIMessageRenderer.render;
 
@@ -167,12 +176,64 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   }, [agent, threadId, copilotkit]);
 
   useEffect(() => {
+    if (!agent) return;
+    const applyThinkingEvent = (incoming: unknown) => {
+      const event = incoming as { type?: string; delta?: string; runId?: string };
+      if (!event?.type) return;
+      if (event.type === EventType.RUN_STARTED) {
+        const runId = typeof event.runId === "string" ? event.runId : null;
+        currentRunIdRef.current = runId;
+        thinkingBufferRef.current = "";
+        return;
+      }
+      if (event.type === EventType.THINKING_TEXT_MESSAGE_START) {
+        thinkingBufferRef.current = "";
+        return;
+      }
+      if (event.type === EventType.THINKING_TEXT_MESSAGE_CONTENT) {
+        const delta = typeof event.delta === "string" ? event.delta : "";
+        if (!delta) return;
+        thinkingBufferRef.current += delta;
+        const runId = currentRunIdRef.current;
+        if (!runId) return;
+        setLiveThinkingByRunId((prev) =>
+          prev[runId] === thinkingBufferRef.current
+            ? prev
+            : { ...prev, [runId]: thinkingBufferRef.current }
+        );
+        return;
+      }
+      if (event.type === EventType.THINKING_TEXT_MESSAGE_END) {
+        const runId = currentRunIdRef.current;
+        const value = thinkingBufferRef.current;
+        thinkingBufferRef.current = "";
+        if (!runId || !value) return;
+        setCompletedThinkingByRunId((prev) => ({
+          ...prev,
+          [runId]: [...(prev[runId] ?? []), value],
+        }));
+        setLiveThinkingByRunId((prev) => ({ ...prev, [runId]: "" }));
+      }
+    };
+    const { unsubscribe } = agent.subscribe({
+      onEvent: ({ event }) => {
+        applyThinkingEvent(event);
+      },
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [agent, setMessages]);
+
+  useEffect(() => {
     if (previousThreadId.current === undefined) {
       previousThreadId.current = threadId;
       return;
     }
     if (previousThreadId.current !== threadId) {
       previousThreadId.current = threadId;
+      setLiveThinkingByRunId({});
+      setCompletedThinkingByRunId({});
       setHistoryLoaded(false);
       setHistoryLoading(false);
       setHistoryError("");
@@ -223,6 +284,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   const mapHistoryMessage = useCallback(
     (item: {
       msg_id?: string;
+      run_id?: string;
       type?: string;
       role?: string;
       content?: string;
@@ -233,12 +295,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         typeof metadata.activity_type === "string"
           ? metadata.activity_type
           : undefined;
-      const runId =
-        typeof metadata.run_id === "string"
-          ? metadata.run_id
-          : typeof metadata.runId === "string"
-          ? metadata.runId
-          : undefined;
+      const runId = typeof item.run_id === "string" ? item.run_id : undefined;
       const roleFromMeta =
         typeof metadata.role === "string" ? metadata.role : undefined;
       const isActivity = item.type === "activity" || Boolean(activityType);
@@ -350,9 +407,9 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
   );
 
   useEffect(() => {
-    if (isNewThread || historyLoaded || !threadId) return;
+    if (historyLoaded || !threadId) return;
     fetchHistoryPage(1, true);
-  }, [fetchHistoryPage, historyLoaded, isNewThread, threadId]);
+  }, [fetchHistoryPage, historyLoaded, threadId]);
 
   useEffect(() => {
     if (isPrependingRef.current) {
@@ -391,7 +448,8 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
       activities?: ActivityMessageLike[];
     }> = [];
     const groups = new Map<string, (typeof items)[number]>();
-    let currentRunKey: string | null = null;
+    let currentBatchKey: string | null = null;
+    let lastAssistantGroupId: string | null = null;
 
     for (const message of messages) {
       if (message.role === "user") {
@@ -401,13 +459,12 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
           id: message.id,
           content: userText || safeStringify(message.content),
         });
-        currentRunKey = message.id;
+        currentBatchKey = `user-${message.id}`;
         continue;
       }
 
       const runId = (message as { runId?: string }).runId;
-      const key = runId || currentRunKey || message.id;
-      if (runId) currentRunKey = runId;
+      const key = runId ?? currentBatchKey ?? message.id;
 
       let group = groups.get(key);
       if (!group) {
@@ -422,6 +479,7 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
         groups.set(key, group);
         items.push(group);
       }
+      lastAssistantGroupId = group.id;
 
       if (message.role === "activity") {
         if (message.activityType === A2UIMessageRenderer.activityType) {
@@ -436,8 +494,54 @@ function ChatContent({ isNewThread }: { isNewThread: boolean }) {
       group.reasoningParts?.push(...parts.reasoningParts);
     }
 
+    for (const item of items) {
+      if (item.kind !== "assistant") continue;
+      const historyThinking = completedThinkingByRunId[item.id] ?? [];
+      const liveThinking = liveThinkingByRunId[item.id];
+      const merged = [
+        ...(item.reasoningParts ?? []),
+        ...historyThinking,
+        ...(liveThinking ? [liveThinking] : []),
+      ];
+      item.reasoningParts = merged.length > 0 ? merged : item.reasoningParts;
+    }
+
+    const thinkingRunIds = new Set([
+      ...Object.keys(completedThinkingByRunId),
+      ...Object.keys(liveThinkingByRunId),
+    ]);
+
+    for (const runId of thinkingRunIds) {
+      if (groups.has(runId)) continue;
+      const historyThinking = completedThinkingByRunId[runId] ?? [];
+      const liveThinking = liveThinkingByRunId[runId];
+      const mergedThinking = [
+        ...historyThinking,
+        ...(liveThinking ? [liveThinking] : []),
+      ];
+      if (mergedThinking.length === 0) continue;
+      if (lastAssistantGroupId) {
+        const group = groups.get(lastAssistantGroupId);
+        if (group) {
+          group.reasoningParts = [
+            ...(group.reasoningParts ?? []),
+            ...mergedThinking,
+          ];
+          continue;
+        }
+      }
+      items.push({
+        kind: "assistant",
+        id: runId,
+        textParts: [],
+        toolParts: [],
+        reasoningParts: mergedThinking,
+        activities: [],
+      });
+    }
+
     return items;
-  }, [messages]);
+  }, [completedThinkingByRunId, liveThinkingByRunId, messages]);
 
   return (
     <div className="flex h-full flex-col">

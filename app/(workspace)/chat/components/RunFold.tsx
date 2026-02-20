@@ -8,8 +8,8 @@ type RunFoldProps = {
 };
 
 export function RunFold({ toolItems, reasoningItems }: RunFoldProps) {
-  const tools = (toolItems?.filter(Boolean) ?? []).slice().reverse();
-  const reasoning = (reasoningItems?.filter(Boolean) ?? []).slice().reverse();
+  const tools = toolItems?.filter(Boolean) ?? [];
+  const reasoning = reasoningItems?.filter(Boolean) ?? [];
   const hasContent = tools.length > 0 || reasoning.length > 0;
   const [open, setOpen] = useState(false);
 
