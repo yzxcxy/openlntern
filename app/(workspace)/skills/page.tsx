@@ -8,22 +8,17 @@ import {
   updateTokenFromResponse,
 } from "../auth";
 
-type SkillType = "official" | "custom";
-
 type Skill = {
   skill_id?: string;
   name?: string;
   description?: string;
-  type?: SkillType;
   source?: string;
   icon?: string;
   path?: string;
-  user_id?: string;
 };
 
 const API_BASE = "/api/backend";
 export default function SkillsPage() {
-  const [category, setCategory] = useState<SkillType>("official");
   const [keyword, setKeyword] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
   const [items, setItems] = useState<Skill[]>([]);
@@ -48,10 +43,7 @@ export default function SkillsPage() {
       if (searchKeyword.trim()) {
         params.set("keyword", searchKeyword.trim());
       }
-      const url =
-        category === "official"
-          ? `${API_BASE}/v1/skills/meta/official?${params.toString()}`
-          : `${API_BASE}/v1/skills/meta/custom?${params.toString()}`;
+      const url = `${API_BASE}/v1/skills/meta?${params.toString()}`;
       const res = await fetch(url, {
         headers: buildAuthHeaders(token),
       });
@@ -71,7 +63,7 @@ export default function SkillsPage() {
     } finally {
       setLoading(false);
     }
-  }, [category, getValidToken, page, pageSize, searchKeyword]);
+  }, [getValidToken, page, pageSize, searchKeyword]);
 
   useEffect(() => {
     fetchList();
@@ -112,58 +104,6 @@ export default function SkillsPage() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm ${
-                category === "official"
-                  ? "border-gray-400 bg-gray-50 text-gray-900"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-              onClick={() => {
-                setCategory("official");
-                setPage(1);
-              }}
-            >
-              <svg
-                className="h-4 w-4 text-gray-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.7-4.9 2.7.9-5.5-4-3.9 5.5-.8L12 3z" />
-              </svg>
-              官方 Skill
-            </button>
-            <button
-              type="button"
-              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm ${
-                category === "custom"
-                  ? "border-gray-400 bg-gray-50 text-gray-900"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-              onClick={() => {
-                setCategory("custom");
-                setPage(1);
-              }}
-            >
-              <svg
-                className="h-4 w-4 text-gray-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M8 3a3 3 0 0 1 6 0v1h1.2a2.8 2.8 0 1 1 0 5.6H14V12h2.2a2.8 2.8 0 1 1 0 5.6H14V20a3 3 0 0 1-6 0v-1H6.8a2.8 2.8 0 1 1 0-5.6H8V9.6H5.8a2.8 2.8 0 1 1 0-5.6H8V3z" />
-              </svg>
-              自定义 Skill
-            </button>
-          </div>
           <button
             className="flex items-center gap-2 rounded-md border bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
             type="button"
@@ -205,7 +145,7 @@ export default function SkillsPage() {
                   className="flex h-full flex-col rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-gray-300 hover:shadow"
                   onClick={() =>
                     router.push(
-                      `/skills/detail?scope=${category}&name=${encodeURIComponent(
+                      `/skills/detail?name=${encodeURIComponent(
                         item.skillName
                       )}`
                     )
@@ -225,9 +165,6 @@ export default function SkillsPage() {
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <span className="rounded-full border px-2 py-0.5">
-                      {category === "official" ? "官方" : "自定义"}
-                    </span>
                     {item.source && (
                       <span className="rounded-full border px-2 py-0.5">
                         {item.source}

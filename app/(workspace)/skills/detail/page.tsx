@@ -17,17 +17,13 @@ import {
   updateTokenFromResponse,
 } from "../../auth";
 
-type SkillType = "official" | "custom";
-
 type Skill = {
   skill_id?: string;
   name?: string;
   description?: string;
-  type?: SkillType;
   source?: string;
   icon?: string;
   path?: string;
-  user_id?: string;
 };
 
 type SkillFileItem = {
@@ -151,7 +147,6 @@ export default function SkillDetailPage() {
   const [docModalLoading, setDocModalLoading] = useState(false);
   const [docModalError, setDocModalError] = useState("");
 
-  const scope = (params.get("scope") as SkillType) || "official";
   const rawName = params.get("name") ?? "";
   const normalizedName = useMemo(() => {
     const trimmed = rawName.trim();
@@ -240,15 +235,8 @@ export default function SkillDetailPage() {
       return `/${skill.path.replace(/^\/+/, "")}`;
     }
     if (!normalizedName) return "";
-    if (scope === "official") {
-      return `/official/${normalizedName}`;
-    }
-    if (skill?.user_id) {
-      return `/${skill.user_id}/${normalizedName}`;
-    }
-    return "";
-  }, [normalizedName, scope, skill?.path, skill?.user_id]);
-  const listScope = scope === "official" ? "official" : "user";
+    return `/${normalizedName}`;
+  }, [normalizedName, skill?.path]);
   const fetchFileList = useCallback(async () => {
     const token = getValidToken();
     if (!token) {
@@ -263,7 +251,6 @@ export default function SkillDetailPage() {
     setFileError("");
     try {
       const params = new URLSearchParams();
-      params.set("scope", listScope);
       params.set("path", skillPath);
       const res = await fetch(`${API_BASE}/v1/skills?${params.toString()}`, {
         headers: buildAuthHeaders(token),
@@ -290,7 +277,7 @@ export default function SkillDetailPage() {
     } finally {
       setFileLoading(false);
     }
-  }, [getValidToken, listScope, skillPath]);
+  }, [getValidToken, skillPath]);
   const fetchFileContent = async (path: string) => {
     const token = getValidToken();
     if (!token) {
@@ -306,7 +293,7 @@ export default function SkillDetailPage() {
     try {
       const nameParam = encodeURIComponent(normalizedName);
       const pathParam = encodeURIComponent(path);
-      const apiUrl = `${API_BASE}/v1/skills/content/${scope}/${nameParam}?path=${pathParam}`;
+      const apiUrl = `${API_BASE}/v1/skills/content/${nameParam}?path=${pathParam}`;
       const res = await fetch(apiUrl, {
         headers: buildAuthHeaders(token),
       });
@@ -490,7 +477,7 @@ export default function SkillDetailPage() {
     }
     const nameParam = encodeURIComponent(normalizedName);
     const pathParam = encodeURIComponent(href);
-    const apiUrl = `${API_BASE}/v1/skills/content/${scope}/${nameParam}?path=${pathParam}`;
+    const apiUrl = `${API_BASE}/v1/skills/content/${nameParam}?path=${pathParam}`;
     try {
       const res = await fetch(apiUrl, {
         headers: buildAuthHeaders(token),
@@ -575,7 +562,7 @@ export default function SkillDetailPage() {
       try {
         const nameParam = encodeURIComponent(normalizedName);
         const metaRes = await fetch(
-          `${API_BASE}/v1/skills/meta/${scope}/${nameParam}`,
+          `${API_BASE}/v1/skills/meta/${nameParam}`,
           {
             headers: buildAuthHeaders(token),
           }
@@ -587,7 +574,7 @@ export default function SkillDetailPage() {
         }
         setSkill(metaData.data ?? null);
         const contentRes = await fetch(
-          `${API_BASE}/v1/skills/content/${scope}/${nameParam}`,
+          `${API_BASE}/v1/skills/content/${nameParam}`,
           {
             headers: buildAuthHeaders(token),
           }
@@ -609,7 +596,7 @@ export default function SkillDetailPage() {
       }
     };
     fetchDetail();
-  }, [getValidToken, normalizedName, rawName, scope]);
+  }, [getValidToken, normalizedName]);
   useEffect(() => {
     setFileItems(null);
     setFileListLoaded(false);
@@ -674,9 +661,6 @@ export default function SkillDetailPage() {
                 <div className="mt-1 text-sm text-gray-500">{headerDesc}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                <span className="rounded-full border px-2 py-0.5">
-                  {scope === "official" ? "官方" : "自定义"}
-                </span>
                 {skill?.source && (
                   <span className="rounded-full border px-2 py-0.5">
                     {skill.source}
