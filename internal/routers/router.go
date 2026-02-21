@@ -58,8 +58,7 @@ func SetupRouter() *gin.Engine {
 	a2uiGroup := r.Group("/v1/a2uis", middleware.AuthRequired())
 	{
 		a2uiGroup.POST("", controllers.CreateA2UI)
-		a2uiGroup.GET("/official", controllers.ListOfficialA2UIs)
-		a2uiGroup.GET("/custom", controllers.ListCustomA2UIs)
+		a2uiGroup.GET("", controllers.ListA2UIs)
 		a2uiGroup.GET("/:id", controllers.GetA2UI)
 		a2uiGroup.PUT("/:id", controllers.UpdateA2UI)
 		a2uiGroup.DELETE("/:id", controllers.DeleteA2UI)

@@ -15,8 +15,7 @@ import (
 
 // A2UIServiceInterface 供 list/get 使用的 A2UI 查询接口，由 services 注入到 context
 type A2UIServiceInterface interface {
-	ListOfficialA2UIs(page, pageSize int, keyword string) ([]models.A2UI, int64, error)
-	ListCustomA2UIs(page, pageSize int, userID, keyword string) ([]models.A2UI, int64, error)
+	ListA2UIs(page, pageSize int, keyword string) ([]models.A2UI, int64, error)
 	GetA2UIByID(id string) (*models.A2UI, error)
 }
 
@@ -60,13 +59,7 @@ func listA2UIsImpl(ctx context.Context, input ListA2UIsInput) (string, error) {
 	if svc == nil {
 		return "", errA2UIServiceNotInCtx
 	}
-	userID, _ := ctx.Value(ContextKeyUserID).(string)
-
-	officialList, _, err := svc.ListOfficialA2UIs(1, listA2UIsLimit, "")
-	if err != nil {
-		return "", err
-	}
-	customList, _, err := svc.ListCustomA2UIs(1, listA2UIsLimit, userID, "")
+	a2uiList, _, err := svc.ListA2UIs(1, listA2UIsLimit, "")
 	if err != nil {
 		return "", err
 	}
@@ -75,23 +68,13 @@ func listA2UIsImpl(ctx context.Context, input ListA2UIsInput) (string, error) {
 		A2UIID      string `json:"a2ui_id"`
 		Name        string `json:"name"`
 		Description string `json:"description"`
-		Type        string `json:"type"`
 	}
 	var result []brief
-	for _, a := range officialList {
+	for _, a := range a2uiList {
 		result = append(result, brief{
 			A2UIID:      a.A2UIID,
 			Name:        a.Name,
 			Description: a.Description,
-			Type:        string(a.Type),
-		})
-	}
-	for _, a := range customList {
-		result = append(result, brief{
-			A2UIID:      a.A2UIID,
-			Name:        a.Name,
-			Description: a.Description,
-			Type:        string(a.Type),
 		})
 	}
 	b, err := json.Marshal(result)
@@ -112,10 +95,6 @@ func getA2UIImpl(ctx context.Context, input GetA2UIInput) (string, error) {
 	a, err := svc.GetA2UIByID(input.A2UIID)
 	if err != nil {
 		return "", err
-	}
-	userID, _ := ctx.Value(ContextKeyUserID).(string)
-	if a.Type == models.A2UITypeCustom && a.UserID != "" && a.UserID != userID {
-		return "", errA2UINotFoundOrNoAccess
 	}
 	b, err := json.Marshal(a)
 	if err != nil {
@@ -144,11 +123,6 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	userID, _ := ctx.Value(ContextKeyUserID).(string)
-	if a.Type == models.A2UITypeCustom && a.UserID != "" && a.UserID != userID {
-		return "", errA2UINotFoundOrNoAccess
-	}
-
 	resp := a2ui.A2UIResponse{
 		MsgID:     input.MsgID,
 		SurfaceID: input.SurfaceID,
@@ -165,7 +139,7 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 func GetA2UITools(ctx context.Context) ([]einoTool.BaseTool, error) {
 	listTool, err := utils.InferTool[ListA2UIsInput, string](
 		"list_a2uis",
-		"列出当前用户可以访问的全部 A2UI（官方 + 该用户的自定义），一次返回所有。返回 a2ui_id、name、description、type 等简要信息。",
+		"列出当前用户可以访问的全部 A2UI，一次返回所有。返回 a2ui_id、name、description 等简要信息。",
 		listA2UIsImpl,
 	)
 	if err != nil {
@@ -173,7 +147,7 @@ func GetA2UITools(ctx context.Context) ([]einoTool.BaseTool, error) {
 	}
 	getTool, err := utils.InferTool[GetA2UIInput, string](
 		"get_a2ui",
-		"根据 a2ui_id 获取单个 A2UI 的详细信息（含 ui_json、data_json 等）。仅能访问官方 A2UI 或本人创建的自定义 A2UI。",
+		"根据 a2ui_id 获取单个 A2UI 的详细信息（含 ui_json、data_json 等）。",
 		getA2UIImpl,
 	)
 	if err != nil {

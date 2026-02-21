@@ -30,6 +30,16 @@ func Init(dsn string) error {
 	if err := DB.AutoMigrate(&models.User{}, &models.A2UI{}, &models.Thread{}, &models.Message{}); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
+	if DB.Migrator().HasColumn(&models.A2UI{}, "type") {
+		if err := DB.Migrator().DropColumn(&models.A2UI{}, "type"); err != nil {
+			log.Fatalf("failed to drop a2ui.type: %v", err)
+		}
+	}
+	if DB.Migrator().HasColumn(&models.A2UI{}, "user_id") {
+		if err := DB.Migrator().DropColumn(&models.A2UI{}, "user_id"); err != nil {
+			log.Fatalf("failed to drop a2ui.user_id: %v", err)
+		}
+	}
 
 	return err
 }
