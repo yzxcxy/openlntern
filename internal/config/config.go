@@ -8,15 +8,17 @@ import (
 )
 
 type Config struct {
-	Port    string        `yaml:"port"`
-	MySQL   MySQLConfig   `yaml:"mysql"`
-	Redis   RedisConfig   `yaml:"redis"`
-	JWT     JWTConfig     `yaml:"jwt"`
-	COS     COSConfig     `yaml:"cos"`
-	LLM     LLMConfig     `yaml:"llm"`
-	SummaryLLM LLMConfig `yaml:"summary_llm"`
-	Tools   ToolsConfig   `yaml:"tools"`
-	APMPlus APMPlusConfig `yaml:"apmplus"`
+	Port         string             `yaml:"port"`
+	MySQL        MySQLConfig        `yaml:"mysql"`
+	Redis        RedisConfig        `yaml:"redis"`
+	JWT          JWTConfig          `yaml:"jwt"`
+	COS          COSConfig          `yaml:"cos"`
+	LLM          LLMConfig          `yaml:"llm"`
+	SummaryLLM   LLMConfig          `yaml:"summary_llm"`
+	EmbeddingLLM EmbeddingLLMConfig `yaml:"embedding_llm"`
+	Milvus       MilvusConfig       `yaml:"milvus"`
+	Tools        ToolsConfig        `yaml:"tools"`
+	APMPlus      APMPlusConfig      `yaml:"apmplus"`
 }
 
 type MySQLConfig struct {
@@ -44,6 +46,22 @@ type COSConfig struct {
 type LLMConfig struct {
 	Model  string `yaml:"model"`
 	APIKey string `yaml:"api_key"`
+}
+
+type EmbeddingLLMConfig struct {
+	Model  string `yaml:"model"`
+	APIKey string `yaml:"api_key"`
+}
+
+type MilvusConfig struct {
+	Address      string `yaml:"address"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`
+	APIKey       string `yaml:"api_key"`
+	Dimension    int64  `yaml:"dimension"`
+	MetricType   string `yaml:"metric_type"`
+	EnableHybrid bool   `yaml:"enable_hybrid"`
+	AnalyzerType string `yaml:"analyzer_type"`
 }
 
 type ToolsConfig struct {

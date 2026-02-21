@@ -1,9 +1,11 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
+	"openIntern/internal/services/rag"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -28,7 +30,10 @@ func (s *UserService) CreateUser(user *models.User) error {
 	}
 	user.Password = string(hashedPassword)
 
-	return database.DB.Create(user).Error
+	if err := database.DB.Create(user).Error; err != nil {
+		return err
+	}
+	return rag.RAG.EnsureUserDatabase(context.Background(), user.UserID)
 }
 
 // GetUserByUserID 根据 UserID 获取用户

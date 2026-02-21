@@ -7,6 +7,8 @@ import (
 	"openIntern/internal/database"
 	"openIntern/internal/routers"
 	"openIntern/internal/services"
+	"openIntern/internal/services/embedding"
+	"openIntern/internal/services/rag"
 )
 
 func main() {
@@ -20,6 +22,12 @@ func main() {
 	services.InitAuth(cfg.JWT.Secret, cfg.JWT.ExpireMinutes)
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
+	}
+	if err := embedding.InitEmbedding(cfg.EmbeddingLLM); err != nil {
+		log.Fatalf("failed to init embedding service: %v", err)
+	}
+	if err := rag.InitRAG(cfg.Milvus); err != nil {
+		log.Fatalf("failed to init rag service: %v", err)
 	}
 	shutdown, err := services.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.APMPlus)
 	if err != nil {
