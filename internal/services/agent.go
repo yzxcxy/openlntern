@@ -64,7 +64,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent agui to eino failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	// 注入 A2UI 工具所需的 context：service 与 sender（user_id 由 controller 注入）
+	// 注入 A2UI 工具所需的 context：service 与 sender
 	ctx = context.WithValue(ctx, tools.ContextKeyA2UIService, A2UI)
 	ctx = context.WithValue(ctx, tools.ContextKeyA2UISender, s)
 	err = runEinoStreaming(ctx, s, einoMessages)

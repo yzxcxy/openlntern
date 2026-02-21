@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"openIntern/internal/agui"
 	"openIntern/internal/a2ui"
+	"openIntern/internal/agui"
 	"openIntern/internal/models"
 	"strings"
 
@@ -21,19 +21,17 @@ type A2UIServiceInterface interface {
 
 var (
 	errA2UIIDRequired         = errors.New("a2ui_id is required")
-	errA2UINotFoundOrNoAccess = errors.New("a2ui not found or no access")
 	errA2UISenderNotAvailable = errors.New("a2ui sender not available in this context")
 	errMsgIDRequired          = errors.New("msg_id is required")
 	errA2UIServiceNotInCtx    = errors.New("a2ui service not available in context")
 )
 
-// Context key 类型，用于从 context 中获取当前用户 ID 和 A2UI Sender
+// Context key 类型，用于从 context 中获取 A2UI Sender
 type contextKey string
 
 const (
-	ContextKeyUserID       contextKey = "openintern_user_id"
-	ContextKeyA2UISender   contextKey = "openintern_a2ui_sender"
-	ContextKeyA2UIService  contextKey = "openintern_a2ui_service"
+	ContextKeyA2UISender  contextKey = "openintern_a2ui_sender"
+	ContextKeyA2UIService contextKey = "openintern_a2ui_service"
 )
 
 // ListA2UIsInput 列出可访问 A2UI 的入参（无参数，一次返回全部）
@@ -135,11 +133,11 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 	return `{"status":"ok","message":"A2UI 已发送"}`, nil
 }
 
-// GetA2UITools 返回 A2UI 相关的三个工具（依赖从 context 读取 user_id 与 a2ui_sender）
+// GetA2UITools 返回 A2UI 相关的三个工具（依赖从 context 读取 a2ui_sender）
 func GetA2UITools(ctx context.Context) ([]einoTool.BaseTool, error) {
 	listTool, err := utils.InferTool[ListA2UIsInput, string](
 		"list_a2uis",
-		"列出当前用户可以访问的全部 A2UI，一次返回所有。返回 a2ui_id、name、description 等简要信息。",
+		"列出已通过鉴权可访问的全部 A2UI，一次返回所有。返回 a2ui_id、name、description 等简要信息。",
 		listA2UIsImpl,
 	)
 	if err != nil {
