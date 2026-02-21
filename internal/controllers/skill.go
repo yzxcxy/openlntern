@@ -27,8 +27,6 @@ type skillFileItem struct {
 	Date time.Time `json:"date"`
 }
 
-const officialSkillDirName = "official"
-
 type skillFrontmatter struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
@@ -37,23 +35,10 @@ type skillFrontmatter struct {
 }
 
 func ListSkillFiles(c *gin.Context) {
-	scope := strings.TrimSpace(c.DefaultQuery("scope", "official"))
 	rawPath := c.DefaultQuery("path", "/")
-	userID, _, ok := getAuthUser(c)
-
-	if scope != "official" && scope != "user" {
-		response.BadRequest(c)
-		return
-	}
-
-	if scope == "user" && !ok {
+	if _, _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
-	}
-
-	baseSegment := "official"
-	if scope == "user" {
-		baseSegment = userID
 	}
 
 	cleaned, err := cleanSkillPath(rawPath)
@@ -62,7 +47,7 @@ func ListSkillFiles(c *gin.Context) {
 		return
 	}
 
-	absPath, relPath, err := resolveSkillPath(cleaned, baseSegment)
+	absPath, relPath, err := resolveSkillPath(cleaned)
 	if err != nil {
 		response.Forbidden(c)
 		return
@@ -129,18 +114,12 @@ func ReadSkillFile(c *gin.Context) {
 		return
 	}
 
-	userID, _, ok := getAuthUser(c)
-	baseSegment, err := resolveReadBase(cleaned, userID, ok)
-	if err != nil {
-		if errors.Is(err, errUnauthorized) {
-			response.Unauthorized(c)
-			return
-		}
-		response.Forbidden(c)
+	if _, _, ok := getAuthUser(c); !ok {
+		response.Unauthorized(c)
 		return
 	}
 
-	absPath, _, err := resolveSkillPath(cleaned, baseSegment)
+	absPath, _, err := resolveSkillPath(cleaned)
 	if err != nil {
 		response.Forbidden(c)
 		return
@@ -188,23 +167,12 @@ func CreateSkillEntry(c *gin.Context) {
 		return
 	}
 
-	userID, role, ok := getAuthUser(c)
-	if !ok {
+	if _, _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
 
-	baseSegment, err := resolveWriteBase(cleaned, userID, role)
-	if err != nil {
-		if errors.Is(err, errUnauthorized) {
-			response.Unauthorized(c)
-			return
-		}
-		response.Forbidden(c)
-		return
-	}
-
-	absPath, _, err := resolveSkillPath(cleaned, baseSegment)
+	absPath, _, err := resolveSkillPath(cleaned)
 	if err != nil {
 		response.Forbidden(c)
 		return
@@ -269,23 +237,12 @@ func UpdateSkillFile(c *gin.Context) {
 		return
 	}
 
-	userID, role, ok := getAuthUser(c)
-	if !ok {
+	if _, _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
 
-	baseSegment, err := resolveWriteBase(cleaned, userID, role)
-	if err != nil {
-		if errors.Is(err, errUnauthorized) {
-			response.Unauthorized(c)
-			return
-		}
-		response.Forbidden(c)
-		return
-	}
-
-	absPath, _, err := resolveSkillPath(cleaned, baseSegment)
+	absPath, _, err := resolveSkillPath(cleaned)
 	if err != nil {
 		response.Forbidden(c)
 		return
@@ -326,23 +283,12 @@ func DeleteSkillEntry(c *gin.Context) {
 		return
 	}
 
-	userID, role, ok := getAuthUser(c)
-	if !ok {
+	if _, _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
 
-	baseSegment, err := resolveWriteBase(cleaned, userID, role)
-	if err != nil {
-		if errors.Is(err, errUnauthorized) {
-			response.Unauthorized(c)
-			return
-		}
-		response.Forbidden(c)
-		return
-	}
-
-	absPath, _, err := resolveSkillPath(cleaned, baseSegment)
+	absPath, _, err := resolveSkillPath(cleaned)
 	if err != nil {
 		response.Forbidden(c)
 		return
@@ -378,43 +324,14 @@ func CreateSkillMeta(c *gin.Context) {
 	response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "skill meta is read-only")
 }
 
-func GetOfficialSkillMetaByName(c *gin.Context) {
+func GetSkillMetaByName(c *gin.Context) {
 	name, err := parseSkillName(c.Param("name"))
 	if err != nil {
 		response.BadRequest(c)
 		return
 	}
 
-	baseDir, err := skillBaseDir()
-	if err != nil {
-		response.InternalError(c)
-		return
-	}
-	skillDir := filepath.Join(baseDir, officialSkillDirName, name)
-	skillFile := filepath.Join(skillDir, "SKILL.md")
-
-	skill, err := readSkillFromFile(skillFile, path.Join("official", name), "", "official")
-	if err != nil {
-		if os.IsNotExist(err) {
-			response.NotFound(c, "skill not found")
-			return
-		}
-		response.InternalError(c)
-		return
-	}
-
-	response.JSONSuccess(c, http.StatusOK, skill)
-}
-
-func GetCustomSkillMetaByName(c *gin.Context) {
-	name, err := parseSkillName(c.Param("name"))
-	if err != nil {
-		response.BadRequest(c)
-		return
-	}
-
-	userID, _, ok := getAuthUser(c)
-	if !ok {
+	if _, _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -424,74 +341,10 @@ func GetCustomSkillMetaByName(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	skillDir := filepath.Join(baseDir, userID, name)
+	skillDir := filepath.Join(baseDir, name)
 	skillFile := filepath.Join(skillDir, "SKILL.md")
 
-	skill, err := readSkillFromFile(skillFile, path.Join(userID, name), userID, userID)
-	if err != nil {
-		if os.IsNotExist(err) {
-			response.NotFound(c, "skill not found")
-			return
-		}
-		response.InternalError(c)
-		return
-	}
-
-	response.JSONSuccess(c, http.StatusOK, skill)
-}
-
-func GetSkillMeta(c *gin.Context) {
-	id := c.Param("id")
-	if strings.TrimSpace(id) == "" {
-		response.BadRequest(c)
-		return
-	}
-
-	decoded, err := url.PathUnescape(id)
-	if err != nil {
-		response.BadRequest(c)
-		return
-	}
-
-	cleaned, err := cleanSkillPath(decoded)
-	if err != nil {
-		response.BadRequest(c)
-		return
-	}
-
-	userID, _, ok := getAuthUser(c)
-	baseSegment, err := resolveReadBase(cleaned, userID, ok)
-	if err != nil {
-		if errors.Is(err, errUnauthorized) {
-			response.Unauthorized(c)
-			return
-		}
-		response.Forbidden(c)
-		return
-	}
-
-	absPath, relPath, err := resolveSkillMetaPath(cleaned, baseSegment)
-	if err != nil {
-		response.Forbidden(c)
-		return
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			response.NotFound(c, "skill not found")
-			return
-		}
-		response.InternalError(c)
-		return
-	}
-
-	skillFile := absPath
-	if info.IsDir() {
-		skillFile = filepath.Join(absPath, "SKILL.md")
-	}
-
-	skill, err := readSkillFromFile(skillFile, relPath, userID, baseSegment)
+	skill, err := readSkillFromFile(skillFile, name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			response.NotFound(c, "skill not found")
@@ -512,10 +365,15 @@ func DeleteSkillMeta(c *gin.Context) {
 	response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "skill meta is read-only")
 }
 
-func ReadOfficialSkillContent(c *gin.Context) {
+func ReadSkillContent(c *gin.Context) {
 	name, err := parseSkillName(c.Param("name"))
 	if err != nil {
 		response.BadRequest(c)
+		return
+	}
+
+	if _, _, ok := getAuthUser(c); !ok {
+		response.Unauthorized(c)
 		return
 	}
 
@@ -524,7 +382,7 @@ func ReadOfficialSkillContent(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	skillDir := filepath.Join(baseDir, officialSkillDirName, name)
+	skillDir := filepath.Join(baseDir, name)
 	skillFile, err := resolveSkillContentPath(skillDir, c.Query("path"))
 	if err != nil {
 		if errors.Is(err, errInvalidPath) {
@@ -566,15 +424,12 @@ func ReadOfficialSkillContent(c *gin.Context) {
 	})
 }
 
-func ReadCustomSkillContent(c *gin.Context) {
-	name, err := parseSkillName(c.Param("name"))
-	if err != nil {
-		response.BadRequest(c)
-		return
-	}
+func ListSkills(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	keyword := c.Query("keyword")
 
-	userID, _, ok := getAuthUser(c)
-	if !ok {
+	if _, _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -584,60 +439,8 @@ func ReadCustomSkillContent(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	skillDir := filepath.Join(baseDir, userID, name)
-	skillFile, err := resolveSkillContentPath(skillDir, c.Query("path"))
-	if err != nil {
-		if errors.Is(err, errInvalidPath) {
-			response.BadRequest(c)
-			return
-		}
-		if errors.Is(err, errOutOfScope) {
-			response.Forbidden(c)
-			return
-		}
-		response.InternalError(c)
-		return
-	}
-	info, err := os.Stat(skillFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			response.NotFound(c, "file not found")
-			return
-		}
-		response.InternalError(c)
-		return
-	}
-	if info.IsDir() {
-		response.BadRequest(c)
-		return
-	}
-	content, err := os.ReadFile(skillFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			response.NotFound(c, "file not found")
-			return
-		}
-		response.InternalError(c)
-		return
-	}
-	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"name":    name,
-		"content": string(content),
-	})
-}
 
-func ListOfficialSkills(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	keyword := c.Query("keyword")
-
-	baseDir, err := skillBaseDir()
-	if err != nil {
-		response.InternalError(c)
-		return
-	}
-
-	skills, total, err := listSkillMetas(filepath.Join(baseDir, officialSkillDirName), "official", "", keyword, page, pageSize)
+	skills, total, err := listSkillMetas(baseDir, keyword, page, pageSize)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -651,47 +454,6 @@ func ListOfficialSkills(c *gin.Context) {
 	})
 }
 
-func ListCustomSkills(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	userID := c.Query("user_id")
-	keyword := c.Query("keyword")
-
-	authUserID, _, ok := getAuthUser(c)
-	if !ok {
-		response.Unauthorized(c)
-		return
-	}
-
-	if userID == "" {
-		userID = authUserID
-	}
-	if userID != authUserID {
-		response.Forbidden(c)
-		return
-	}
-
-	baseDir, err := skillBaseDir()
-	if err != nil {
-		response.InternalError(c)
-		return
-	}
-
-	skills, total, err := listSkillMetas(filepath.Join(baseDir, userID), userID, userID, keyword, page, pageSize)
-	if err != nil {
-		response.InternalError(c)
-		return
-	}
-
-	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"data":  skills,
-		"total": total,
-		"page":  page,
-		"size":  pageSize,
-	})
-}
-
-var errUnauthorized = errors.New("unauthorized")
 var errInvalidPath = errors.New("invalid path")
 var errOutOfScope = errors.New("out of scope")
 
@@ -795,104 +557,33 @@ func parseSkillName(name string) (string, error) {
 	return decoded, nil
 }
 
-func resolveSkillPath(cleaned string, baseSegment string) (string, string, error) {
-	if baseSegment == "" {
-		return "", "", errors.New("invalid base")
-	}
-	relPath := ""
-	if cleaned == "/" {
-		relPath = baseSegment
-	} else {
-		relPath = strings.TrimPrefix(cleaned, "/")
-		parts := strings.SplitN(relPath, "/", 2)
-		if len(parts) == 0 || parts[0] != baseSegment {
-			return "", "", errors.New("out of scope")
-		}
-	}
+func resolveSkillPath(cleaned string) (string, string, error) {
+	relPath := strings.TrimPrefix(cleaned, "/")
 	baseDir, err := skillBaseDir()
 	if err != nil {
 		return "", "", err
 	}
 	absPath := filepath.Join(baseDir, filepath.FromSlash(relPath))
-	return absPath, relPath, nil
-}
-
-func resolveReadBase(cleaned string, userID string, hasAuth bool) (string, error) {
-	if hasSegmentPrefix(cleaned, "official") {
-		return "official", nil
-	}
-	if !hasAuth {
-		return "", errUnauthorized
-	}
-	if hasSegmentPrefix(cleaned, userID) {
-		return userID, nil
-	}
-	return "", errors.New("out of scope")
-}
-
-func resolveWriteBase(cleaned string, userID string, role string) (string, error) {
-	if userID == "" {
-		return "", errUnauthorized
-	}
-	if hasSegmentPrefix(cleaned, "official") {
-		if role != models.RoleAdmin {
-			return "", errors.New("forbidden")
-		}
-		return "official", nil
-	}
-	if hasSegmentPrefix(cleaned, userID) {
-		return userID, nil
-	}
-	return "", errors.New("forbidden")
-}
-
-func hasSegmentPrefix(cleaned string, segment string) bool {
-	if segment == "" {
-		return false
-	}
-	prefix := "/" + segment
-	if !strings.HasPrefix(cleaned, prefix) {
-		return false
-	}
-	if len(cleaned) == len(prefix) {
-		return true
-	}
-	return cleaned[len(prefix)] == '/'
-}
-
-func resolveSkillMetaPath(cleaned string, baseSegment string) (string, string, error) {
-	if baseSegment == "" {
-		return "", "", errors.New("invalid base")
-	}
-	relPath := ""
-	if cleaned == "/" {
-		relPath = baseSegment
-	} else {
-		relPath = strings.TrimPrefix(cleaned, "/")
-		parts := strings.SplitN(relPath, "/", 2)
-		if len(parts) == 0 || parts[0] != baseSegment {
-			return "", "", errors.New("out of scope")
-		}
-	}
-	fsRelPath := relPath
-	if baseSegment == "official" {
-		parts := strings.SplitN(relPath, "/", 2)
-		parts[0] = officialSkillDirName
-		fsRelPath = parts[0]
-		if len(parts) > 1 {
-			fsRelPath = fsRelPath + "/" + parts[1]
-		}
-	}
-	baseDir, err := skillBaseDir()
+	baseAbs, err := filepath.Abs(baseDir)
 	if err != nil {
 		return "", "", err
 	}
-	absPath := filepath.Join(baseDir, filepath.FromSlash(fsRelPath))
-	return absPath, relPath, nil
+	targetAbs, err := filepath.Abs(absPath)
+	if err != nil {
+		return "", "", err
+	}
+	relTo, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.HasPrefix(relTo, "..") {
+		return "", "", errors.New("out of scope")
+	}
+	return targetAbs, relPath, nil
 }
 
-func listSkillMetas(baseDir string, baseSegment string, userID string, keyword string, page int, pageSize int) ([]models.Skill, int64, error) {
-	skills, err := collectSkills(baseDir, baseSegment, userID)
+func listSkillMetas(baseDir string, keyword string, page int, pageSize int) ([]models.Skill, int64, error) {
+	skills, err := collectSkills(baseDir)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -930,7 +621,7 @@ func listSkillMetas(baseDir string, baseSegment string, userID string, keyword s
 	return skills[start:end], total, nil
 }
 
-func collectSkills(baseDir string, baseSegment string, userID string) ([]models.Skill, error) {
+func collectSkills(baseDir string) ([]models.Skill, error) {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -945,7 +636,7 @@ func collectSkills(baseDir string, baseSegment string, userID string) ([]models.
 			continue
 		}
 		dirName := entry.Name()
-		skillPath := path.Join(baseSegment, dirName)
+		skillPath := path.Join(dirName)
 		skillFile := filepath.Join(baseDir, dirName, "SKILL.md")
 		info, err := os.Stat(skillFile)
 		if err != nil {
@@ -957,7 +648,7 @@ func collectSkills(baseDir string, baseSegment string, userID string) ([]models.
 		if info.IsDir() {
 			continue
 		}
-		skill, err := readSkillFromFile(skillFile, skillPath, userID, baseSegment)
+		skill, err := readSkillFromFile(skillFile, skillPath)
 		if err != nil {
 			return nil, err
 		}
@@ -966,7 +657,7 @@ func collectSkills(baseDir string, baseSegment string, userID string) ([]models.
 	return skills, nil
 }
 
-func readSkillFromFile(skillFile string, skillPath string, userID string, baseSegment string) (models.Skill, error) {
+func readSkillFromFile(skillFile string, skillPath string) (models.Skill, error) {
 	data, err := os.ReadFile(skillFile)
 	if err != nil {
 		return models.Skill{}, err
@@ -978,19 +669,13 @@ func readSkillFromFile(skillFile string, skillPath string, userID string, baseSe
 
 	dirName := filepath.Base(filepath.Dir(skillFile))
 	author := parseAuthorFromDir(dirName)
-	skillType := models.SkillTypeCustom
-	if baseSegment == "official" {
-		skillType = models.SkillTypeOfficial
-	}
 	return models.Skill{
 		SkillID:     url.PathEscape(skillPath),
 		Name:        frontmatter.Name,
 		Description: frontmatter.Description,
-		Type:        skillType,
 		Source:      author,
 		Icon:        frontmatter.Icon,
 		Path:        skillPath,
-		UserID:      userID,
 	}, nil
 }
 

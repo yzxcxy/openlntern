@@ -64,18 +64,21 @@ func SetupRouter() *gin.Engine {
 		a2uiGroup.DELETE("/:id", controllers.DeleteA2UI)
 	}
 
-	r.GET("/v1/skills", controllers.ListSkillFiles)
-	r.POST("/v1/skills", controllers.CreateSkillEntry)
-	r.PUT("/v1/skills/content", controllers.UpdateSkillFile)
-	r.DELETE("/v1/skills", controllers.DeleteSkillEntry)
-	r.GET("/v1/skills/content/official/:name", controllers.ReadOfficialSkillContent)
-	r.GET("/v1/skills/content/custom/:name", controllers.ReadCustomSkillContent)
+	skillGroup := r.Group("/v1/skills", middleware.AuthRequired())
+	{
+		skillGroup.GET("", controllers.ListSkillFiles)
+		skillGroup.POST("", controllers.CreateSkillEntry)
+		skillGroup.PUT("/content", controllers.UpdateSkillFile)
+		skillGroup.DELETE("", controllers.DeleteSkillEntry)
+		skillGroup.GET("/content/:name", controllers.ReadSkillContent)
+	}
 
-	r.POST("/v1/skills/meta", controllers.CreateSkillMeta)
-	r.GET("/v1/skills/meta/official", controllers.ListOfficialSkills)
-	r.GET("/v1/skills/meta/custom", controllers.ListCustomSkills)
-	r.GET("/v1/skills/meta/official/:name", controllers.GetOfficialSkillMetaByName)
-	r.GET("/v1/skills/meta/custom/:name", controllers.GetCustomSkillMetaByName)
+	skillMetaGroup := r.Group("/v1/skills/meta", middleware.AuthRequired())
+	{
+		skillMetaGroup.POST("", controllers.CreateSkillMeta)
+		skillMetaGroup.GET("", controllers.ListSkills)
+		skillMetaGroup.GET("/:name", controllers.GetSkillMetaByName)
+	}
 
 	return r
 }
