@@ -275,9 +275,6 @@ func ensureThreadTitle(ctx context.Context, threadID string, messages []types.Me
 	if strings.TrimSpace(thread.Title) != "" {
 		return nil
 	}
-	if thread.OwnerID == "" {
-		return nil
-	}
 	source := extractTitleSource(messages)
 	if source == "" {
 		return nil
@@ -290,7 +287,7 @@ func ensureThreadTitle(ctx context.Context, threadID string, messages []types.Me
 	if title == "" {
 		return nil
 	}
-	return Thread.UpdateThreadTitle(thread.OwnerID, thread.ThreadID, title)
+	return Thread.UpdateThreadTitle(thread.ThreadID, title)
 }
 
 func extractTitleSource(messages []types.Message) string {

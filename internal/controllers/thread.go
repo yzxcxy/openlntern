@@ -13,11 +13,10 @@ import (
 )
 
 func ListThreads(c *gin.Context) {
-	ownerID := c.GetString("user_id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
-	threads, total, err := services.Thread.ListThreads(ownerID, page, pageSize)
+	threads, total, err := services.Thread.ListThreads(page, pageSize)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -31,9 +30,8 @@ func ListThreads(c *gin.Context) {
 }
 
 func GetThread(c *gin.Context) {
-	ownerID := c.GetString("user_id")
 	threadID := c.Param("thread_id")
-	thread, err := services.Thread.GetThread(ownerID, threadID)
+	thread, err := services.Thread.GetThread(threadID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
@@ -46,7 +44,6 @@ func GetThread(c *gin.Context) {
 }
 
 func UpdateThread(c *gin.Context) {
-	ownerID := c.GetString("user_id")
 	threadID := c.Param("thread_id")
 	var req struct {
 		Title string `json:"title"`
@@ -55,7 +52,7 @@ func UpdateThread(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if err := services.Thread.UpdateThreadTitle(ownerID, threadID, req.Title); err != nil {
+	if err := services.Thread.UpdateThreadTitle(threadID, req.Title); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
 			return
@@ -67,9 +64,8 @@ func UpdateThread(c *gin.Context) {
 }
 
 func DeleteThread(c *gin.Context) {
-	ownerID := c.GetString("user_id")
 	threadID := c.Param("thread_id")
-	if err := services.Thread.DeleteThread(ownerID, threadID); err != nil {
+	if err := services.Thread.DeleteThread(threadID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
 			return

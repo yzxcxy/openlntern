@@ -17,9 +17,9 @@ type MessageService struct{}
 
 var Message = new(MessageService)
 
-func (s *MessageService) ListMessages(ownerID, threadID string, page, pageSize int) ([]models.Message, int64, error) {
-	if ownerID == "" || threadID == "" {
-		return nil, 0, errors.New("owner_id and thread_id are required")
+func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]models.Message, int64, error) {
+	if threadID == "" {
+		return nil, 0, errors.New("thread_id is required")
 	}
 	if page <= 0 {
 		page = 1
@@ -29,7 +29,7 @@ func (s *MessageService) ListMessages(ownerID, threadID string, page, pageSize i
 	}
 
 	var thread models.Thread
-	if err := database.DB.Where("owner_id = ? AND thread_id = ?", ownerID, threadID).First(&thread).Error; err != nil {
+	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
 		return nil, 0, err
 	}
 

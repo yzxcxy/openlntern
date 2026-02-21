@@ -18,17 +18,14 @@ type ThreadService struct{}
 
 var Thread = new(ThreadService)
 
-func (s *ThreadService) ListThreads(ownerID string, page, pageSize int) ([]models.Thread, int64, error) {
-	if ownerID == "" {
-		return nil, 0, errors.New("owner_id is required")
-	}
+func (s *ThreadService) ListThreads(page, pageSize int) ([]models.Thread, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
 	if pageSize <= 0 {
 		pageSize = 10
 	}
-	key := fmt.Sprintf("threads:%s:%d:%d", ownerID, page, pageSize)
+	key := fmt.Sprintf("threads:%d:%d", page, pageSize)
 	ctx := context.Background()
 	client := database.GetRedis()
 	if client != nil {
@@ -45,7 +42,7 @@ func (s *ThreadService) ListThreads(ownerID string, page, pageSize int) ([]model
 
 	var threads []models.Thread
 	var total int64
-	db := database.DB.Model(&models.Thread{}).Where("owner_id = ?", ownerID)
+	db := database.DB.Model(&models.Thread{})
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -70,11 +67,11 @@ func (s *ThreadService) ListThreads(ownerID string, page, pageSize int) ([]model
 	return threads, total, nil
 }
 
-func (s *ThreadService) GetThread(ownerID, threadID string) (*models.Thread, error) {
-	if ownerID == "" || threadID == "" {
-		return nil, errors.New("owner_id and thread_id are required")
+func (s *ThreadService) GetThread(threadID string) (*models.Thread, error) {
+	if threadID == "" {
+		return nil, errors.New("thread_id is required")
 	}
-	key := fmt.Sprintf("thread:%s:%s", ownerID, threadID)
+	key := fmt.Sprintf("thread:%s", threadID)
 	ctx := context.Background()
 	client := database.GetRedis()
 	if client != nil {
@@ -89,7 +86,7 @@ func (s *ThreadService) GetThread(ownerID, threadID string) (*models.Thread, err
 	}
 
 	var thread models.Thread
-	err := database.DB.Where("owner_id = ? AND thread_id = ?", ownerID, threadID).First(&thread).Error
+	err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
@@ -117,18 +114,14 @@ func (s *ThreadService) GetThreadByThreadID(threadID string) (*models.Thread, er
 	return &thread, nil
 }
 
-func (s *ThreadService) EnsureThread(ownerID, threadID, title string) (*models.Thread, error) {
-	if ownerID == "" || threadID == "" {
-		return nil, errors.New("owner_id and thread_id are required")
+func (s *ThreadService) EnsureThread(threadID, title string) (*models.Thread, error) {
+	if threadID == "" {
+		return nil, errors.New("thread_id is required")
 	}
 	var thread models.Thread
 	err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error
 	if err == nil {
 		updates := map[string]any{}
-		if thread.OwnerID == "" && ownerID != "" {
-			updates["owner_id"] = ownerID
-			thread.OwnerID = ownerID
-		}
 		if thread.Title == "" && title != "" {
 			updates["title"] = title
 			thread.Title = title
@@ -137,50 +130,49 @@ func (s *ThreadService) EnsureThread(ownerID, threadID, title string) (*models.T
 			if err := database.DB.Model(&thread).Updates(updates).Error; err != nil {
 				return nil, err
 			}
-			invalidateThreadCache(thread.OwnerID, thread.ThreadID)
+			invalidateThreadCache(thread.ThreadID)
 		}
 		return &thread, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		thread = models.Thread{
 			ThreadID: threadID,
-			OwnerID:  ownerID,
 			Title:    title,
 		}
 		if err := database.DB.Create(&thread).Error; err != nil {
 			return nil, err
 		}
-		invalidateThreadCache(thread.OwnerID, thread.ThreadID)
+		invalidateThreadCache(thread.ThreadID)
 		return &thread, nil
 	}
 	return nil, err
 }
 
-func (s *ThreadService) UpdateThreadTitle(ownerID, threadID, title string) error {
-	if ownerID == "" || threadID == "" {
-		return errors.New("owner_id and thread_id are required")
+func (s *ThreadService) UpdateThreadTitle(threadID, title string) error {
+	if threadID == "" {
+		return errors.New("thread_id is required")
 	}
 	if title == "" {
 		return errors.New("title is required")
 	}
 	var thread models.Thread
-	if err := database.DB.Where("owner_id = ? AND thread_id = ?", ownerID, threadID).First(&thread).Error; err != nil {
+	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
 		return err
 	}
 	if err := database.DB.Model(&thread).Update("title", title).Error; err != nil {
 		return err
 	}
-	invalidateThreadCache(ownerID, threadID)
+	invalidateThreadCache(threadID)
 	return nil
 }
 
-func (s *ThreadService) DeleteThread(ownerID, threadID string) error {
-	if ownerID == "" || threadID == "" {
-		return errors.New("owner_id and thread_id are required")
+func (s *ThreadService) DeleteThread(threadID string) error {
+	if threadID == "" {
+		return errors.New("thread_id is required")
 	}
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		var thread models.Thread
-		if err := tx.Where("owner_id = ? AND thread_id = ?", ownerID, threadID).First(&thread).Error; err != nil {
+		if err := tx.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("thread_id = ?", threadID).Delete(&models.Message{}).Error; err != nil {
@@ -191,7 +183,7 @@ func (s *ThreadService) DeleteThread(ownerID, threadID string) error {
 	if err != nil {
 		return err
 	}
-	invalidateThreadCache(ownerID, threadID)
+	invalidateThreadCache(threadID)
 	return nil
 }
 
@@ -206,20 +198,20 @@ func (s *ThreadService) TouchThread(threadID string) error {
 	if err := database.DB.Model(&thread).Update("updated_at", time.Now()).Error; err != nil {
 		return err
 	}
-	invalidateThreadCache(thread.OwnerID, thread.ThreadID)
+	invalidateThreadCache(thread.ThreadID)
 	return nil
 }
 
-func invalidateThreadCache(ownerID, threadID string) {
+func invalidateThreadCache(threadID string) {
 	client := database.GetRedis()
-	if client == nil || ownerID == "" {
+	if client == nil {
 		return
 	}
 	ctx := context.Background()
 	if threadID != "" {
-		client.Del(ctx, fmt.Sprintf("thread:%s:%s", ownerID, threadID))
+		client.Del(ctx, fmt.Sprintf("thread:%s", threadID))
 	}
-	pattern := fmt.Sprintf("threads:%s:*", ownerID)
+	pattern := "threads:*"
 	var cursor uint64
 	for {
 		keys, next, err := client.Scan(ctx, cursor, pattern, 50).Result()

@@ -13,12 +13,11 @@ import (
 )
 
 func ListMessages(c *gin.Context) {
-	ownerID := c.GetString("user_id")
 	threadID := c.Param("thread_id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	messages, total, err := services.Message.ListMessages(ownerID, threadID, page, pageSize)
+	messages, total, err := services.Message.ListMessages(threadID, page, pageSize)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")

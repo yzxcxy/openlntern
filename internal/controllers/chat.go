@@ -32,7 +32,7 @@ func ChatSSE(c *gin.Context) {
 	}
 	// 注入 user_id 供 agent 内 A2UI 等工具使用
 	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), tools.ContextKeyUserID, ownerID))
-	if _, err := services.Thread.EnsureThread(ownerID, input.ThreadID, ""); err != nil {
+	if _, err := services.Thread.EnsureThread(input.ThreadID, ""); err != nil {
 		log.Printf("ChatSSE ensure thread failed thread_id=%s client_ip=%s err=%v", input.ThreadID, c.ClientIP(), err)
 		response.InternalError(c)
 		return

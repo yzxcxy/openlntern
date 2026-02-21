@@ -40,6 +40,11 @@ func Init(dsn string) error {
 			log.Fatalf("failed to drop a2ui.user_id: %v", err)
 		}
 	}
+	if DB.Migrator().HasColumn(&models.Thread{}, "owner_id") {
+		if err := DB.Migrator().DropColumn(&models.Thread{}, "owner_id"); err != nil {
+			log.Fatalf("failed to drop thread.owner_id: %v", err)
+		}
+	}
 
 	return err
 }
