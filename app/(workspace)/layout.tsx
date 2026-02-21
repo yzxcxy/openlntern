@@ -6,7 +6,6 @@ import { ConfirmDialog } from "./a2ui/components/ConfirmDialog";
 import { Modal } from "./a2ui/components/Modal";
 import {
   buildAuthHeaders,
-  getUserIdFromToken,
   readStoredUser,
   readValidToken,
   updateTokenFromResponse,
@@ -85,11 +84,6 @@ export default function WorkspaceLayout({
   const fetchThreads = useCallback(async () => {
     const token = getValidToken();
     if (!token) return;
-    const user = readUserFromStorage();
-    const userId =
-      typeof user?.user_id === "string" || typeof user?.user_id === "number"
-        ? String(user.user_id)
-        : getUserIdFromToken(token);
     setHistoryLoading(true);
     setHistoryError("");
     try {
@@ -97,7 +91,7 @@ export default function WorkspaceLayout({
       params.set("page", "1");
       params.set("page_size", "5");
     const res = await fetch(`/api/backend/v1/threads?${params.toString()}`, {
-      headers: buildAuthHeaders(token, userId),
+      headers: buildAuthHeaders(token),
     });
       updateTokenFromResponse(res);
       const data = await res.json();
@@ -180,17 +174,12 @@ export default function WorkspaceLayout({
     if (!deleteTarget?.thread_id) return;
     const token = getValidToken();
     if (!token) return;
-    const user = readUserFromStorage();
-    const userId =
-      typeof user?.user_id === "string" || typeof user?.user_id === "number"
-        ? String(user.user_id)
-        : getUserIdFromToken(token);
     setDeleting(true);
     setHistoryError("");
     try {
       const res = await fetch(`/api/backend/v1/threads/${deleteTarget.thread_id}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token, userId),
+        headers: buildAuthHeaders(token),
       });
       updateTokenFromResponse(res);
       const data = await res.json();
@@ -235,11 +224,6 @@ export default function WorkspaceLayout({
     }
     const token = getValidToken();
     if (!token) return;
-    const user = readUserFromStorage();
-    const userId =
-      typeof user?.user_id === "string" || typeof user?.user_id === "number"
-        ? String(user.user_id)
-        : getUserIdFromToken(token);
     setRenaming(true);
     setRenameError("");
     try {
@@ -247,7 +231,7 @@ export default function WorkspaceLayout({
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...buildAuthHeaders(token, userId),
+          ...buildAuthHeaders(token),
         },
         body: JSON.stringify({ title }),
       });
