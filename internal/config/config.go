@@ -74,9 +74,10 @@ type SandboxConfig struct {
 }
 
 type OpenVikingConfig struct {
-	BaseURL    string `yaml:"base_url"`
-	APIKey     string `yaml:"api_key"`
-	SkillsRoot string `yaml:"skills_root"`
+	BaseURL        string `yaml:"base_url"`
+	APIKey         string `yaml:"api_key"`
+	SkillsRoot     string `yaml:"skills_root"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
 }
 
 type APMPlusConfig struct {

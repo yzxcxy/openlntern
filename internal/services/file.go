@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"openIntern/internal/config"
@@ -71,4 +74,32 @@ func (s *FileService) Delete(ctx context.Context, key string) error {
 	}
 	_, err := s.client.Object.Delete(ctx, key)
 	return err
+}
+
+func (s *FileService) UploadPath(ctx context.Context, key string, filePath string) (string, error) {
+	if s.client == nil {
+		return "", errors.New("file service not configured")
+	}
+	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
+	if key == "" {
+		return "", errors.New("empty key")
+	}
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return "", errors.New("empty file path")
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	options := &cos.ObjectPutOptions{}
+	if contentType := mime.TypeByExtension(filepath.Ext(filePath)); contentType != "" {
+		options.ObjectPutHeaderOptions = &cos.ObjectPutHeaderOptions{ContentType: contentType}
+	}
+	_, err = s.client.Object.Put(ctx, key, file, options)
+	if err != nil {
+		return "", err
+	}
+	return s.client.Object.GetObjectURL(key).String(), nil
 }

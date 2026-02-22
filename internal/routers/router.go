@@ -79,5 +79,17 @@ func SetupRouter() *gin.Engine {
 		skillMetaGroup.GET("/:name", controllers.GetSkillMetaByName)
 	}
 
+	kbGroup := r.Group("/v1/kbs", middleware.AuthRequired())
+	{
+		kbGroup.GET("", controllers.ListKnowledgeBases)
+		kbGroup.GET("/:name/tree", controllers.GetKnowledgeBaseTree)
+		kbGroup.POST("/import", controllers.ImportKnowledgeBase)
+		kbGroup.POST("/file", controllers.UploadKnowledgeBaseFile)
+		kbGroup.POST("/move", controllers.MoveKnowledgeBaseEntry)
+		kbGroup.POST("/drag", controllers.DragKnowledgeBaseEntry)
+		kbGroup.DELETE("/:name", controllers.DeleteKnowledgeBase)
+		kbGroup.DELETE("/entry", controllers.DeleteKnowledgeBaseEntry)
+	}
+
 	return r
 }

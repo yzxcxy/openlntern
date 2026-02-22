@@ -2,8 +2,6 @@ package controllers
 
 import (
 	"archive/zip"
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,12 +30,6 @@ type skillFileItem struct {
 	Date time.Time `json:"date"`
 }
 
-type openVikingResponse struct {
-	Status string          `json:"status"`
-	Result json.RawMessage `json:"result"`
-	Error  any             `json:"error"`
-}
-
 func ListSkillFiles(c *gin.Context) {
 	rawPath := c.DefaultQuery("path", "/")
 	if _, _, ok := getAuthUser(c); !ok {
@@ -64,7 +56,7 @@ func ListSkillFiles(c *gin.Context) {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	entries, err := openVikingList(c, skillURI, true)
+	entries, err := services.OpenVikingList(c.Request.Context(), skillURI, true)
 	if err != nil {
 		if isOpenVikingNotFound(err) {
 			response.JSONSuccess(c, http.StatusOK, []skillFileItem{})
@@ -75,12 +67,12 @@ func ListSkillFiles(c *gin.Context) {
 	}
 	items := make([]skillFileItem, 0, len(entries))
 	for _, entry := range entries {
-		if openVikingEntryIsDir(entry) {
+		if services.OpenVikingEntryIsDir(entry) {
 			continue
 		}
-		entryPath := openVikingEntryString(entry, "path", "uri")
-		entryName := openVikingEntryString(entry, "name")
-		rel := openVikingRelativePath(skillURI, entryPath)
+		entryPath := services.OpenVikingEntryString(entry, "path", "uri")
+		entryName := services.OpenVikingEntryString(entry, "name")
+		rel := services.OpenVikingRelativePath(skillURI, entryPath)
 		if rel == "" {
 			rel = entryName
 		}
@@ -89,9 +81,9 @@ func ListSkillFiles(c *gin.Context) {
 		}
 		items = append(items, skillFileItem{
 			ID:   "/" + path.Join(relPath, rel),
-			Type: openVikingEntryString(entry, "type", "kind"),
-			Size: openVikingEntryInt64(entry, "size"),
-			Date: openVikingEntryTime(entry, "mtime", "modified_at", "date"),
+			Type: services.OpenVikingEntryString(entry, "type", "kind"),
+			Size: services.OpenVikingEntryInt64(entry, "size"),
+			Date: services.OpenVikingEntryTime(entry, "mtime", "modified_at", "date"),
 		})
 	}
 	response.JSONSuccess(c, http.StatusOK, items)
@@ -127,7 +119,7 @@ func ReadSkillFile(c *gin.Context) {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	content, err := openVikingReadContent(c, targetURI)
+	content, err := services.OpenVikingReadContent(c.Request.Context(), targetURI)
 	if err != nil {
 		if isOpenVikingNotFound(err) {
 			response.NotFound(c, "file not found")
@@ -228,7 +220,7 @@ func ImportSkill(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	if err := openVikingAddSkill(c, rootDir); err != nil {
+	if err := services.OpenVikingAddSkill(c.Request.Context(), rootDir); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
@@ -259,7 +251,7 @@ func DeleteSkill(c *gin.Context) {
 	if !strings.HasSuffix(targetURI, "/") {
 		targetURI += "/"
 	}
-	if err := openVikingDeleteSkill(c, targetURI); err != nil {
+	if err := services.OpenVikingDeleteSkill(c.Request.Context(), targetURI); err != nil {
 		if isOpenVikingNotFound(err) {
 			response.NotFound(c, "skill not found")
 			return
@@ -355,7 +347,7 @@ func ReadSkillContent(c *gin.Context) {
 		return
 	}
 	targetURI := strings.TrimRight(skillURI, "/") + "/" + rel
-	content, err := openVikingReadContent(c, targetURI)
+	content, err := services.OpenVikingReadContent(c.Request.Context(), targetURI)
 	if err != nil {
 		if isOpenVikingNotFound(err) {
 			response.NotFound(c, "file not found")
@@ -400,18 +392,18 @@ func ListSkills(c *gin.Context) {
 
 func listOpenVikingSkills(c *gin.Context, keyword string, page int, pageSize int) ([]models.Skill, int64, error) {
 	root := services.OpenViking.SkillsRoot()
-	entries, err := openVikingList(c, root, false)
+	entries, err := services.OpenVikingList(c.Request.Context(), root, false)
 	if err != nil {
 		return nil, 0, err
 	}
 	skills := make([]models.Skill, 0, len(entries))
 	for _, entry := range entries {
-		if !openVikingEntryIsDir(entry) {
+		if !services.OpenVikingEntryIsDir(entry) {
 			continue
 		}
-		entryPath := openVikingEntryString(entry, "path", "uri")
-		entryName := openVikingEntryString(entry, "name")
-		skillPath := openVikingRelativePath(root, entryPath)
+		entryPath := services.OpenVikingEntryString(entry, "path", "uri")
+		entryName := services.OpenVikingEntryString(entry, "name")
+		skillPath := services.OpenVikingRelativePath(root, entryPath)
 		if skillPath == "" {
 			skillPath = entryName
 		}
@@ -522,245 +514,6 @@ func buildSkillURI(skillPath string) (string, error) {
 		return root, nil
 	}
 	return root + "/" + strings.Join(cleaned, "/"), nil
-}
-
-func openVikingList(c *gin.Context, uri string, recursive bool) ([]map[string]any, error) {
-	params := url.Values{}
-	params.Set("uri", uri)
-	if recursive {
-		params.Set("recursive", "true")
-	}
-	params.Set("output", "agent")
-	body, err := openVikingGet(c, "/api/v1/fs/ls", params)
-	if err != nil {
-		return nil, err
-	}
-	var resp openVikingResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(resp.Status) != "" && strings.ToLower(resp.Status) != "ok" {
-		return nil, errors.New("openviking error")
-	}
-	if resp.Error != nil {
-		if msg := strings.TrimSpace(fmt.Sprint(resp.Error)); msg != "" && msg != "<nil>" {
-			return nil, errors.New(msg)
-		}
-	}
-	if len(resp.Result) == 0 {
-		return []map[string]any{}, nil
-	}
-	var result []map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func openVikingReadContent(c *gin.Context, uri string) (string, error) {
-	params := url.Values{}
-	params.Set("uri", uri)
-	body, err := openVikingGet(c, "/api/v1/content/read", params)
-	if err != nil {
-		return "", err
-	}
-	trimmed := strings.TrimSpace(string(body))
-	if trimmed == "" {
-		return "", nil
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err == nil {
-		if result, ok := payload["result"]; ok {
-			switch value := result.(type) {
-			case string:
-				return value, nil
-			case map[string]any:
-				if content, ok := value["content"]; ok {
-					return fmt.Sprint(content), nil
-				}
-				if text, ok := value["text"]; ok {
-					return fmt.Sprint(text), nil
-				}
-			}
-		}
-		if content, ok := payload["content"]; ok {
-			return fmt.Sprint(content), nil
-		}
-	}
-	return string(body), nil
-}
-
-func openVikingGet(c *gin.Context, endpoint string, params url.Values) ([]byte, error) {
-	if !services.OpenViking.Configured() {
-		return nil, errors.New("openviking not configured")
-	}
-	baseURL := strings.TrimRight(services.OpenViking.BaseURL(), "/")
-	if baseURL == "" {
-		return nil, errors.New("openviking base_url not configured")
-	}
-	requestURL := baseURL + endpoint
-	if len(params) > 0 {
-		requestURL += "?" + params.Encode()
-	}
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, requestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if apiKey := services.OpenViking.APIKey(); apiKey != "" {
-		req.Header.Set("x-api-key", apiKey)
-	}
-	client := services.OpenViking.Client()
-	if client == nil {
-		return nil, errors.New("openviking client not configured")
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(body))
-		if msg == "" {
-			msg = resp.Status
-		}
-		return nil, errors.New(msg)
-	}
-	return body, nil
-}
-
-func openVikingPost(c *gin.Context, endpoint string, payload any) ([]byte, error) {
-	if !services.OpenViking.Configured() {
-		return nil, errors.New("openviking not configured")
-	}
-	baseURL := strings.TrimRight(services.OpenViking.BaseURL(), "/")
-	if baseURL == "" {
-		return nil, errors.New("openviking base_url not configured")
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	requestURL := baseURL + endpoint
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, requestURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if apiKey := services.OpenViking.APIKey(); apiKey != "" {
-		req.Header.Set("x-api-key", apiKey)
-	}
-	client := services.OpenViking.Client()
-	if client == nil {
-		return nil, errors.New("openviking client not configured")
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(respBody))
-		if msg == "" {
-			msg = resp.Status
-		}
-		return nil, errors.New(msg)
-	}
-	return respBody, nil
-}
-
-func openVikingDelete(c *gin.Context, endpoint string, params url.Values) ([]byte, error) {
-	if !services.OpenViking.Configured() {
-		return nil, errors.New("openviking not configured")
-	}
-	baseURL := strings.TrimRight(services.OpenViking.BaseURL(), "/")
-	if baseURL == "" {
-		return nil, errors.New("openviking base_url not configured")
-	}
-	requestURL := baseURL + endpoint
-	if len(params) > 0 {
-		requestURL += "?" + params.Encode()
-	}
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodDelete, requestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if apiKey := services.OpenViking.APIKey(); apiKey != "" {
-		req.Header.Set("x-api-key", apiKey)
-	}
-	client := services.OpenViking.Client()
-	if client == nil {
-		return nil, errors.New("openviking client not configured")
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(body))
-		if msg == "" {
-			msg = resp.Status
-		}
-		return nil, errors.New(msg)
-	}
-	return body, nil
-}
-
-func openVikingDeleteSkill(c *gin.Context, uri string) error {
-	params := url.Values{}
-	params.Set("uri", uri)
-	params.Set("recursive", "true")
-	body, err := openVikingDelete(c, "/api/v1/fs", params)
-	if err != nil {
-		return err
-	}
-	var resp openVikingResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return err
-	}
-	if strings.TrimSpace(resp.Status) != "" && strings.ToLower(resp.Status) != "ok" {
-		return errors.New("openviking error")
-	}
-	if resp.Error != nil {
-		if msg := strings.TrimSpace(fmt.Sprint(resp.Error)); msg != "" && msg != "<nil>" {
-			return errors.New(msg)
-		}
-	}
-	return nil
-}
-
-func openVikingAddSkill(c *gin.Context, skillDir string) error {
-	body, err := openVikingPost(c, "/api/v1/skills", map[string]any{
-		"data": skillDir,
-	})
-	if err != nil {
-		return err
-	}
-	var resp openVikingResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return err
-	}
-	if strings.TrimSpace(resp.Status) != "" && strings.ToLower(resp.Status) != "ok" {
-		return errors.New("openviking error")
-	}
-	if resp.Error != nil {
-		if msg := strings.TrimSpace(fmt.Sprint(resp.Error)); msg != "" && msg != "<nil>" {
-			return errors.New(msg)
-		}
-	}
-	return nil
 }
 
 type skillFrontmatterPayload struct {
@@ -945,126 +698,6 @@ func unzipSkill(zipPath string, dest string) error {
 		}
 	}
 	return nil
-}
-
-func openVikingRelativePath(rootURI string, entryPath string) string {
-	if entryPath == "" {
-		return ""
-	}
-	root := strings.TrimRight(rootURI, "/")
-	entryPath = strings.TrimPrefix(entryPath, root)
-	return strings.TrimPrefix(entryPath, "/")
-}
-
-func openVikingEntryString(entry map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := entry[key]; ok {
-			switch v := value.(type) {
-			case string:
-				if v != "" {
-					return v
-				}
-			case fmt.Stringer:
-				str := v.String()
-				if str != "" {
-					return str
-				}
-			default:
-				str := strings.TrimSpace(fmt.Sprint(value))
-				if str != "" {
-					return str
-				}
-			}
-		}
-	}
-	return ""
-}
-
-func openVikingEntryBool(entry map[string]any, keys ...string) bool {
-	for _, key := range keys {
-		if value, ok := entry[key]; ok {
-			switch v := value.(type) {
-			case bool:
-				return v
-			case string:
-				if strings.EqualFold(strings.TrimSpace(v), "true") {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func openVikingEntryIsDir(entry map[string]any) bool {
-	if openVikingEntryBool(entry, "is_dir", "isDir", "dir", "directory", "isDirectory") {
-		return true
-	}
-	t := strings.ToLower(openVikingEntryString(entry, "type", "kind"))
-	return t == "dir" || t == "directory" || t == "folder"
-}
-
-func openVikingEntryInt64(entry map[string]any, keys ...string) int64 {
-	for _, key := range keys {
-		if value, ok := entry[key]; ok {
-			switch v := value.(type) {
-			case int64:
-				return v
-			case int:
-				return int64(v)
-			case float64:
-				return int64(v)
-			case json.Number:
-				if n, err := v.Int64(); err == nil {
-					return n
-				}
-			case string:
-				if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
-					return n
-				}
-			}
-		}
-	}
-	return 0
-}
-
-func openVikingEntryTime(entry map[string]any, keys ...string) time.Time {
-	for _, key := range keys {
-		if value, ok := entry[key]; ok {
-			switch v := value.(type) {
-			case time.Time:
-				return v
-			case string:
-				if parsed, err := parseOpenVikingTime(v); err == nil {
-					return parsed
-				}
-			case float64:
-				return time.Unix(int64(v), 0)
-			case json.Number:
-				if n, err := v.Int64(); err == nil {
-					return time.Unix(n, 0)
-				}
-			}
-		}
-	}
-	return time.Time{}
-}
-
-func parseOpenVikingTime(value string) (time.Time, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return time.Time{}, errors.New("empty time")
-	}
-	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
-		return parsed, nil
-	}
-	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
-		return parsed, nil
-	}
-	if n, err := strconv.ParseInt(value, 10, 64); err == nil {
-		return time.Unix(n, 0), nil
-	}
-	return time.Time{}, errors.New("invalid time")
 }
 
 func isOpenVikingNotFound(err error) bool {
