@@ -9,6 +9,7 @@ import (
 	"openIntern/internal/agui"
 	"openIntern/internal/config"
 	"openIntern/internal/models"
+	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	"openIntern/internal/services/tools"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/ark"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/adk"
+	einoSkill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -103,6 +105,51 @@ var einoRunner *adk.Runner
 var apmplusShutdown func(context.Context) error
 var titleModel *deepseek.ChatModel
 
+type openVikingSkillClient struct{}
+
+func (openVikingSkillClient) SkillsRoot() string {
+	return OpenViking.SkillsRoot()
+}
+
+func (openVikingSkillClient) List(ctx context.Context, uri string, recursive bool) ([]map[string]any, error) {
+	return OpenVikingList(ctx, uri, recursive)
+}
+
+func (openVikingSkillClient) ReadContent(ctx context.Context, uri string) (string, error) {
+	return OpenVikingReadContent(ctx, uri)
+}
+
+type skillFrontmatterStore struct{}
+
+func (skillFrontmatterStore) ListByNames(names []string) ([]skillmiddleware.SkillFrontmatterRecord, error) {
+	items, err := SkillFrontmatter.ListByNames(names)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]skillmiddleware.SkillFrontmatterRecord, 0, len(items))
+	for _, item := range items {
+		records = append(records, skillmiddleware.SkillFrontmatterRecord{
+			SkillName: item.SkillName,
+			Raw:       item.Raw,
+		})
+	}
+	return records, nil
+}
+
+func (skillFrontmatterStore) GetByName(name string) (*skillmiddleware.SkillFrontmatterRecord, error) {
+	item, err := SkillFrontmatter.GetByName(name)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, nil
+	}
+	return &skillmiddleware.SkillFrontmatterRecord{
+		SkillName: item.SkillName,
+		Raw:       item.Raw,
+	}, nil
+}
+
 func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
 	if apmCfg.Host != "" && apmCfg.AppKey != "" && apmCfg.ServiceName != "" {
@@ -146,7 +193,23 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	if err != nil {
 		return nil, err
 	}
+	skillBackend, err := skillmiddleware.NewOpenVikingBackend(openVikingSkillClient{}, skillFrontmatterStore{})
+	if err != nil {
+		return nil, err
+	}
+	skillMiddleware, err := einoSkill.New(ctx, &einoSkill.Config{
+		Backend:    skillBackend,
+		UseChinese: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	skillTools, err := skillmiddleware.GetSkillFileTools(openVikingSkillClient{})
+	if err != nil {
+		return nil, err
+	}
 	allTools := append(sandboxTools, a2uiTools...)
+	allTools = append(allTools, skillTools...)
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "openintern_agent",
 		Description: "openintern agent",
@@ -156,6 +219,7 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 				Tools: allTools,
 			},
 		},
+		Middlewares: []adk.AgentMiddleware{skillMiddleware},
 	})
 	if err != nil {
 		return nil, err

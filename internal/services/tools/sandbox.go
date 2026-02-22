@@ -56,7 +56,7 @@ func excludeTools(info *schema.ToolInfo) bool {
 		return false
 	}
 	name := strings.ToLower(info.Name)
-	excludes := []string{"file","browser","editor"}
+	excludes := []string{}
 	for _, exclude := range excludes {
 		if strings.Contains(name, exclude) {
 			return true
