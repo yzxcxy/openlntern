@@ -1,7 +1,7 @@
 "use client";
 
-import matter from "gray-matter";
 import ReactMarkdown from "react-markdown";
+import matter from "gray-matter";
 import {
   useCallback,
   useEffect,
@@ -18,12 +18,10 @@ import {
 } from "../../auth";
 
 type Skill = {
-  skill_id?: string;
   name?: string;
   description?: string;
-  source?: string;
   icon?: string;
-  path?: string;
+  frontmatter?: string;
 };
 
 type SkillFileItem = {
@@ -130,6 +128,9 @@ export default function SkillDetailPage() {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deletingSkill, setDeletingSkill] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteSuccess, setDeleteSuccess] = useState("");
   const [activeTab, setActiveTab] = useState<"doc" | "files">("doc");
   const [fileItems, setFileItems] = useState<SkillFileItem[] | null>(null);
   const [fileListLoaded, setFileListLoaded] = useState(false);
@@ -160,48 +161,20 @@ export default function SkillDetailPage() {
   );
   const parsedContent = useMemo(() => {
     if (!content) {
-      return { body: "", frontmatter: {} as Record<string, unknown> };
+      return { body: "" };
     }
-    try {
-      const parsed = matter(content);
-      return {
-        body: parsed.content?.trim() ?? "",
-        frontmatter: (parsed.data ?? {}) as Record<string, unknown>,
-      };
-    } catch {
-      return { body: content, frontmatter: {} as Record<string, unknown> };
-    }
+    return { body: content.trim() };
   }, [content]);
   const parsedDocContent = useMemo(() => {
     if (!docModalContent) {
       return { body: "" };
     }
-    try {
-      const parsed = matter(docModalContent);
-      return { body: parsed.content?.trim() ?? "" };
-    } catch {
-      return { body: docModalContent };
-    }
+    return { body: docModalContent.trim() };
   }, [docModalContent]);
   const docIsMarkdown = useMemo(() => {
     const value = docModalPath.toLowerCase();
     return value.endsWith(".md") || value.endsWith(".markdown");
   }, [docModalPath]);
-  const frontmatterEntries = useMemo(
-    () => Object.entries(parsedContent.frontmatter ?? {}),
-    [parsedContent.frontmatter]
-  );
-  const formatFrontmatterValue = (value: unknown) => {
-    if (value === null || value === undefined) return "—";
-    if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean"
-    ) {
-      return String(value);
-    }
-    return JSON.stringify(value);
-  };
   const isDocLink = (href?: string) => {
     if (!href) return false;
     const value = href.toLowerCase();
@@ -231,12 +204,9 @@ export default function SkillDetailPage() {
     return text;
   };
   const skillPath = useMemo(() => {
-    if (skill?.path) {
-      return `/${skill.path.replace(/^\/+/, "")}`;
-    }
     if (!normalizedName) return "";
     return `/${normalizedName}`;
-  }, [normalizedName, skill?.path]);
+  }, [normalizedName]);
   const fetchFileList = useCallback(async () => {
     const token = getValidToken();
     if (!token) {
@@ -308,6 +278,41 @@ export default function SkillDetailPage() {
       }
     } finally {
       setFileContentLoading(false);
+    }
+  };
+  const handleDeleteSkill = async () => {
+    if (!normalizedName) return;
+    if (!window.confirm(`确定删除 ${displayName} 吗？`)) {
+      return;
+    }
+    const token = getValidToken();
+    if (!token) return;
+    setDeletingSkill(true);
+    setDeleteError("");
+    setDeleteSuccess("");
+    try {
+      const res = await fetch(
+        `${API_BASE}/v1/skills/${encodeURIComponent(normalizedName)}`,
+        {
+          method: "DELETE",
+          headers: buildAuthHeaders(token),
+        }
+      );
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "删除失败");
+      }
+      setDeleteSuccess("删除成功");
+      router.push("/skills");
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setDeleteError(err.message);
+      } else {
+        setDeleteError("删除失败");
+      }
+    } finally {
+      setDeletingSkill(false);
     }
   };
   const toRelativeFilePath = useCallback(
@@ -621,6 +626,36 @@ export default function SkillDetailPage() {
   const headerName = skill?.name || displayName;
   const headerDesc = skill?.description || "暂无描述";
   const headerIcon = skill?.icon || "🧩";
+  const frontmatter = skill?.frontmatter?.trim() || "";
+  const parsedFrontmatter = useMemo(() => {
+    if (!frontmatter) {
+      return { data: null, error: "" };
+    }
+    try {
+      const parsed = matter(`---\n${frontmatter}\n---`);
+      return { data: parsed.data as Record<string, unknown>, error: "" };
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        return { data: null, error: err.message };
+      }
+      return { data: null, error: "frontmatter 解析失败" };
+    }
+  }, [frontmatter]);
+  const frontmatterEntries = useMemo(
+    () => Object.entries(parsedFrontmatter.data ?? {}),
+    [parsedFrontmatter.data]
+  );
+  const formatFrontmatterValue = (value: unknown) => {
+    if (value === null || value === undefined) return "—";
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return String(value);
+    }
+    return JSON.stringify(value);
+  };
   const fileCount = fileItems?.length ?? 0;
 
   return (
@@ -660,33 +695,50 @@ export default function SkillDetailPage() {
                 </div>
                 <div className="mt-1 text-sm text-gray-500">{headerDesc}</div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                {skill?.source && (
-                  <span className="rounded-full border px-2 py-0.5">
-                    {skill.source}
-                  </span>
-                )}
-              </div>
+              <button
+                className="rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60"
+                type="button"
+                onClick={handleDeleteSkill}
+                disabled={deletingSkill || !normalizedName}
+              >
+                {deletingSkill ? "删除中..." : "删除"}
+              </button>
             </div>
-            {frontmatterEntries.length > 0 && (
-              <div className="mt-4 rounded-lg border bg-gray-50 p-4">
-                <div className="text-sm font-semibold text-gray-900">元信息</div>
-                <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm text-gray-600 sm:grid-cols-2">
-                  {frontmatterEntries.map(([key, value]) => (
-                    <div key={key} className="flex flex-col">
-                      <dt className="text-xs font-medium uppercase text-gray-500">
-                        {key}
-                      </dt>
-                      <dd className="mt-1 text-gray-700">
-                        {formatFrontmatterValue(value)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+            {deleteError && (
+              <div className="mt-4 text-sm text-red-600">{deleteError}</div>
+            )}
+            {deleteSuccess && (
+              <div className="mt-4 text-sm text-green-600">
+                {deleteSuccess}
               </div>
             )}
             <div className="mt-6">
-              <div className="flex flex-wrap items-center gap-3 border-b">
+              {frontmatter ? (
+                parsedFrontmatter.error ? (
+                  <div className="text-sm text-red-600">
+                    {parsedFrontmatter.error}
+                  </div>
+                ) : frontmatterEntries.length > 0 ? (
+                  <div className="rounded-lg border bg-gray-50 p-4">
+                    <div className="text-sm font-semibold text-gray-900">
+                      元信息
+                    </div>
+                    <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm text-gray-600 sm:grid-cols-2">
+                      {frontmatterEntries.map(([key, value]) => (
+                        <div key={key} className="flex flex-col">
+                          <dt className="text-xs font-medium uppercase text-gray-500">
+                            {key}
+                          </dt>
+                          <dd className="mt-1 text-gray-700">
+                            {formatFrontmatterValue(value)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ) : null
+              ) : null}
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-b">
                 <button
                   type="button"
                   className={`flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${

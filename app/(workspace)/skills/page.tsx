@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildAuthHeaders,
@@ -12,7 +12,6 @@ type Skill = {
   skill_id?: string;
   name?: string;
   description?: string;
-  source?: string;
   icon?: string;
   path?: string;
 };
@@ -27,7 +26,11 @@ export default function SkillsPage() {
   const [pageSize, setPageSize] = useState(12);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
   const router = useRouter();
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const getValidToken = useCallback(() => readValidToken(router), [router]);
 
@@ -72,6 +75,51 @@ export default function SkillsPage() {
   const handleSearch = () => {
     setPage(1);
     setSearchKeyword(keyword);
+  };
+
+  const handleUploadClick = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const handleUploadChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setUploadError("仅支持 .zip 文件");
+      return;
+    }
+    const token = getValidToken();
+    if (!token) return;
+    setUploading(true);
+    setUploadError("");
+    setUploadSuccess("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_BASE}/v1/skills/import`, {
+        method: "POST",
+        headers: buildAuthHeaders(token),
+        body: formData,
+      });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "上传失败");
+      }
+      setUploadSuccess("上传成功");
+      await fetchList();
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setUploadError(err.message);
+      } else {
+        setUploadError("上传失败");
+      }
+    } finally {
+      setUploading(false);
+    }
   };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -123,6 +171,21 @@ export default function SkillsPage() {
             </svg>
             搜索
           </button>
+          <button
+            className="flex items-center gap-2 rounded-md border bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+            type="button"
+            onClick={handleUploadClick}
+            disabled={uploading}
+          >
+            {uploading ? "上传中..." : "上传 Skill"}
+          </button>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
+            onChange={handleUploadChange}
+          />
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -130,7 +193,12 @@ export default function SkillsPage() {
         </div>
 
         {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
-
+        {uploadError && (
+          <div className="mt-2 text-sm text-red-600">{uploadError}</div>
+        )}
+        {uploadSuccess && (
+          <div className="mt-2 text-sm text-green-600">{uploadSuccess}</div>
+        )}
         <div className="mt-4">
           {loading ? (
             <div className="text-sm text-gray-500">加载中...</div>
@@ -139,10 +207,11 @@ export default function SkillsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {cards.map((item) => (
-                <button
+                <div
                   key={item.path ?? item.skillName}
-                  type="button"
                   className="flex h-full flex-col rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-gray-300 hover:shadow"
+                  role="button"
+                  tabIndex={0}
                   onClick={() =>
                     router.push(
                       `/skills/detail?name=${encodeURIComponent(
@@ -150,6 +219,16 @@ export default function SkillsPage() {
                       )}`
                     )
                   }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      router.push(
+                        `/skills/detail?name=${encodeURIComponent(
+                          item.skillName
+                        )}`
+                      );
+                    }
+                  }}
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-xl">
@@ -164,17 +243,7 @@ export default function SkillsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    {item.source && (
-                      <span className="rounded-full border px-2 py-0.5">
-                        {item.source}
-                      </span>
-                    )}
-                    <span className="rounded-full border px-2 py-0.5">
-                      {item.skillName}
-                    </span>
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
