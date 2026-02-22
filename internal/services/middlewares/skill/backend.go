@@ -13,6 +13,7 @@ import (
 type OpenVikingClient interface {
 	SkillsRoot() string
 	List(ctx context.Context, uri string, recursive bool) ([]map[string]any, error)
+	ReadAbstract(ctx context.Context, uri string) (string, error)
 	ReadContent(ctx context.Context, uri string) (string, error)
 }
 
@@ -79,26 +80,16 @@ func (b *OpenVikingBackend) List(ctx context.Context) ([]einoSkill.FrontMatter, 
 		seen[skillPath] = true
 		names = append(names, skillPath)
 	}
-	frontmatters, err := b.store.ListByNames(names)
-	if err != nil {
-		return nil, err
-	}
-	descIndex := make(map[string]string, len(frontmatters))
-	for _, item := range frontmatters {
-		parsed, err := parseFrontmatterRaw(item.Raw)
+	result := make([]einoSkill.FrontMatter, 0, len(names))
+	for _, name := range names {
+		skillURI := buildSkillURI(b.skillsRoot, name, "")
+		abstract, err := b.client.ReadAbstract(ctx, skillURI)
 		if err != nil {
 			return nil, err
 		}
-		if parsed.Name == "" {
-			return nil, errors.New("frontmatter missing name")
-		}
-		descIndex[item.SkillName] = parsed.Description
-	}
-	result := make([]einoSkill.FrontMatter, 0, len(names))
-	for _, name := range names {
 		result = append(result, einoSkill.FrontMatter{
 			Name:        name,
-			Description: descIndex[name],
+			Description: strings.TrimSpace(abstract),
 		})
 	}
 	return result, nil

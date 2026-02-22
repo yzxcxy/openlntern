@@ -115,6 +115,10 @@ func (openVikingSkillClient) List(ctx context.Context, uri string, recursive boo
 	return OpenVikingList(ctx, uri, recursive)
 }
 
+func (openVikingSkillClient) ReadAbstract(ctx context.Context, uri string) (string, error) {
+	return OpenVikingReadAbstract(ctx, uri)
+}
+
 func (openVikingSkillClient) ReadContent(ctx context.Context, uri string) (string, error) {
 	return OpenVikingReadContent(ctx, uri)
 }
@@ -235,6 +239,9 @@ func mergeRunAgentInputHistory(input *types.RunAgentInput, history []models.Mess
 	merged := *input
 	merged.Messages = nil
 	for _, item := range history {
+		if item.Type != "text" {
+			continue
+		}
 		if item.Content == "" {
 			continue
 		}
@@ -280,7 +287,17 @@ func mergeRunAgentInputHistory(input *types.RunAgentInput, history []models.Mess
 		})
 	}
 	if len(input.Messages) > 0 {
-		merged.Messages = append(merged.Messages, input.Messages...)
+		var lastUser *types.Message
+		for i := len(input.Messages) - 1; i >= 0; i-- {
+			msg := input.Messages[i]
+			if msg.Role == types.RoleUser {
+				lastUser = &msg
+				break
+			}
+		}
+		if lastUser != nil {
+			merged.Messages = append(merged.Messages, *lastUser)
+		}
 	}
 	return &merged, nil
 }

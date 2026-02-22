@@ -234,6 +234,39 @@ func OpenVikingReadContent(ctx context.Context, uri string) (string, error) {
 	return string(body), nil
 }
 
+func OpenVikingReadAbstract(ctx context.Context, uri string) (string, error) {
+	params := url.Values{}
+	params.Set("uri", uri)
+	body, err := openVikingGet(ctx, "/api/v1/content/abstract", params)
+	if err != nil {
+		return "", err
+	}
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return "", nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err == nil {
+		if result, ok := payload["result"]; ok {
+			switch value := result.(type) {
+			case string:
+				return value, nil
+			case map[string]any:
+				if content, ok := value["content"]; ok {
+					return fmt.Sprint(content), nil
+				}
+				if text, ok := value["text"]; ok {
+					return fmt.Sprint(text), nil
+				}
+			}
+		}
+		if content, ok := payload["content"]; ok {
+			return fmt.Sprint(content), nil
+		}
+	}
+	return string(body), nil
+}
+
 func OpenVikingAddResource(ctx context.Context, resourcePath string, targetURI string) error {
 	return OpenVikingAddResourceWithOptions(ctx, resourcePath, targetURI, false, 0)
 }
