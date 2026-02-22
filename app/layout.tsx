@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import "./a2ui-theme.css";
+import "../node_modules/@douyinfe/semi-ui/dist/css/semi.min.css";
 import "@copilotkit/react-core/v2/styles.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";

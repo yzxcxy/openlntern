@@ -266,6 +266,7 @@ export default function WorkspaceLayout({
   const isA2ui = pathname === "/a2ui";
   const isChat = pathname === "/chat";
   const isSkill = pathname.startsWith("/skills");
+  const isKB = pathname === "/kb";
 
   return (
     <main
@@ -437,6 +438,41 @@ export default function WorkspaceLayout({
                           <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.7-4.9 2.7.9-5.5-4-3.9 5.5-.8L12 3z" />
                         </svg>
                         Skill 市场
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        查看
+                        <svg
+                          className="h-3.5 w-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 5l6 7-6 7" />
+                        </svg>
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => router.push("/kb")}
+                      className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-gray-700 ${
+                        isKB ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg
+                          className="h-4 w-4 text-gray-500"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M4 4h7l2 2h7v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+                        </svg>
+                        知识库管理
                       </span>
                       <span className="flex items-center gap-1 text-xs text-gray-400">
                         查看
