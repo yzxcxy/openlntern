@@ -67,9 +67,8 @@ func SetupRouter() *gin.Engine {
 	skillGroup := r.Group("/v1/skills", middleware.AuthRequired())
 	{
 		skillGroup.GET("", controllers.ListSkillFiles)
-		skillGroup.POST("", controllers.CreateSkillEntry)
-		skillGroup.PUT("/content", controllers.UpdateSkillFile)
-		skillGroup.DELETE("", controllers.DeleteSkillEntry)
+		skillGroup.POST("/import", controllers.ImportSkill)
+		skillGroup.DELETE("/:name", controllers.DeleteSkill)
 		skillGroup.GET("/content/:name", controllers.ReadSkillContent)
 	}
 

@@ -65,11 +65,18 @@ type MilvusConfig struct {
 }
 
 type ToolsConfig struct {
-	Sandbox SandboxConfig `yaml:"sandbox"`
+	Sandbox    SandboxConfig    `yaml:"sandbox"`
+	OpenViking OpenVikingConfig `yaml:"openviking"`
 }
 
 type SandboxConfig struct {
 	Url string `yaml:"url"`
+}
+
+type OpenVikingConfig struct {
+	BaseURL    string `yaml:"base_url"`
+	APIKey     string `yaml:"api_key"`
+	SkillsRoot string `yaml:"skills_root"`
 }
 
 type APMPlusConfig struct {

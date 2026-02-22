@@ -1,4 +1,0 @@
-ALTER TABLE a2ui
-  DROP COLUMN user_id,
-  DROP COLUMN type;
-

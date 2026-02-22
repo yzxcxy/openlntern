@@ -27,7 +27,7 @@ func Init(dsn string) error {
 	}
 
 	// 自动迁移表结构
-	if err := DB.AutoMigrate(&models.User{}, &models.A2UI{}, &models.Thread{}, &models.Message{}); err != nil {
+	if err := DB.AutoMigrate(&models.User{}, &models.A2UI{}, &models.Thread{}, &models.Message{}, &models.SkillFrontmatter{}); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
 	if DB.Migrator().HasColumn(&models.A2UI{}, "type") {
