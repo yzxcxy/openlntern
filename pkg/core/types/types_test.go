@@ -125,6 +125,38 @@ func TestRunAgentInputUnmarshalSnakeCase(t *testing.T) {
 	assert.Equal(t, "xyz", forwarded["trace_id"])
 }
 
+func TestMessageUnmarshalReasoningEncryptedFields(t *testing.T) {
+	payload := []byte(`{
+		"id": "msg-1",
+		"role": "reasoning",
+		"content": "summary",
+		"encryptedContent": "content-blob",
+		"encryptedValue": "value-blob"
+	}`)
+
+	var msg Message
+	err := json.Unmarshal(payload, &msg)
+	require.NoError(t, err)
+	assert.Equal(t, RoleReasoning, msg.Role)
+	assert.Equal(t, "content-blob", msg.EncryptedContent)
+	assert.Equal(t, "value-blob", msg.EncryptedValue)
+
+	payload = []byte(`{
+		"id": "msg-2",
+		"role": "reasoning",
+		"content": "summary",
+		"encrypted_content": "content-blob-2",
+		"encrypted_value": "value-blob-2"
+	}`)
+
+	var msgSnake Message
+	err = json.Unmarshal(payload, &msgSnake)
+	require.NoError(t, err)
+	assert.Equal(t, RoleReasoning, msgSnake.Role)
+	assert.Equal(t, "content-blob-2", msgSnake.EncryptedContent)
+	assert.Equal(t, "value-blob-2", msgSnake.EncryptedValue)
+}
+
 // TestInputContentUnmarshalSnakeCase verifies decoding snake_case fields in InputContent.
 func TestInputContentUnmarshalSnakeCase(t *testing.T) {
 	payload := []byte(`{

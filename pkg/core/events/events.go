@@ -40,6 +40,13 @@ const (
 	EventTypeThinkingTextMessageStart   EventType = "THINKING_TEXT_MESSAGE_START"
 	EventTypeThinkingTextMessageContent EventType = "THINKING_TEXT_MESSAGE_CONTENT"
 	EventTypeThinkingTextMessageEnd     EventType = "THINKING_TEXT_MESSAGE_END"
+	EventTypeReasoningStart             EventType = "REASONING_START"
+	EventTypeReasoningEnd               EventType = "REASONING_END"
+	EventTypeReasoningMessageStart      EventType = "REASONING_MESSAGE_START"
+	EventTypeReasoningMessageContent    EventType = "REASONING_MESSAGE_CONTENT"
+	EventTypeReasoningMessageEnd        EventType = "REASONING_MESSAGE_END"
+	EventTypeReasoningMessageChunk      EventType = "REASONING_MESSAGE_CHUNK"
+	EventTypeReasoningEncryptedValue    EventType = "REASONING_ENCRYPTED_VALUE"
 
 	// EventTypeUnknown represents an unrecognized event type
 	EventTypeUnknown EventType = "UNKNOWN"
@@ -73,6 +80,13 @@ var validEventTypes = map[EventType]bool{
 	EventTypeThinkingTextMessageStart:   true,
 	EventTypeThinkingTextMessageContent: true,
 	EventTypeThinkingTextMessageEnd:     true,
+	EventTypeReasoningStart:             true,
+	EventTypeReasoningEnd:               true,
+	EventTypeReasoningMessageStart:      true,
+	EventTypeReasoningMessageContent:    true,
+	EventTypeReasoningMessageEnd:        true,
+	EventTypeReasoningMessageChunk:      true,
+	EventTypeReasoningEncryptedValue:    true,
 }
 
 // Event defines the common interface for all AG-UI events

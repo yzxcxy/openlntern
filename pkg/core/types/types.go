@@ -22,6 +22,7 @@ const (
 	RoleTool Role = "tool"
 	// RoleActivity is the activity role.
 	RoleActivity Role = "activity"
+	RoleReasoning Role = "reasoning"
 )
 
 // FunctionCall represents a function call name and arguments.
@@ -126,6 +127,8 @@ type Message struct {
 	Error string `json:"error,omitempty"`
 	// ActivityType is an optional activity discriminator for activity messages.
 	ActivityType string `json:"activityType,omitempty"`
+	EncryptedContent string `json:"encryptedContent,omitempty"`
+	EncryptedValue   string `json:"encryptedValue,omitempty"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler and supports snake_case compatibility.
@@ -157,6 +160,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if err := unmarshalField(raw, &m.ActivityType, "activityType", "activity_type"); err != nil {
+		return err
+	}
+	if err := unmarshalField(raw, &m.EncryptedContent, "encryptedContent", "encrypted_content"); err != nil {
+		return err
+	}
+	if err := unmarshalField(raw, &m.EncryptedValue, "encryptedValue", "encrypted_value"); err != nil {
 		return err
 	}
 
