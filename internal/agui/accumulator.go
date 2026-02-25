@@ -26,10 +26,6 @@ type Accumulator struct {
 	runID              string
 	messages           map[string]*AccumulatedMessage
 	order              []string
-	thinkingMessageID  string
-	thinkingTitle      string
-	thinkingContent    string
-	thinkingMsgMessage string
 	state              any
 	customEvents       []AccumulatedMessage
 	rawEvents          []AccumulatedMessage
@@ -91,34 +87,27 @@ func (a *Accumulator) OnTextMessageEnd(msgID string) {
 	a.ensureMessage(msgID, "text")
 }
 
-func (a *Accumulator) OnThinkingStart(title string) {
-	a.thinkingTitle = title
-	if a.thinkingMessageID == "" {
-		a.thinkingMessageID = a.newEventID()
+func (a *Accumulator) OnReasoningStart(messageID string) {
+	_ = messageID
+}
+
+func (a *Accumulator) OnReasoningEnd(messageID string) {
+	_ = messageID
+}
+
+func (a *Accumulator) OnReasoningMessageStart(messageID, role string) {
+	if messageID == "" {
+		messageID = a.newEventID()
 	}
+	msg := a.ensureMessage(messageID, "reasoning_message")
+	msg.Role = role
 }
 
-func (a *Accumulator) OnThinkingContent(delta string) {
-	a.thinkingContent += delta
-}
-
-func (a *Accumulator) OnThinkingEnd() {
-	a.thinkingMessageID = ""
-	a.thinkingTitle = ""
-	a.thinkingContent = ""
-}
-
-func (a *Accumulator) OnThinkingMessageStart() {
-	if a.thinkingMsgMessage == "" {
-		a.thinkingMsgMessage = a.newEventID()
+func (a *Accumulator) OnReasoningMessageContent(messageID, delta string) {
+	if messageID == "" {
+		messageID = a.newEventID()
 	}
-}
-
-func (a *Accumulator) OnThinkingMessageContent(delta string) {
-	if a.thinkingMsgMessage == "" {
-		a.thinkingMsgMessage = a.newEventID()
-	}
-	msg := a.ensureMessage(a.thinkingMsgMessage, "thinking_message")
+	msg := a.ensureMessage(messageID, "reasoning_message")
 	if msg.Content == nil {
 		msg.Content = ""
 	}
@@ -129,8 +118,11 @@ func (a *Accumulator) OnThinkingMessageContent(delta string) {
 	}
 }
 
-func (a *Accumulator) OnThinkingMessageEnd() {
-	a.thinkingMsgMessage = ""
+func (a *Accumulator) OnReasoningMessageEnd(messageID string) {
+	if messageID == "" {
+		return
+	}
+	a.ensureMessage(messageID, "reasoning_message")
 }
 
 func (a *Accumulator) OnToolCallStart(toolCallID, toolName string) {

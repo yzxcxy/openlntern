@@ -74,33 +74,37 @@ func (s *Sender) EndMessage(msgID string) error {
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 
-// StartThinking sends a ThinkingStart event
-func (s *Sender) StartThinking(title string) error {
-	evt := events.NewThinkingStartEvent().WithTitle(title)
+// StartReasoning sends a ReasoningStart event
+func (s *Sender) StartReasoning(messageID string) error {
+	evt := events.NewReasoningStartEvent(messageID)
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 
-// EndThinking sends a ThinkingEnd event
-func (s *Sender) EndThinking() error {
-	evt := events.NewThinkingEndEvent()
+// EndReasoning sends a ReasoningEnd event
+func (s *Sender) EndReasoning(messageID string) error {
+	evt := events.NewReasoningEndEvent(messageID)
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 
-// StartThinkingMessage sends a ThinkingTextMessageStart event
-func (s *Sender) StartThinkingMessage() error {
-	evt := events.NewThinkingTextMessageStartEvent()
+// StartReasoningMessage sends a ReasoningMessageStart event
+func (s *Sender) StartReasoningMessage(messageID, role string) error {
+	opts := []events.ReasoningMessageStartOption{}
+	if role != "" {
+		opts = append(opts, events.WithReasoningMessageRole(role))
+	}
+	evt := events.NewReasoningMessageStartEvent(messageID, opts...)
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 
-// ThinkingContent sends a ThinkingTextMessageContent event
-func (s *Sender) ThinkingContent(delta string) error {
-	evt := events.NewThinkingTextMessageContentEvent(delta)
+// ReasoningContent sends a ReasoningMessageContent event
+func (s *Sender) ReasoningContent(messageID, delta string) error {
+	evt := events.NewReasoningMessageContentEvent(messageID, delta)
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 
-// EndThinkingMessage sends a ThinkingTextMessageEnd event
-func (s *Sender) EndThinkingMessage() error {
-	evt := events.NewThinkingTextMessageEndEvent()
+// EndReasoningMessage sends a ReasoningMessageEnd event
+func (s *Sender) EndReasoningMessage(messageID string) error {
+	evt := events.NewReasoningMessageEndEvent(messageID)
 	return s.sse.WriteEvent(s.ctx, s.w, evt)
 }
 

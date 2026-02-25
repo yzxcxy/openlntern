@@ -189,3 +189,5 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/ag-ui-protocol/ag-ui/sdks/community/go => /Users/fqc/project/agent/openIntern/go

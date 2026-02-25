@@ -457,8 +457,10 @@ func streamMessageVariant(sender *agui.AccumulatingSender, mv *adk.MessageVarian
 func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.StreamReader[*schema.Message]) error {
 	messageID := ""
 	messageStarted := false
-	thinkingStarted := false
-	thinkingSessionStarted := false
+	reasoningMessageStarted := false
+	reasoningSessionStarted := false
+	reasoningMessageID := ""
+	reasoningSessionID := ""
 	toolCallStarted := map[string]bool{}
 	toolCallArgs := map[string]string{}
 	for {
@@ -546,30 +548,32 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 			}
 		}
 		if msg.ReasoningContent != "" {
-			if !thinkingSessionStarted {
-				if err := sender.StartThinking(""); err != nil {
+			if !reasoningSessionStarted {
+				reasoningSessionID = events.GenerateMessageID()
+				if err := sender.StartReasoning(reasoningSessionID); err != nil {
 					return err
 				}
-				thinkingSessionStarted = true
+				reasoningSessionStarted = true
 			}
-			if !thinkingStarted {
-				if err := sender.StartThinkingMessage(); err != nil {
+			if !reasoningMessageStarted {
+				reasoningMessageID = events.GenerateMessageID()
+				if err := sender.StartReasoningMessage(reasoningMessageID, string(types.RoleReasoning)); err != nil {
 					return err
 				}
-				thinkingStarted = true
+				reasoningMessageStarted = true
 			}
-			if err := sender.ThinkingContent(msg.ReasoningContent); err != nil {
+			if err := sender.ReasoningContent(reasoningMessageID, msg.ReasoningContent); err != nil {
 				return err
 			}
 		}
 	}
-	if thinkingStarted {
-		if err := sender.EndThinkingMessage(); err != nil {
+	if reasoningMessageStarted {
+		if err := sender.EndReasoningMessage(reasoningMessageID); err != nil {
 			return err
 		}
 	}
-	if thinkingSessionStarted {
-		if err := sender.EndThinking(); err != nil {
+	if reasoningSessionStarted {
+		if err := sender.EndReasoning(reasoningSessionID); err != nil {
 			return err
 		}
 	}
@@ -706,10 +710,11 @@ func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string
 	case "text":
 		message.Role = types.Role(msg.Role)
 		message.Content = msg.Content
-	case "thinking_message":
-		message.Role = types.Role("reasoning")
+	case "reasoning_message":
+		message.Role = types.RoleReasoning
 		message.Content = msg.Content
 	case "tool_call":
+		// 注意tool_call是内嵌在assistant消息中的，和tool_result是不同的角色
 		message.Role = types.RoleAssistant
 		toolCallID := msg.ToolCallID
 		if toolCallID == "" {
@@ -752,9 +757,6 @@ func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string
 	default:
 		if msg.Role != "" {
 			message.Role = types.Role(msg.Role)
-		} else {
-			message.Role = types.RoleActivity
-			message.ActivityType = msg.Type
 		}
 		message.Content = msg.Content
 	}

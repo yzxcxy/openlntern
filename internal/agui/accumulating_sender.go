@@ -42,39 +42,39 @@ func (s *AccumulatingSender) EndMessage(msgID string) error {
 	return s.base.EndMessage(msgID)
 }
 
-func (s *AccumulatingSender) StartThinking(title string) error {
+func (s *AccumulatingSender) StartReasoning(messageID string) error {
 	if s.acc != nil {
-		s.acc.OnThinkingStart(title)
+		s.acc.OnReasoningStart(messageID)
 	}
-	return s.base.StartThinking(title)
+	return s.base.StartReasoning(messageID)
 }
 
-func (s *AccumulatingSender) EndThinking() error {
+func (s *AccumulatingSender) EndReasoning(messageID string) error {
 	if s.acc != nil {
-		s.acc.OnThinkingEnd()
+		s.acc.OnReasoningEnd(messageID)
 	}
-	return s.base.EndThinking()
+	return s.base.EndReasoning(messageID)
 }
 
-func (s *AccumulatingSender) StartThinkingMessage() error {
+func (s *AccumulatingSender) StartReasoningMessage(messageID, role string) error {
 	if s.acc != nil {
-		s.acc.OnThinkingMessageStart()
+		s.acc.OnReasoningMessageStart(messageID, role)
 	}
-	return s.base.StartThinkingMessage()
+	return s.base.StartReasoningMessage(messageID, role)
 }
 
-func (s *AccumulatingSender) ThinkingContent(delta string) error {
+func (s *AccumulatingSender) ReasoningContent(messageID, delta string) error {
 	if s.acc != nil {
-		s.acc.OnThinkingMessageContent(delta)
+		s.acc.OnReasoningMessageContent(messageID, delta)
 	}
-	return s.base.ThinkingContent(delta)
+	return s.base.ReasoningContent(messageID, delta)
 }
 
-func (s *AccumulatingSender) EndThinkingMessage() error {
+func (s *AccumulatingSender) EndReasoningMessage(messageID string) error {
 	if s.acc != nil {
-		s.acc.OnThinkingMessageEnd()
+		s.acc.OnReasoningMessageEnd(messageID)
 	}
-	return s.base.EndThinkingMessage()
+	return s.base.EndReasoningMessage(messageID)
 }
 
 func (s *AccumulatingSender) StartToolCall(toolCallID, toolName string) error {
