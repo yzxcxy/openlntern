@@ -1,12 +1,38 @@
 "use client";
 
-import { AIChatDialogue, AIChatInput } from "@douyinfe/semi-ui";
-import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
-import { CopilotKit, useCopilotChatInternal } from "@copilotkit/react-core";
-import { useCopilotKit } from "@copilotkit/react-core/v2";
-import { EventType } from "@ag-ui/client";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
+import {
+  CopilotKitProvider,
+  UseAgentUpdate,
+  useAgent,
+  useRenderActivityMessage,
+} from "@copilotkit/react-core/v2";
+import {
+  AIChatDialogue,
+  AIChatInput,
+  Collapsible,
+  MarkdownRender,
+} from "@douyinfe/semi-ui-19";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconWrench,
+} from "@douyinfe/semi-icons";
+import type { Message as SemiMessage } from "@douyinfe/semi-ui-19/lib/es/aiChatDialogue/interface";
+import type {
+  ActivityMessage,
+  Message as AguiMessage,
+} from "@ag-ui/client";
+import type { MessageContent } from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
 import { theme } from "../../theme";
 import {
   buildAuthHeaders,
@@ -14,16 +40,56 @@ import {
   readStoredUser,
   readValidToken,
   updateTokenFromResponse,
+  type StoredUser,
 } from "../auth";
 
-const A2UIMessageRenderer = createA2UIMessageRenderer({ theme });
-const activityRenderers = [A2UIMessageRenderer];
-const API_BASE = "/api/backend";
-const quickActionHints = [
-  "给我推荐几道今日菜单",
-  "我想要两人套餐，包含荤素搭配",
-  "请避开辣味和海鲜",
-];
+const A2UI_MESSAGE_RENDERER = createA2UIMessageRenderer({ theme });
+// 需要稳定引用，避免 renderActivityMessages 触发不稳定数组报错
+const ACTIVITY_RENDERERS = [A2UI_MESSAGE_RENDERER];
+const TOOL_RESULT_TYPE = "tool_result_text";
+
+type ToolResultCollapseProps = {
+  text: string;
+};
+
+function ToolResultCollapse({ text }: ToolResultCollapseProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const toggleOpen = useCallback(() => {
+    setIsOpen((prev) => !prev);
+  }, []);
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleOpen();
+      }
+    },
+    [toggleOpen]
+  );
+
+  return (
+    <div>
+      <div
+        className="semi-ai-chat-dialogue-content-tool-call"
+        onClick={toggleOpen}
+        role="button"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        style={{ cursor: "pointer" }}
+      >
+        <IconWrench />
+        <span>工具执行结果</span>
+        {isOpen ? <IconChevronUp /> : <IconChevronDown />}
+      </div>
+      <Collapsible isOpen={isOpen}>
+        <div className="semi-ai-chat-dialogue-content-bubble">
+          <MarkdownRender format="md" raw={text} />
+        </div>
+      </Collapsible>
+    </div>
+  );
+}
+
 const createThreadId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -31,910 +97,813 @@ const createThreadId = () => {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
-type ActivityMessageLike = {
-  id: string;
-  role: "activity";
-  content: Record<string, unknown>;
-  activityType: string;
+const createMessageId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
-const safeStringify = (value: unknown) => {
+// 基于文字生成头像，避免无图时对话头信息空白
+const buildTextAvatarDataUrl = (
+  text: string,
+  options?: { background?: string; color?: string }
+) => {
+  const safeText = Array.from(text || "")
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("");
+  const label = safeText || "AI";
+  const background = options?.background ?? "#94A3B8";
+  const color = options?.color ?? "#FFFFFF";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+    <rect width="64" height="64" rx="16" fill="${background}" />
+    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+      font-family="Arial, sans-serif" font-size="24" fill="${color}">${label}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+type BackendMessageItem = {
+  msg_id: string;
+  thread_id: string;
+  run_id: string;
+  type: string;
+  content: string;
+  status?: string;
+  metadata?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type BackendMessagePage = {
+  data: BackendMessageItem[];
+  total: number;
+  page?: number;
+  size?: number;
+};
+
+type BackendResult<T> = {
+  code: number;
+  message: string;
+  data?: T;
+};
+
+// 后端消息中的 content 为 JSON 字符串，解析失败时返回 null
+const safeParseJson = <T,>(value: string): T | null => {
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.parse(value) as T;
   } catch {
-    return String(value);
-  }
-};
-
-const normalizeContentItems = (content: unknown) => {
-  if (typeof content === "string") return [content];
-  if (Array.isArray(content)) return content;
-  if (content && typeof content === "object") {
-    const container = content as { content?: unknown; text?: unknown };
-    if (Array.isArray(container.content)) return container.content;
-    if (typeof container.text === "string") return [container];
-    if (typeof container.content === "string") return [container.content];
-  }
-  if (content === null || content === undefined) return [];
-  return [content];
-};
-
-const collectMessageParts = (message: {
-  role?: string;
-  content?: unknown;
-  toolCalls?: unknown[];
-}) => {
-  const textParts: string[] = [];
-  const toolParts: string[] = [];
-  const reasoningParts: string[] = [];
-  const role = message.role;
-  const items = normalizeContentItems(message.content);
-
-  const pushValue = (target: string[], value: string) => {
-    if (!value) return;
-    target.push(value);
-  };
-
-  for (const item of items) {
-    if (typeof item === "string") {
-      if (role === "tool") {
-        pushValue(toolParts, item);
-      } else {
-        pushValue(textParts, item);
-      }
-      continue;
-    }
-    if (typeof item === "number" || typeof item === "boolean") {
-      const value = String(item);
-      if (role === "tool") {
-        pushValue(toolParts, value);
-      } else {
-        pushValue(textParts, value);
-      }
-      continue;
-    }
-    if (item && typeof item === "object") {
-      const entry = item as {
-        type?: string;
-        text?: string;
-        content?: string;
-        reasoning?: string;
-      };
-      const type = typeof entry.type === "string" ? entry.type.toLowerCase() : "";
-      const value =
-        (typeof entry.text === "string" && entry.text) ||
-        (typeof entry.content === "string" && entry.content) ||
-        (typeof entry.reasoning === "string" && entry.reasoning) ||
-        safeStringify(item);
-      if (type.includes("reasoning") || type.includes("thinking")) {
-        pushValue(reasoningParts, value);
-      } else if (type.includes("tool")) {
-        pushValue(toolParts, value);
-      } else if (type.includes("text")) {
-        pushValue(textParts, value);
-      } else if (role === "tool") {
-        pushValue(toolParts, value);
-      } else {
-        pushValue(textParts, value);
-      }
-    }
-  }
-
-  if (Array.isArray(message.toolCalls)) {
-    for (const toolCall of message.toolCalls) {
-      pushValue(toolParts, safeStringify(toolCall));
-    }
-  }
-
-  return { textParts, toolParts, reasoningParts };
-};
-
-const getTextFromContent = (content: unknown) => {
-  const { textParts } = collectMessageParts({ content, role: "user" });
-  return textParts.join("\n").trim();
-};
-
-const extractInputText = (payload?: { inputContents?: unknown[] }) => {
-  const items = Array.isArray(payload?.inputContents) ? payload.inputContents : [];
-  const parts: string[] = [];
-  for (const item of items) {
-    if (typeof item === "string") {
-      parts.push(item);
-      continue;
-    }
-    if (item && typeof item === "object") {
-      const entry = item as { text?: string; content?: unknown; type?: string };
-      if (typeof entry.text === "string") {
-        parts.push(entry.text);
-        continue;
-      }
-      if (typeof entry.content === "string") {
-        parts.push(entry.content);
-        continue;
-      }
-      if (Array.isArray(entry.content)) {
-        const text = collectMessageParts({ role: "user", content: entry.content })
-          .textParts.join("\n")
-          .trim();
-        if (text) parts.push(text);
-      }
-    }
-  }
-  return parts.join("\n").trim();
-};
-
-function ChatContent() {
-  const { copilotkit } = useCopilotKit();
-  const {
-    messages,
-    sendMessage,
-    setMessages,
-    isLoading,
-    stopGeneration,
-    agent,
-    threadId,
-  } = useCopilotChatInternal();
-  const [historyLoaded, setHistoryLoaded] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState("");
-  const [historyPage, setHistoryPage] = useState(1);
-  const [historyPageSize] = useState(20);
-  const [historyHasMore, setHistoryHasMore] = useState(false);
-  const [liveThinkingByRunId, setLiveThinkingByRunId] = useState<
-    Record<string, Record<string, string>>
-  >({});
-  const [completedThinkingByRunId, setCompletedThinkingByRunId] = useState<
-    Record<string, Record<string, string[]>>
-  >({});
-  const previousThreadId = useRef<string | undefined>(threadId);
-  const isPrependingRef = useRef(false);
-  const messagesRef = useRef(messages);
-  const thinkingBufferByRunIdRef = useRef<Record<string, string>>({});
-  const currentRunIdRef = useRef<string | null>(null);
-  const currentThinkingMsgIdByRunIdRef = useRef<Record<string, string>>({});
-  const runIdToUserMessageIdRef = useRef<Record<string, string>>({});
-  const runIdOrderRef = useRef<string[]>([]);
-  const router = useRouter();
-  const ActivityRenderer = A2UIMessageRenderer.render;
-  const getLatestUserMessageId = () => {
-    const list = messagesRef.current;
-    for (let i = list.length - 1; i >= 0; i -= 1) {
-      const message = list[i];
-      if (message?.role === "user" && typeof message.id === "string") {
-        return message.id;
-      }
-    }
     return null;
-  };
+  }
+};
 
-  useEffect(() => {
-    if (!agent || !threadId) return;
-    if (agent.threadId !== threadId) {
-      agent.threadId = threadId;
-      copilotkit.connectAgent({ agent }).catch(() => {});
+// 从不同形态的 content 中提取文本
+const extractText = (content: unknown) => {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((item) =>
+        typeof (item as { text?: unknown }).text === "string"
+          ? String((item as { text?: string }).text)
+          : ""
+      )
+      .filter(Boolean)
+      .join("");
+  }
+  return "";
+};
+
+// tool_result 的 content 可能是 JSON 字符串，优先解析出 text 聚合
+const extractToolResultText = (content: unknown) => {
+  if (typeof content === "string") {
+    const parsed = safeParseJson<{ content?: Array<{ text?: string }> }>(content);
+    if (parsed?.content?.length) {
+      return parsed.content
+        .map((item) => (typeof item.text === "string" ? item.text : ""))
+        .filter(Boolean)
+        .join("");
     }
-  }, [agent, threadId, copilotkit]);
+    return content;
+  }
+  if (content && typeof content === "object") {
+    const items = (content as { content?: Array<{ text?: string }> }).content;
+    if (Array.isArray(items)) {
+      return items
+        .map((item) => (typeof item.text === "string" ? item.text : ""))
+        .filter(Boolean)
+        .join("");
+    }
+  }
+  return "";
+};
 
-  useEffect(() => {
-    if (!agent) return;
-    const applyThinkingEvent = (incoming: unknown) => {
-      const event = incoming as { type?: string; delta?: string; runId?: string };
-      if (!event?.type) return;
-      if (event.type === EventType.RUN_STARTED) {
-        const runId = typeof event.runId === "string" ? event.runId : null;
-        currentRunIdRef.current = runId;
-        if (runId) {
-          thinkingBufferByRunIdRef.current[runId] = "";
-        }
-        if (runId) {
-          const latestUserId = getLatestUserMessageId();
-          if (latestUserId) {
-            runIdToUserMessageIdRef.current[runId] = latestUserId;
-          }
-          runIdOrderRef.current = [...runIdOrderRef.current, runId];
-        }
-        return;
-      }
-      if (event.type === EventType.THINKING_START) {
-        const runId = currentRunIdRef.current;
-        if (!runId) return;
-        const thinkingMsgId = createThreadId();
-        currentThinkingMsgIdByRunIdRef.current[runId] = thinkingMsgId;
-        thinkingBufferByRunIdRef.current[runId] = "";
-        setLiveThinkingByRunId((prev) => ({
-          ...prev,
-          [runId]: {
-            ...(prev[runId] ?? {}),
-            [thinkingMsgId]: "",
-          },
-        }));
-        return;
-      }
-      if (event.type === EventType.THINKING_TEXT_MESSAGE_START) {
-        const runId = currentRunIdRef.current;
-        if (!runId) return;
-        thinkingBufferByRunIdRef.current[runId] = "";
-        return;
-      }
-      if (event.type === EventType.THINKING_TEXT_MESSAGE_CONTENT) {
-        const delta = typeof event.delta === "string" ? event.delta : "";
-        if (!delta) return;
-        const runId = currentRunIdRef.current;
-        if (!runId) return;
-        const thinkingMsgId = currentThinkingMsgIdByRunIdRef.current[runId];
-        if (!thinkingMsgId) return;
-        const current = thinkingBufferByRunIdRef.current[runId] ?? "";
-        const next = `${current}${delta}`;
-        thinkingBufferByRunIdRef.current[runId] = next;
-        setLiveThinkingByRunId((prev) => {
-          const runLive = prev[runId] ?? {};
-          if (runLive[thinkingMsgId] === next) return prev;
-          return {
-            ...prev,
-            [runId]: {
-              ...runLive,
-              [thinkingMsgId]: next,
-            },
-          };
-        });
-        return;
-      }
-      if (event.type === EventType.THINKING_TEXT_MESSAGE_END) {
-        const runId = currentRunIdRef.current;
-        if (!runId) return;
-        const thinkingMsgId = currentThinkingMsgIdByRunIdRef.current[runId];
-        if (!thinkingMsgId) return;
-        const value = thinkingBufferByRunIdRef.current[runId] ?? "";
-        thinkingBufferByRunIdRef.current[runId] = "";
-        if (!runId || !value) return;
-        setCompletedThinkingByRunId((prev) => ({
-          ...prev,
-          [runId]: {
-            ...(prev[runId] ?? {}),
-            [thinkingMsgId]: [...(prev[runId]?.[thinkingMsgId] ?? []), value],
-          },
-        }));
-        setLiveThinkingByRunId((prev) => ({
-          ...prev,
-          [runId]: {
-            ...(prev[runId] ?? {}),
-            [thinkingMsgId]: "",
-          },
-        }));
-      }
-      if (event.type === EventType.THINKING_END) {
-        const runId = currentRunIdRef.current;
-        if (!runId) return;
-        delete currentThinkingMsgIdByRunIdRef.current[runId];
-        thinkingBufferByRunIdRef.current[runId] = "";
-      }
-    };
-    const { unsubscribe } = agent.subscribe({
-      onEvent: ({ event }) => {
-        applyThinkingEvent(event);
-      },
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, [agent, setMessages]);
+// ISO 时间字符串转为时间戳，解析失败返回 undefined
+const toTimestamp = (value?: string) => {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return undefined;
+  return parsed;
+};
 
-  useEffect(() => {
-    if (previousThreadId.current === undefined) {
-      previousThreadId.current = threadId;
+// 历史消息：按时间排序后聚合到 SemiMessage[]
+const mapHistoryMessages = (items: BackendMessageItem[]) => {
+  const sorted = [...items].sort((a, b) => {
+    const aTime = toTimestamp(a.updated_at) ?? toTimestamp(a.created_at) ?? 0;
+    const bTime = toTimestamp(b.updated_at) ?? toTimestamp(b.created_at) ?? 0;
+    return aTime - bTime;
+  });
+  const result: SemiMessage[] = [];
+  const runIndexMap = new Map<string, number>();
+
+  sorted.forEach((item) => {
+    const aguiMessage = safeParseJson<any>(item.content);
+    const role = aguiMessage?.role;
+    const createdAt =
+      toTimestamp(item.created_at) ?? toTimestamp(item.updated_at);
+    const updatedAt =
+      toTimestamp(item.updated_at) ?? toTimestamp(item.created_at);
+
+    // user 消息直接映射为独立的 SemiMessage
+    if (role === "user") {
+      result.push({
+        id: item.msg_id,
+        role: "user",
+        content: extractText(aguiMessage?.content),
+        status: item.status,
+        createdAt,
+        updatedAt,
+      });
       return;
     }
-    if (previousThreadId.current !== threadId) {
-      previousThreadId.current = threadId;
-      setLiveThinkingByRunId({});
-      setCompletedThinkingByRunId({});
-      runIdToUserMessageIdRef.current = {};
-      runIdOrderRef.current = [];
-      currentThinkingMsgIdByRunIdRef.current = {};
-      thinkingBufferByRunIdRef.current = {};
-      setHistoryLoaded(false);
-      setHistoryLoading(false);
-      setHistoryError("");
-      setHistoryPage(1);
-      setHistoryHasMore(false);
-      setMessages([]);
-    }
-  }, [threadId, setMessages]);
 
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  const parseMetadata = useCallback((metadata?: string) => {
-    if (!metadata) return {};
-    try {
-      return JSON.parse(metadata);
-    } catch {
-      return {};
+    // activity 消息独立映射，交由 A2UI 渲染
+    if (role === "activity" || aguiMessage?.activityType) {
+      result.push({
+        id: item.msg_id,
+        role: "activity",
+        content: aguiMessage?.content as unknown as SemiMessage["content"],
+        activityType: aguiMessage?.activityType,
+        status: item.status,
+        createdAt,
+        updatedAt,
+      } as SemiMessage);
+      return;
     }
-  }, []);
 
-  const parseActivityContent = useCallback((content: string) => {
-    if (!content) return content;
-    try {
-      return JSON.parse(content);
-    } catch {
-      return content;
+    // 其他消息按 run_id 归并到同一个 assistant SemiMessage
+    if (!item.run_id) {
+      return;
     }
-  }, []);
-  const parseMessagePayload = useCallback((content?: string) => {
-    if (!content) return {};
-    try {
-      return JSON.parse(content) as {
-        role?: string;
-        content?: unknown;
-        tool_calls?: unknown[];
-        toolCalls?: unknown[];
-        activityType?: string;
-        activity_type?: string;
-        toolCallId?: string;
+
+    let runIndex = runIndexMap.get(item.run_id);
+    if (runIndex === undefined) {
+      const runMessage: SemiMessage = {
+        id: item.run_id,
+        role: "assistant",
+        content: [],
+        status: item.status,
+        createdAt,
+        updatedAt,
       };
-    } catch {
-      return {};
+      result.push(runMessage);
+      runIndex = result.length - 1;
+      runIndexMap.set(item.run_id, runIndex);
     }
-  }, []);
-  const getValidToken = useCallback(() => readValidToken(router), [router]);
 
-  const mapHistoryMessage = useCallback(
-    (item: {
-      msg_id?: string;
-      run_id?: string;
-      type?: string;
-      role?: string;
-      content?: string;
-      metadata?: string;
-    }) => {
-      const metadata = parseMetadata(item.metadata);
-      const activityType =
-        typeof metadata.activity_type === "string"
-          ? metadata.activity_type
-          : undefined;
-      const runId = typeof item.run_id === "string" ? item.run_id : undefined;
-      const roleFromMeta =
-        typeof metadata.role === "string" ? metadata.role : undefined;
-      const isActivity = item.type === "activity" || Boolean(activityType);
-      const payload = parseMessagePayload(item.content);
-      const activityTypeFromPayload =
-        typeof payload.activityType === "string"
-          ? payload.activityType
-          : typeof payload.activity_type === "string"
-          ? payload.activity_type
-          : undefined;
-      const roleFromPayload =
-        typeof payload.role === "string" ? payload.role : undefined;
-      const roleFromItem = typeof item.role === "string" ? item.role : undefined;
-      const roleFromType = typeof item.type === "string" ? item.type : undefined;
-      const roleCandidate =
-        roleFromPayload ?? roleFromItem ?? roleFromMeta ?? roleFromType;
-      const normalizedRole =
-        roleCandidate === "user" ||
-        roleCandidate === "assistant" ||
-        roleCandidate === "system" ||
-        roleCandidate === "tool" ||
-        roleCandidate === "reasoning"
-          ? roleCandidate
-          : "assistant";
-      const role = isActivity ? "activity" : normalizedRole;
-      const content = isActivity
-        ? payload.content ?? parseActivityContent(item.content ?? "")
-        : (payload.content ?? "");
-      const toolCalls =
-        payload.tool_calls ??
-        payload.toolCalls ??
-        (typeof payload.tool_calls === "undefined" &&
-        typeof payload.toolCalls === "undefined"
-          ? undefined
-          : []);
-      return {
-        id: item.msg_id ?? createThreadId(),
-        role,
-        content,
-        ...(activityType || activityTypeFromPayload
-          ? { activityType: activityType ?? activityTypeFromPayload }
-          : {}),
-        ...(runId ? { runId } : {}),
-        ...(toolCalls ? { toolCalls } : {}),
-        ...(typeof payload.toolCallId === "string"
-          ? { toolCallId: payload.toolCallId }
-          : {}),
-        ...(typeof item.type === "string" ? { messageType: item.type } : {}),
-      };
-    },
-    [parseActivityContent, parseMessagePayload, parseMetadata]
-  );
+    const target = result[runIndex] as SemiMessage;
+    const content = Array.isArray(target.content) ? target.content : [];
+    const nextContent = [...content];
 
-  const fetchHistoryPage = useCallback(
-    async (pageToLoad: number, replace: boolean) => {
-      if (!threadId) return;
-      const token = getValidToken();
-      if (!token) return;
-      setHistoryLoading(true);
-      setHistoryError("");
-      try {
-        const params = new URLSearchParams();
-        params.set("page", String(pageToLoad));
-        params.set("page_size", String(historyPageSize));
-        const res = await fetch(
-          `${API_BASE}/v1/threads/${threadId}/messages?${params.toString()}`,
-          {
-            headers: buildAuthHeaders(token),
-          }
-        );
-        updateTokenFromResponse(res);
-        const data = await res.json();
-        const message = typeof data?.message === "string" ? data.message : "";
-        if (!res.ok) {
-          if (res.status === 404 && message === "thread not found") {
-            setMessages(replace ? [] : messagesRef.current);
-            setHistoryLoaded(true);
-            setHistoryPage(pageToLoad);
-            setHistoryHasMore(false);
-            return;
-          }
-          throw new Error(message || "获取历史消息失败");
-        }
-        if (data.code !== 0) {
-          if (message === "thread not found") {
-            setMessages(replace ? [] : messagesRef.current);
-            setHistoryLoaded(true);
-            setHistoryPage(pageToLoad);
-            setHistoryHasMore(false);
-            return;
-          }
-          throw new Error(message || "获取历史消息失败");
-        }
-        const items = Array.isArray(data.data?.data) ? data.data.data : [];
-        const total = typeof data.data?.total === "number" ? data.data.total : 0;
-        const normalized = items.map(mapHistoryMessage).reverse();
-        setMessages(replace ? normalized : [...normalized, ...messagesRef.current]);
-        setHistoryLoaded(true);
-        setHistoryPage(pageToLoad);
-        setHistoryHasMore(pageToLoad * historyPageSize < total);
-      } catch (err) {
-        if (err instanceof Error && err.message) {
-          setHistoryError(err.message);
-        } else {
-          setHistoryError("获取历史消息失败");
-        }
-      } finally {
-        setHistoryLoading(false);
-      }
-    },
-    [getValidToken, historyPageSize, mapHistoryMessage, setMessages, threadId]
-  );
-
-  useEffect(() => {
-    if (historyLoaded || !threadId) return;
-    fetchHistoryPage(1, true);
-  }, [fetchHistoryPage, historyLoaded, threadId]);
-
-  const handleQuickSend = useCallback(
-    async (content: string) => {
-      const trimmed = content.trim();
-      if (!trimmed) return;
-      await sendMessage({
-        id: createThreadId(),
-        role: "user",
-        content: trimmed,
-      });
-      window.dispatchEvent(new Event("threads-refresh"));
-    },
-    [sendMessage]
-  );
-
-  const handleInputSend = useCallback(
-    (payload: { inputContents?: unknown[] }) => {
-      const text = extractInputText(payload);
-      if (!text) return;
-      void handleQuickSend(text);
-    },
-    [handleQuickSend]
-  );
-
-  const groupedItems = useMemo(() => {
-    type Segment = {
-      id: string;
-      kind: "text" | "reasoning" | "tool_call" | "tool_result" | "activity";
-      text?: string;
-      toolCall?: unknown;
-      toolCallId?: string;
-      activity?: ActivityMessageLike;
-    };
-    const items: Array<{
-      kind: "user" | "assistant";
-      id: string;
-      content?: string;
-      segments?: Segment[];
-    }> = [];
-    const groups = new Map<string, (typeof items)[number]>();
-    const groupSegmentMaps = new Map<string, Map<string, Segment>>();
-    let currentBatchKey: string | null = null;
-    const runIdToUserMessageId = runIdToUserMessageIdRef.current;
-    const runIdOrder = runIdOrderRef.current;
-    const latestThinkingRunId = (() => {
-      const ids = [
-        ...Object.keys(liveThinkingByRunId),
-        ...Object.keys(completedThinkingByRunId),
-      ];
-      return ids.length > 0 ? ids[ids.length - 1] : undefined;
-    })();
-    const getThinkingItems = (runId: string) => {
-      const completedById = completedThinkingByRunId[runId] ?? {};
-      const liveById = liveThinkingByRunId[runId] ?? {};
-      const ids = new Set([...Object.keys(completedById), ...Object.keys(liveById)]);
-      return Array.from(ids)
-        .map((id) => {
-          const completed = completedById[id] ?? [];
-          const live = liveById[id];
-          const texts = [...completed, ...(live ? [live] : [])];
-          return { id, texts };
-        })
-        .filter((item) => item.texts.length > 0);
-    };
-    const getGroup = (key: string) => {
-      let group = groups.get(key);
-      if (!group) {
-        group = {
-          kind: "assistant",
-          id: key,
-          segments: [],
-        };
-        groups.set(key, group);
-        items.push(group);
-      }
-      return group;
-    };
-    const getSegment = (
-      group: (typeof items)[number],
-      kind: Segment["kind"],
-      id: string
-    ) => {
-      let map = groupSegmentMaps.get(group.id);
-      if (!map) {
-        map = new Map();
-        groupSegmentMaps.set(group.id, map);
-      }
-      const key = `${kind}:${id}`;
-      let segment = map.get(key);
-      if (!segment) {
-        segment = { kind, id };
-        map.set(key, segment);
-        group.segments?.push(segment);
-      }
-      return segment;
-    };
-    const getMessageText = (content: unknown, role?: string) => {
-      const text = collectMessageParts({ content, role }).textParts.join("\n").trim();
-      return text || (typeof content === "string" ? content : "");
-    };
-
-    const getRunIdForUser = (userId?: string) => {
-      if (!userId) return undefined;
-      for (let i = runIdOrder.length - 1; i >= 0; i -= 1) {
-        const runId = runIdOrder[i];
-        if (!runId) continue;
-        if (runIdToUserMessageId[runId] === userId) {
-          return runId;
-        }
-      }
-      return undefined;
-    };
-
-    for (const message of messages) {
-      if (message.role === "user") {
-        const userText = getTextFromContent(message.content);
-        items.push({
-          kind: "user",
-          id: message.id,
-          content: userText || safeStringify(message.content),
-        });
-        currentBatchKey = `user-${message.id}`;
-        continue;
-      }
-
-      const runId = (message as { runId?: string }).runId;
-      const latestUserId = currentBatchKey?.startsWith("user-")
-        ? currentBatchKey.slice("user-".length)
-        : undefined;
-      const resolvedRunId =
-        runId ??
-        getRunIdForUser(latestUserId) ??
-        currentRunIdRef.current ??
-        runIdOrder[runIdOrder.length - 1] ??
-        latestThinkingRunId ??
-        undefined;
-      const key = resolvedRunId ?? currentBatchKey ?? message.id;
-      const group = getGroup(key);
-      if (message.role === "activity") {
-        if (message.activityType === A2UIMessageRenderer.activityType) {
-          const activity = message as ActivityMessageLike;
-          const segment = getSegment(group, "activity", activity.id ?? message.id);
-          segment.activity = activity;
-        }
-        continue;
-      }
-      const messageType = (message as { messageType?: string }).messageType;
-      if (messageType === "thinking_message") {
-        const text = getMessageText(message.content, "assistant");
-        if (text) {
-          const segment = getSegment(group, "reasoning", message.id);
-          segment.text = segment.text ? `${segment.text}\n${text}` : text;
-        }
-        continue;
-      }
-      if (message.role === "tool") {
-        const toolCallId = (message as { toolCallId?: string }).toolCallId;
-        const text = getMessageText(message.content, "tool");
-        const segment = getSegment(group, "tool_result", toolCallId ?? message.id);
-        segment.toolCallId = toolCallId;
-        if (text) {
-          segment.text = segment.text ? `${segment.text}\n${text}` : text;
-        }
-        continue;
-      }
-      const toolCalls = (message as { toolCalls?: unknown[] }).toolCalls;
-      if (Array.isArray(toolCalls)) {
-        for (const toolCall of toolCalls) {
-          const toolCallId =
-            toolCall && typeof toolCall === "object" && "id" in toolCall
-              ? String((toolCall as { id?: string }).id ?? "")
-              : "";
-          const segment = getSegment(
-            group,
-            "tool_call",
-            toolCallId || `${message.id}-tool-${group.segments?.length ?? 0}`
-          );
-          segment.toolCall = toolCall;
-          segment.toolCallId = toolCallId || segment.toolCallId;
-        }
-      }
-      const text = getMessageText(message.content, "assistant");
+    // text -> output_text
+    if (item.type === "text") {
+      const text = extractText(aguiMessage?.content);
       if (text) {
-        const segment = getSegment(group, "text", message.id);
-        segment.text = segment.text ? `${segment.text}\n${text}` : text;
+        nextContent.push({
+          type: "message",
+          content: [{ type: "output_text", text }],
+          status: item.status ?? "completed",
+        });
       }
     }
 
-    const thinkingRunIds = new Set([
-      ...Object.keys(completedThinkingByRunId),
-      ...Object.keys(liveThinkingByRunId),
-    ]);
+    // tool_call -> function_call
+    if (item.type === "tool_call") {
+      const toolCall = aguiMessage?.toolCalls?.[0];
+      if (toolCall) {
+        nextContent.push({
+          type: "function_call",
+          id: toolCall.id,
+          call_id: toolCall.id,
+          name: toolCall.function?.name,
+          status: item.status ?? "completed",
+          arguments: toolCall.function?.arguments ?? "",
+        });
+      }
+    }
 
-    for (const runId of thinkingRunIds) {
-      const thinkingItems = getThinkingItems(runId);
-      if (thinkingItems.length === 0) continue;
-      if (groups.has(runId)) {
-        const existing = groups.get(runId);
-        if (existing && existing.kind === "assistant") {
-          thinkingItems.forEach((thinking) => {
-            const segment = getSegment(existing, "reasoning", thinking.id);
-            const text = thinking.texts.join("\n").trim();
-            if (text) {
-              segment.text = segment.text ? `${segment.text}\n${text}` : text;
-            }
-          });
-        }
-        continue;
+    if (item.type === "tool_result") {
+      const text = extractToolResultText(aguiMessage?.content);
+      if (text) {
+        nextContent.push({
+          type: TOOL_RESULT_TYPE,
+          text,
+          status: item.status ?? "completed",
+        });
       }
-      const targetUserId = runIdToUserMessageId[runId];
-      if (targetUserId) {
-        const insertIndex = items.findIndex(
-          (item) => item.kind === "user" && item.id === targetUserId
-        );
-        if (insertIndex !== -1) {
-          const group = {
-            kind: "assistant",
-            id: runId,
-            segments: [],
-          } as (typeof items)[number];
-          thinkingItems.forEach((thinking) => {
-            const segment = getSegment(group, "reasoning", thinking.id);
-            const text = thinking.texts.join("\n").trim();
-            if (text) {
-              segment.text = segment.text ? `${segment.text}\n${text}` : text;
-            }
-          });
-          items.splice(insertIndex + 1, 0, group);
-          continue;
-        }
-      }
-      const group = {
-        kind: "assistant",
-        id: runId,
-        segments: [],
-      } as (typeof items)[number];
-      thinkingItems.forEach((thinking) => {
-        const segment = getSegment(group, "reasoning", thinking.id);
-        const text = thinking.texts.join("\n").trim();
-        if (text) {
-          segment.text = segment.text ? `${segment.text}\n${text}` : text;
-        }
+    }
+
+    // reasoning -> summary_text
+    if (item.type === "reasoning" || item.type === "reasoning_message") {
+      const text = extractText(aguiMessage?.content);
+      nextContent.push({
+        type: "reasoning",
+        status: item.status ?? "completed",
+        summary: text ? [{ type: "summary_text", text }] : [],
+        encryptedValue: aguiMessage?.encryptedValue,
       });
-      items.push(group);
     }
 
-    return items;
-  }, [completedThinkingByRunId, liveThinkingByRunId, messages]);
+    result[runIndex] = {
+      ...target,
+      content: nextContent,
+      updatedAt: updatedAt ?? target.updatedAt,
+    } as SemiMessage;
+  });
+
+  return result;
+};
+
+type ChatContentProps = {
+  token: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+};
+
+function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
+  const searchParams = useSearchParams();
+  const fallbackThreadIdRef = useRef<string>("");
+  const currentRunIdRef = useRef<string>("");
+  const textMessageMapRef = useRef(new Map<string, { runId: string; index: number }>());
+  const toolCallMapRef = useRef(new Map<string, { runId: string; index: number }>());
+  const reasoningMessageMapRef = useRef(
+    new Map<string, { runId: string; index: number }>()
+  );
+  const { agent } = useAgent({
+    updates: [
+      UseAgentUpdate.OnRunStatusChanged,
+      UseAgentUpdate.OnStateChanged,
+    ],
+  });
+  const { renderActivityMessage } = useRenderActivityMessage();
+  const [inputError, setInputError] = useState("");
+  const [threadId, setThreadId] = useState("");
+  const [semiMessages, setSemiMessages] = useState<SemiMessage[]>([]);
+
+  // 根据 query 参数或生成新 thread_id
+  const resolvedThreadId = useMemo(() => {
+    const paramThreadId = searchParams.get("threadId");
+    if (paramThreadId) {
+      return paramThreadId;
+    }
+    if (!fallbackThreadIdRef.current) {
+      fallbackThreadIdRef.current = createThreadId();
+    }
+    return fallbackThreadIdRef.current;
+  }, [searchParams]);
+
+  // 切换 thread 时重置消息与事件映射表
+  useEffect(() => {
+    if (!agent) return;
+    if (resolvedThreadId !== threadId) {
+      setThreadId(resolvedThreadId);
+      agent.threadId = resolvedThreadId;
+      agent.setMessages([]);
+      setInputError("");
+      setSemiMessages([]);
+      currentRunIdRef.current = "";
+      textMessageMapRef.current.clear();
+      toolCallMapRef.current.clear();
+      reasoningMessageMapRef.current.clear();
+    }
+  }, [agent, resolvedThreadId, threadId]);
+
+  // 拉取历史消息并映射为 SemiMessage[]
+  const loadHistory = useCallback(async () => {
+    if (!token || !threadId) return;
+    try {
+      const response = await fetch(`/api/backend/v1/threads/${threadId}/messages`, {
+        headers: buildAuthHeaders(token, userId),
+      });
+      updateTokenFromResponse(response);
+      const data = (await response
+        .json()
+        .catch(() => null)) as BackendResult<BackendMessagePage> | null;
+      if (!response.ok) {
+        if (data?.code === 1004) {
+          // 新建会话暂无历史，保持空消息列表
+          setSemiMessages([]);
+          return;
+        }
+        setInputError(data?.message || "历史消息加载失败");
+        return;
+      }
+      if (!data || data.code !== 0) {
+        if (data?.code === 1004) {
+          // 新建会话暂无历史，保持空消息列表
+          setSemiMessages([]);
+          return;
+        }
+        setInputError(data?.message || "历史消息加载失败");
+        return;
+      }
+      // 后端返回 data.data 才是消息列表
+      const mapped = mapHistoryMessages(data.data?.data ?? []);
+      setSemiMessages(mapped);
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        setInputError(error.message);
+      } else {
+        setInputError("历史消息加载失败");
+      }
+    }
+  }, [threadId, token, userId]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  // 按 run_id 定位或创建 assistant SemiMessage
+  const updateRunMessage = useCallback(
+    (runId: string, updater: (message: SemiMessage) => SemiMessage) => {
+      setSemiMessages((prev) => {
+        const next = [...prev];
+        let index = next.findIndex(
+          (message) => message.id === runId && message.role === "assistant"
+        );
+        const baseMessage =
+          index === -1
+            ? {
+                id: runId,
+                role: "assistant",
+                content: [],
+                status: "in_progress",
+                createdAt: Date.now(),
+              }
+            : (next[index] as SemiMessage);
+        const normalizedMessage = {
+          ...baseMessage,
+          content: Array.isArray(baseMessage.content)
+            ? [...baseMessage.content]
+            : [],
+        } as SemiMessage;
+        const updated = updater(normalizedMessage);
+        if (index === -1) {
+          next.push(updated);
+        } else {
+          next[index] = updated;
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const resolveRunId = (event: any) =>
+    event?.runId ?? event?.run_id ?? event?.data?.runId ?? event?.data?.run_id;
+
+  const resolveMessageId = (event: any) =>
+    event?.messageId ??
+    event?.message_id ??
+    event?.data?.messageId ??
+    event?.data?.message_id;
+
+  // 订阅 AG-UI 事件流，增量拼装 ContentItem[]
+  useEffect(() => {
+    if (!agent) return;
+    const subscription = agent.subscribe({
+      onEvent: ({ event }) => {
+        const rawEvent = event as any;
+        const eventType = String(rawEvent?.type ?? "");
+        if (!eventType) return;
+        // 调试日志：确认事件类型与关键信息是否完整
+        console.debug("[chat][event]", {
+          type: eventType,
+          runId: resolveRunId(rawEvent),
+          messageId: resolveMessageId(rawEvent),
+          threadId: rawEvent?.threadId ?? rawEvent?.thread_id,
+        });
+
+        // RUN_STARTED 用来确立 runId
+        if (eventType === "RUN_STARTED") {
+          const runId = resolveRunId(rawEvent);
+          // 关键日志：runId 为空会导致后续流式消息无法归档
+          console.debug("[chat][RUN_STARTED]", { runId });
+          if (runId) {
+            currentRunIdRef.current = runId;
+            updateRunMessage(runId, (message) => message);
+          }
+          return;
+        }
+
+      // RUN_FINISHED 标记 run 结束
+        if (eventType === "RUN_FINISHED") {
+          const runId = resolveRunId(rawEvent) ?? currentRunIdRef.current;
+          if (!runId) return;
+        updateRunMessage(runId, (message) => ({
+          ...message,
+          status: "completed",
+        }));
+        currentRunIdRef.current = "";
+        return;
+        }
+
+      // TEXT_MESSAGE_* 流式拼接 output_text
+        if (eventType === "TEXT_MESSAGE_START") {
+          const runId = currentRunIdRef.current;
+          const messageId = resolveMessageId(rawEvent);
+          if (!runId || !messageId) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const index = content.length;
+          content.push({
+            type: "message",
+            content: [{ type: "output_text", text: "" }],
+            status: "in_progress",
+          });
+            textMessageMapRef.current.set(messageId, { runId, index });
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "TEXT_MESSAGE_CONTENT") {
+          const messageId = resolveMessageId(rawEvent);
+          if (!messageId) return;
+          const mapping = textMessageMapRef.current.get(messageId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as any;
+          if (!target || !Array.isArray(target.content)) {
+            return message;
+          }
+          const nextTarget = { ...target };
+          const items = [...target.content];
+          const first = items[0];
+          if (first && typeof first.text === "string") {
+            items[0] = { ...first, text: `${first.text}${event.delta ?? ""}` };
+          }
+          nextTarget.content = items;
+          content[mapping.index] = nextTarget;
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "TEXT_MESSAGE_END") {
+          const messageId = resolveMessageId(rawEvent);
+          if (!messageId) return;
+          const mapping = textMessageMapRef.current.get(messageId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as any;
+          if (!target) {
+            return message;
+          }
+          content[mapping.index] = { ...target, status: "completed" };
+          return { ...message, content };
+        });
+          textMessageMapRef.current.delete(messageId);
+        return;
+        }
+
+      // REASONING_MESSAGE_* 流式拼接 summary_text
+        if (eventType === "REASONING_MESSAGE_START") {
+          const runId = currentRunIdRef.current;
+          const messageId = resolveMessageId(rawEvent);
+          if (!runId || !messageId) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const index = content.length;
+          content.push({
+            type: "reasoning",
+            summary: [{ type: "summary_text", text: "" }],
+            status: "in_progress",
+          });
+            reasoningMessageMapRef.current.set(messageId, { runId, index });
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "REASONING_MESSAGE_CONTENT") {
+          const messageId = resolveMessageId(rawEvent);
+          if (!messageId) return;
+          const mapping = reasoningMessageMapRef.current.get(messageId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as any;
+          if (!target || !Array.isArray(target.summary)) {
+            return message;
+          }
+          const nextTarget = { ...target };
+          const items = [...target.summary];
+          const first = items[0];
+          if (first && typeof first.text === "string") {
+            items[0] = { ...first, text: `${first.text}${event.delta ?? ""}` };
+          }
+          nextTarget.summary = items;
+          content[mapping.index] = nextTarget;
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "REASONING_MESSAGE_END") {
+          const messageId = resolveMessageId(rawEvent);
+          if (!messageId) return;
+          const mapping = reasoningMessageMapRef.current.get(messageId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as any;
+          if (!target) {
+            return message;
+          }
+          content[mapping.index] = { ...target, status: "completed" };
+          return { ...message, content };
+        });
+          reasoningMessageMapRef.current.delete(messageId);
+        return;
+        }
+
+      // REASONING_ENCRYPTED_VALUE 绑定到 reasoning 消息
+        if (eventType === "REASONING_ENCRYPTED_VALUE") {
+          const messageId = resolveMessageId(rawEvent);
+          if (!messageId) return;
+          const mapping = reasoningMessageMapRef.current.get(messageId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as any;
+          if (!target) return message;
+          content[mapping.index] = {
+            ...target,
+            encryptedValue: event.encryptedValue,
+          };
+          return { ...message, content };
+        });
+        return;
+        }
+
+      // TOOL_CALL_* 处理 function_call 的参数流
+        if (eventType === "TOOL_CALL_START") {
+          const runId = currentRunIdRef.current;
+          const toolCallId =
+            rawEvent.toolCallId ?? rawEvent.toolCall?.id ?? rawEvent.id;
+          if (!runId || !toolCallId) return;
+          // 实时 SSE 事件仅从 toolCallName 获取工具名
+          const name = rawEvent.toolCallName;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const index = content.length;
+          content.push({
+            type: "function_call",
+            id: toolCallId,
+            call_id: toolCallId,
+            name,
+            status: "in_progress",
+            arguments: "",
+          });
+          toolCallMapRef.current.set(toolCallId, { runId, index });
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "TOOL_CALL_ARGS") {
+          const toolCallId =
+            rawEvent.toolCallId ?? rawEvent.toolCall?.id ?? rawEvent.id;
+          if (!toolCallId) return;
+          const mapping = toolCallMapRef.current.get(toolCallId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as any;
+          if (!target) return message;
+          content[mapping.index] = {
+            ...target,
+            arguments: `${target.arguments ?? ""}${rawEvent.delta ?? ""}`,
+          };
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "TOOL_CALL_END") {
+          const toolCallId =
+            rawEvent.toolCallId ?? rawEvent.toolCall?.id ?? rawEvent.id;
+          if (!toolCallId) return;
+          const mapping = toolCallMapRef.current.get(toolCallId);
+          if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index];
+          if (!target) return message;
+          content[mapping.index] = { ...target, status: "completed" };
+          return { ...message, content };
+        });
+        return;
+        }
+
+        if (eventType === "TOOL_CALL_RESULT") {
+          const runId = currentRunIdRef.current;
+          if (!runId) return;
+          const outputText = extractToolResultText(
+            rawEvent.result ?? rawEvent.content
+          );
+        if (!outputText) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          content.push({
+            type: TOOL_RESULT_TYPE,
+            text: outputText,
+            status: "completed",
+          });
+          return { ...message, content };
+        });
+        return;
+        }
+
+      // activity 直接作为独立消息渲染
+        if (eventType === "ACTIVITY_MESSAGE") {
+          const activity = rawEvent.message ?? rawEvent;
+          if (!activity?.activityType) return;
+        setSemiMessages((prev) => [
+          ...prev,
+          {
+            id: activity.id ?? createMessageId(),
+            role: "activity",
+            content: activity.content,
+            activityType: activity.activityType,
+            status: "completed",
+            createdAt: Date.now(),
+          },
+        ]);
+        }
+      },
+    });
+
+    return () => {
+      subscription?.unsubscribe?.();
+    };
+  }, [agent, updateRunMessage]);
+
+  const chats = useMemo<SemiMessage[]>(
+    () =>
+      semiMessages.map((message, index) => ({
+        ...message,
+        id: message.id ?? `${message.role}-${index}`,
+      })),
+    [semiMessages]
+  );
+
+  const dialogueRenderConfig = useMemo(
+    () => ({
+      renderDialogueContent: ({
+        message,
+        defaultContent,
+      }: {
+        message?: SemiMessage;
+        defaultContent?: ReactNode;
+      }) => {
+        if (!message) return defaultContent;
+        if (message.role === "activity") {
+          return renderActivityMessage(message as unknown as ActivityMessage);
+        }
+        return defaultContent;
+      },
+    }),
+    [renderActivityMessage]
+  );
 
   const roleConfig = useMemo(
     () => ({
-      user: { name: "你" },
-      assistant: { name: "助手" },
-      system: { name: "系统" },
+      user: {
+        name: userName || "用户",
+        avatar:
+          userAvatar ||
+          buildTextAvatarDataUrl(userName || "用户", {
+            background: "#2DD4BF",
+          }),
+        color: "teal",
+      },
+      assistant: {
+        name: "AI助手",
+        avatar: buildTextAvatarDataUrl("AI", { background: "#6366F1" }),
+        color: "indigo",
+      },
     }),
-    []
+    [userAvatar, userName]
   );
 
   const renderDialogueContentItem = useMemo(
     () => ({
-      activity: (item: {
-        content?: Record<string, unknown>;
-        activityType?: string;
-        message?: ActivityMessageLike;
-      }) => {
-        const activityType =
-          typeof item?.activityType === "string" ? item.activityType : "";
-        if (!activityType) return null;
-        const content = item?.content ?? {};
-        const message =
-          item?.message ?? ({
-            id: createThreadId(),
-            role: "activity",
-            content,
-            activityType,
-          } as ActivityMessageLike);
-        return (
-          <div className="rounded-xl border bg-white p-4">
-            <ActivityRenderer
-              activityType={activityType}
-              content={content}
-              message={message}
-              agent={agent}
-            />
-          </div>
-        );
+      [TOOL_RESULT_TYPE]: (item: { text?: string }) => {
+        if (!item?.text) return null;
+        return <ToolResultCollapse text={item.text} />;
       },
     }),
-    [ActivityRenderer, agent]
+    []
   );
 
-  const dialogueMessages = useMemo(() => {
-    return groupedItems.map((item) => {
-      if (item.kind === "user") {
-        return {
-          id: item.id,
-          role: "user",
-          content: item.content ?? "",
-        };
+  // 发送：先回显 user 消息，再触发 run
+  const handleMessageSend = useCallback(
+    (payload: MessageContent) => {
+      if (agent.isRunning) return;
+      const inputContents = payload?.inputContents ?? [];
+      if (!inputContents.length) {
+        setInputError("请输入内容");
+        return;
       }
-      const contentItems: Array<Record<string, unknown>> = [];
-      const segments = item.segments ?? [];
-      segments.forEach((segment) => {
-        if (segment.kind === "reasoning") {
-          if (!segment.text) return;
-          contentItems.push({
-            type: "reasoning",
-            status: isLoading ? "in_progress" : "completed",
-            summary: [
-              {
-                type: "summary_text",
-                text: segment.text,
-              },
-            ],
-          });
-          return;
-        }
-        if (segment.kind === "tool_call") {
-          const argumentsValue =
-            typeof segment.toolCall === "string"
-              ? segment.toolCall
-              : safeStringify(segment.toolCall);
-          contentItems.push({
-            type: "function_call",
-            name: "tool",
-            arguments: argumentsValue,
-            status: "completed",
-            call_id: segment.toolCallId ?? segment.id,
-          });
-          return;
-        }
-        if (segment.kind === "tool_result") {
-          if (!segment.text) return;
-          contentItems.push({
-            type: "message",
-            content: [
-              {
-                type: "output_text",
-                text: segment.text,
-              },
-            ],
-            status: "completed",
-          });
-          return;
-        }
-        if (segment.kind === "text") {
-          if (!segment.text) return;
-          contentItems.push({
-            type: "message",
-            content: [
-              {
-                type: "output_text",
-                text: segment.text,
-              },
-            ],
-            status: "completed",
-          });
-          return;
-        }
-        if (segment.kind === "activity") {
-          const activity = segment.activity;
-          if (!activity) return;
-          contentItems.push({
-            type: "activity",
-            activityType: activity.activityType,
-            content: activity.content,
-            message: activity,
-            id: activity.id ?? `${item.id}-activity`,
-          });
+      const textChunks = inputContents
+        .map((item) =>
+          typeof (item as { text?: unknown }).text === "string"
+            ? String((item as { text?: string }).text)
+            : ""
+        )
+        .filter(Boolean);
+      if (!textChunks.length) {
+        setInputError("暂不支持该输入格式");
+        return;
+      }
+      setInputError("");
+      const message: AguiMessage = {
+        id: createMessageId(),
+        role: "user",
+        content: textChunks.join(""),
+      };
+      setSemiMessages((prev) => [
+        ...prev,
+        {
+          id: message.id,
+          role: "user",
+          content: message.content,
+          status: "completed",
+          createdAt: Date.now(),
+        },
+      ]);
+      agent.setMessages([message]);
+      agent.runAgent().catch((error) => {
+        if (error instanceof Error && error.message) {
+          setInputError(error.message);
+        } else {
+          setInputError("发送失败");
         }
       });
-      return {
-        id: item.id,
-        role: "assistant",
-        content: contentItems.length > 0 ? contentItems : "",
-        status: isLoading ? "in_progress" : "completed",
-      };
-    });
-  }, [groupedItems, isLoading]);
+    },
+    [agent]
+  );
+
+  const handleStopGenerate = useCallback(() => {
+    agent.abortRun();
+  }, [agent]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-auto p-6">
-        {historyHasMore && (
-          <div className="flex justify-center">
-            <button
-              type="button"
-              disabled={historyLoading}
-              onClick={() => {
-                isPrependingRef.current = true;
-                fetchHistoryPage(historyPage + 1, false);
-              }}
-              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {historyLoading ? "加载中..." : "加载更多"}
-            </button>
-          </div>
-        )}
-        {historyError && (
-          <div className="text-sm text-red-500">{historyError}</div>
-        )}
-        {dialogueMessages.length === 0 ? (
-          <div className="text-sm text-gray-400">
-            {historyLoading ? "加载中..." : "开始对话吧"}
-          </div>
-        ) : (
-          <AIChatDialogue
-            chats={dialogueMessages}
-            roleConfig={roleConfig}
-            renderDialogueContentItem={renderDialogueContentItem}
-            hints={quickActionHints}
-            onHintClick={handleQuickSend}
-          />
-        )}
-      </div>
-      <div className="sticky bottom-6 mx-6 mb-6 rounded-3xl border border-gray-200 bg-white/90 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur">
-        <AIChatInput
-          placeholder="请输入你的问题"
-          generating={isLoading}
-          immediatelyRender={false}
-          onMessageSend={handleInputSend}
-          onStopGenerate={stopGeneration}
+    <div className="flex h-full w-full flex-col bg-white">
+      <div className="flex-1 overflow-hidden">
+        <AIChatDialogue
+          align="leftRight"
+          mode="bubble"
+          chats={chats}
+          dialogueRenderConfig={dialogueRenderConfig}
+          renderDialogueContentItem={renderDialogueContentItem}
+          roleConfig={roleConfig}
+          className="h-full"
         />
+      </div>
+      <div className="border-t bg-white px-4 py-3">
+        <AIChatInput
+          keepSkillAfterSend={false}
+          onMessageSend={handleMessageSend}
+          onStopGenerate={handleStopGenerate}
+          generating={agent.isRunning}
+          canSend={!agent.isRunning}
+          showUploadButton={false}
+          showUploadFile={false}
+          showReference={false}
+          round
+          immediatelyRender = {false}
+        />
+        {inputError && (
+          <div className="mt-2 text-xs text-red-500">{inputError}</div>
+        )}
       </div>
     </div>
   );
@@ -942,60 +911,83 @@ function ChatContent() {
 
 export default function ChatPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [resolvedThreadId, setResolvedThreadId] = useState<string | null>(null);
-  const [copilotHeaders, setCopilotHeaders] = useState<
-    Record<string, string> | undefined
-  >(undefined);
-  const createdThreadIdRef = useRef<string | null>(null);
-  const getValidToken = useCallback(() => readValidToken(router), [router]);
-  const threadIdFromUrl = useMemo(
-    () => searchParams.get("threadId"),
-    [searchParams]
-  );
+  const [token, setToken] = useState("");
+  const [userInfo, setUserInfo] = useState<StoredUser | null>(null);
+  const refreshUserInfo = useCallback(() => {
+    setUserInfo(readStoredUser());
+  }, []);
 
   useEffect(() => {
-    const token = getValidToken();
-    if (token) {
-      const storedUser = readStoredUser();
-      const storedUserId =
-        typeof storedUser?.user_id === "string" || typeof storedUser?.user_id === "number"
-          ? String(storedUser.user_id)
-          : "";
-      const userId = storedUserId || getUserIdFromToken(token);
-      setCopilotHeaders(buildAuthHeaders(token, userId));
-    } else {
-      setCopilotHeaders(undefined);
-    }
-  }, [getValidToken]);
-
-  useEffect(() => {
-    if (threadIdFromUrl) {
-      setResolvedThreadId(threadIdFromUrl);
-      createdThreadIdRef.current = null;
+    const currentToken = readValidToken(router);
+    if (!currentToken) {
+      router.push("/login");
       return;
     }
-    if (!createdThreadIdRef.current) {
-      createdThreadIdRef.current = createThreadId();
-    }
-    const newThreadId = createdThreadIdRef.current;
-    if (!newThreadId) return;
-    setResolvedThreadId(newThreadId);
-    router.replace(`/chat?threadId=${newThreadId}`);
-  }, [router, threadIdFromUrl]);
+    setToken(currentToken);
+    refreshUserInfo();
+  }, [refreshUserInfo, router]);
 
-  if (!resolvedThreadId) {
+  // 同步 localStorage 用户信息变化
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "user") {
+        refreshUserInfo();
+      }
+    };
+    const handleFocus = () => {
+      refreshUserInfo();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [refreshUserInfo]);
+
+  const userName = useMemo(() => {
+    const name =
+      typeof userInfo?.username === "string" ? userInfo.username.trim() : "";
+    return name || "用户";
+  }, [userInfo]);
+
+  const userAvatar = useMemo(() => {
+    const avatar =
+      typeof userInfo?.avatar === "string" ? userInfo.avatar.trim() : "";
+    return avatar;
+  }, [userInfo]);
+
+  const userId = useMemo(() => {
+    if (!token) return "";
+    const storedId = userInfo?.user_id;
+    if (storedId !== undefined && storedId !== null) {
+      return String(storedId);
+    }
+    return getUserIdFromToken(token);
+  }, [token, userInfo]);
+
+  const copilotHeaders = useMemo(
+    () => buildAuthHeaders(token, userId),
+    [token, userId]
+  );
+
+  if (!token) {
     return null;
   }
 
   return (
-    <CopilotKit
+    <CopilotKitProvider
       runtimeUrl="/api/copilotkit"
-      renderActivityMessages={activityRenderers}
-      threadId={resolvedThreadId}
+      renderActivityMessages={ACTIVITY_RENDERERS}
       headers={copilotHeaders}
     >
-      <ChatContent />
-    </CopilotKit>
+      <ChatContent
+        token={token}
+        userId={userId}
+        userName={userName}
+        userAvatar={userAvatar}
+      />
+    </CopilotKitProvider>
   );
 }

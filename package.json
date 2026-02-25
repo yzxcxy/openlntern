@@ -11,12 +11,12 @@
   },
   "dependencies": {
     "@a2ui/lit": "^0.8.1",
-    "@ag-ui/client": "^0.0.42",
-    "@copilotkit/a2ui-renderer": "1.51.3",
-    "@copilotkit/react-core": "1.51.3",
-    "@copilotkit/runtime": "1.51.3",
-    "@douyinfe/semi-icons": "^2.89.1",
-    "@douyinfe/semi-ui": "^2.89.1",
+    "@ag-ui/client": "0.0.45",
+    "@copilotkit/a2ui-renderer": "1.51.4",
+    "@copilotkit/react-core": "1.51.4",
+    "@copilotkit/runtime": "1.51.4",
+    "@douyinfe/semi-icons": "^2.91.0",
+    "@douyinfe/semi-ui-19": "^2.91.0",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
     "hono": "^4.6.18",
@@ -39,7 +39,7 @@
     "@types/react": "19.2.3",
     "@types/react-dom": "19.2.3",
     "concurrently": "^9.2.1",
-    "eslint": "^9.34.0",
+    "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-only-warn": "^1.1.0",
     "eslint-plugin-react": "^7.37.5",
@@ -50,5 +50,15 @@
     "tailwindcss": "^4.1.13",
     "typescript": "5.9.2",
     "typescript-eslint": "^8.55.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@ag-ui/client": "0.0.45",
+      "**>@ag-ui/client": "0.0.45",
+      "@ag-ui/core": "0.0.45",
+      "@ag-ui/encoder": "0.0.45",
+      "**>@ag-ui/core": "0.0.45",
+      "**>@ag-ui/encoder": "0.0.45"
+    }
   }
 }
