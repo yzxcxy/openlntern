@@ -11,6 +11,7 @@ import (
 
 	einoTool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
+	"github.com/google/uuid"
 )
 
 // A2UIServiceInterface 供 list/get 使用的 A2UI 查询接口，由 services 注入到 context
@@ -22,7 +23,6 @@ type A2UIServiceInterface interface {
 var (
 	errA2UIIDRequired         = errors.New("a2ui_id is required")
 	errA2UISenderNotAvailable = errors.New("a2ui sender not available in this context")
-	errMsgIDRequired          = errors.New("msg_id is required")
 	errA2UIServiceNotInCtx    = errors.New("a2ui service not available in context")
 )
 
@@ -44,7 +44,6 @@ type GetA2UIInput struct {
 
 // SendA2UIInput 渲染数据并发送 A2UI 事件的入参
 type SendA2UIInput struct {
-	MsgID     string `json:"msg_id" jsonschema_description:"消息 ID，用于关联 A2UI 活动"`
 	SurfaceID string `json:"surface_id" jsonschema_description:"Surface ID，如 default，可选"`
 	A2UIID    string `json:"a2ui_id" jsonschema_description:"A2UI 的业务 ID"`
 	DataJSON  string `json:"data_json" jsonschema_description:"数据模型更新内容的 JSON 字符串，注意如果查询对应A2UI返回的data_json为空，说明其是一个纯展示的A2UI，该字段就不应该被传入，可选"`
@@ -110,9 +109,6 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 	if svc == nil {
 		return "", errA2UIServiceNotInCtx
 	}
-	if strings.TrimSpace(input.MsgID) == "" {
-		return "", errMsgIDRequired
-	}
 	if strings.TrimSpace(input.A2UIID) == "" {
 		return "", errA2UIIDRequired
 	}
@@ -121,8 +117,10 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	msgID := uuid.NewString()
 	resp := a2ui.A2UIResponse{
-		MsgID:     input.MsgID,
+		// 关键注释：发送 A2UI 时统一由服务端生成消息 ID，避免上游重复
+		MsgID:     msgID,
 		SurfaceID: input.SurfaceID,
 		UIJSON:    a.UIJSON,
 		DataJSON:  input.DataJSON,
@@ -153,7 +151,7 @@ func GetA2UITools(ctx context.Context) ([]einoTool.BaseTool, error) {
 	}
 	sendTool, err := utils.InferTool[SendA2UIInput, string](
 		"send_a2ui",
-		"根据提供的 a2ui_id 与数据 JSON 渲染 A2UI 并发送事件到当前会话。需要 msg_id、a2ui_id，可选 surface_id、data_json。",
+		"根据提供的 a2ui_id 与数据 JSON 渲染 A2UI 并发送事件到当前会话。需要a2ui_id，可选 surface_id、data_json。",
 		sendA2UIImpl,
 	)
 	if err != nil {
