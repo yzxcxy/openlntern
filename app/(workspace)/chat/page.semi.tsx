@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
@@ -47,6 +46,10 @@ const A2UI_MESSAGE_RENDERER = createA2UIMessageRenderer({ theme });
 // 需要稳定引用，避免 renderActivityMessages 触发不稳定数组报错
 const ACTIVITY_RENDERERS = [A2UI_MESSAGE_RENDERER];
 const TOOL_RESULT_TYPE = "tool_result_text";
+const ACTIVITY_CONTENT_TYPE = "activity_message";
+const ACTIVITY_EVENT_SNAPSHOT = "ACTIVITY_SNAPSHOT";
+const ACTIVITY_EVENT_DELTA = "ACTIVITY_DELTA";
+const A2UI_SURFACE_ACTIVITY_TYPE = "a2ui-surface";
 
 type ToolResultCollapseProps = {
   text: string;
@@ -208,6 +211,103 @@ const toTimestamp = (value?: string) => {
   return parsed;
 };
 
+const toRecord = (value: unknown): Record<string, any> => {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, any>;
+  }
+  return {};
+};
+
+const cloneValue = <T,>(value: T): T => {
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch {
+      // fallback to JSON clone
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return value;
+  }
+};
+
+const applyA2UISurfacePatch = (previousContent: unknown, patch: unknown) => {
+  const base = toRecord(cloneValue(previousContent));
+  const operations = Array.isArray(base.operations) ? [...base.operations] : [];
+  const patchItems = Array.isArray(patch) ? patch : [];
+  patchItems.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const op = String((item as { op?: unknown }).op ?? "");
+    const path = String((item as { path?: unknown }).path ?? "");
+    const value = (item as { value?: unknown }).value;
+
+    if (op === "add" && path === "/operations/-") {
+      operations.push(value);
+      return;
+    }
+
+    const match = path.match(/^\/operations\/(\d+)$/);
+    if (!match) return;
+    const index = Number(match[1]);
+    if (!Number.isInteger(index) || index < 0) return;
+
+    if (op === "add" || op === "replace") {
+      operations[index] = value;
+      return;
+    }
+    if (op === "remove") {
+      operations.splice(index, 1);
+    }
+  });
+  return {
+    ...base,
+    operations,
+  };
+};
+
+const mapActivityContent = (params: {
+  activityType?: string;
+  eventType?: string;
+  content?: unknown;
+  patch?: unknown;
+  replace?: boolean;
+  previousContent?: unknown;
+}) => {
+  const {
+    activityType,
+    eventType,
+    content,
+    patch,
+    replace,
+    previousContent,
+  } = params;
+  const normalizedEventType =
+    eventType === ACTIVITY_EVENT_DELTA
+      ? ACTIVITY_EVENT_DELTA
+      : ACTIVITY_EVENT_SNAPSHOT;
+
+  if (normalizedEventType === ACTIVITY_EVENT_DELTA) {
+    if (activityType === A2UI_SURFACE_ACTIVITY_TYPE) {
+      return applyA2UISurfacePatch(previousContent, patch);
+    }
+    return {
+      ...toRecord(previousContent),
+      patch: Array.isArray(patch) ? patch : [],
+    };
+  }
+
+  const nextContent = toRecord(content);
+  if (replace || !previousContent) {
+    return nextContent;
+  }
+  return {
+    ...toRecord(previousContent),
+    ...nextContent,
+  };
+};
+
 // 历史消息：按时间排序后聚合到 SemiMessage[]
 const mapHistoryMessages = (items: BackendMessageItem[]) => {
   const sorted = [...items].sort((a, b) => {
@@ -217,6 +317,28 @@ const mapHistoryMessages = (items: BackendMessageItem[]) => {
   });
   const result: SemiMessage[] = [];
   const runIndexMap = new Map<string, number>();
+
+  const ensureAssistantMessage = (
+    runId: string,
+    status?: string,
+    createdAt?: number,
+    updatedAt?: number
+  ) => {
+    let runIndex = runIndexMap.get(runId);
+    if (runIndex === undefined) {
+      result.push({
+        id: runId,
+        role: "assistant",
+        content: [],
+        status,
+        createdAt,
+        updatedAt,
+      });
+      runIndex = result.length - 1;
+      runIndexMap.set(runId, runIndex);
+    }
+    return runIndex;
+  };
 
   sorted.forEach((item) => {
     const aguiMessage = safeParseJson<any>(item.content);
@@ -239,17 +361,58 @@ const mapHistoryMessages = (items: BackendMessageItem[]) => {
       return;
     }
 
-    // activity 消息独立映射，交由 A2UI 渲染
+    // activity 消息归并到 assistant.content 中，交由 A2UI 渲染
     if (role === "activity" || aguiMessage?.activityType) {
-      result.push({
+      const activityType =
+        typeof aguiMessage?.activityType === "string"
+          ? aguiMessage.activityType
+          : "";
+      if (!activityType) return;
+      const activityEventType =
+        aguiMessage?.type === ACTIVITY_EVENT_DELTA
+          ? ACTIVITY_EVENT_DELTA
+          : ACTIVITY_EVENT_SNAPSHOT;
+      const runId = item.run_id || `history-activity-${item.msg_id}`;
+      const runIndex = ensureAssistantMessage(runId, item.status, createdAt, updatedAt);
+      const target = result[runIndex] as SemiMessage;
+      const content = Array.isArray(target.content) ? [...target.content] : [];
+      const existingIndex = content.findIndex(
+        (contentItem) =>
+          (contentItem as { type?: string }).type === ACTIVITY_CONTENT_TYPE &&
+          (contentItem as { activityMessageId?: string }).activityMessageId ===
+            item.msg_id
+      );
+      const previousItem =
+        existingIndex === -1 ? null : (content[existingIndex] as Record<string, any>);
+      const mappedContent = mapActivityContent({
+        activityType,
+        eventType: activityEventType,
+        content: aguiMessage?.content,
+        patch: aguiMessage?.patch,
+        replace: aguiMessage?.replace,
+        previousContent: previousItem?.content,
+      });
+      const activityItem = {
+        ...(previousItem ?? {}),
         id: item.msg_id,
-        role: "activity",
-        content: aguiMessage?.content as unknown as SemiMessage["content"],
-        activityType: aguiMessage?.activityType,
-        status: item.status,
-        createdAt,
-        updatedAt,
-      } as SemiMessage);
+        type: ACTIVITY_CONTENT_TYPE,
+        activityMessageId: item.msg_id,
+        activityType,
+        activityEventType,
+        content: mappedContent,
+        status: item.status ?? "completed",
+        timestamp: createdAt ?? updatedAt ?? Date.now(),
+      };
+      if (existingIndex === -1) {
+        content.push(activityItem);
+      } else {
+        content[existingIndex] = activityItem;
+      }
+      result[runIndex] = {
+        ...target,
+        content,
+        updatedAt: updatedAt ?? target.updatedAt,
+      } as SemiMessage;
       return;
     }
 
@@ -258,21 +421,12 @@ const mapHistoryMessages = (items: BackendMessageItem[]) => {
       return;
     }
 
-    let runIndex = runIndexMap.get(item.run_id);
-    if (runIndex === undefined) {
-      const runMessage: SemiMessage = {
-        id: item.run_id,
-        role: "assistant",
-        content: [],
-        status: item.status,
-        createdAt,
-        updatedAt,
-      };
-      result.push(runMessage);
-      runIndex = result.length - 1;
-      runIndexMap.set(item.run_id, runIndex);
-    }
-
+    const runIndex = ensureAssistantMessage(
+      item.run_id,
+      item.status,
+      createdAt,
+      updatedAt
+    );
     const target = result[runIndex] as SemiMessage;
     const content = Array.isArray(target.content) ? target.content : [];
     const nextContent = [...content];
@@ -352,6 +506,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const reasoningMessageMapRef = useRef(
     new Map<string, { runId: string; index: number }>()
   );
+  const activityMessageMapRef = useRef(
+    new Map<string, { runId: string; index: number }>()
+  );
   const { agent } = useAgent({
     updates: [
       UseAgentUpdate.OnRunStatusChanged,
@@ -388,6 +545,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       textMessageMapRef.current.clear();
       toolCallMapRef.current.clear();
       reasoningMessageMapRef.current.clear();
+      activityMessageMapRef.current.clear();
     }
   }, [agent, resolvedThreadId, threadId]);
 
@@ -481,6 +639,13 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     event?.data?.messageId ??
     event?.data?.message_id;
 
+  const resolveActivityMessageId = (event: any) =>
+    event?.messageId ??
+    event?.message_id ??
+    event?.id ??
+    event?.data?.messageId ??
+    event?.data?.message_id;
+
   // 订阅 AG-UI 事件流，增量拼装 ContentItem[]
   useEffect(() => {
     if (!agent) return;
@@ -517,6 +682,13 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           ...message,
           status: "completed",
         }));
+        Array.from(activityMessageMapRef.current.entries()).forEach(
+          ([activityId, mapping]) => {
+            if (mapping.runId === runId) {
+              activityMessageMapRef.current.delete(activityId);
+            }
+          }
+        );
         currentRunIdRef.current = "";
         return;
         }
@@ -741,21 +913,86 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         return;
         }
 
-      // activity 直接作为独立消息渲染
-        if (eventType === "ACTIVITY_MESSAGE") {
-          const activity = rawEvent.message ?? rawEvent;
-          if (!activity?.activityType) return;
-        setSemiMessages((prev) => [
-          ...prev,
-          {
-            id: activity.id ?? createMessageId(),
-            role: "activity",
-            content: activity.content,
-            activityType: activity.activityType,
-            status: "completed",
-            createdAt: Date.now(),
-          },
-        ]);
+      // activity 归并到 assistant.content 中，由 content renderer 交给 A2UI
+        if (
+          eventType === ACTIVITY_EVENT_SNAPSHOT ||
+          eventType === ACTIVITY_EVENT_DELTA
+        ) {
+          const activityEvent = rawEvent;
+          const runId = resolveRunId(rawEvent) ?? currentRunIdRef.current;
+          const activityType =
+            typeof activityEvent?.activityType === "string"
+              ? activityEvent.activityType
+              : "";
+          const activityMessageId = resolveActivityMessageId(activityEvent);
+          if (!runId || !activityType || !activityMessageId) return;
+          const activityMessageKey = String(activityMessageId);
+          const activityEventType =
+            eventType === ACTIVITY_EVENT_DELTA
+              ? ACTIVITY_EVENT_DELTA
+              : ACTIVITY_EVENT_SNAPSHOT;
+          updateRunMessage(runId, (message) => {
+            const content = Array.isArray(message.content) ? [...message.content] : [];
+            const mapped = activityMessageMapRef.current.get(activityMessageKey);
+            let index =
+              mapped && mapped.runId === runId ? mapped.index : -1;
+            if (
+              index < 0 ||
+              index >= content.length ||
+              (content[index] as { activityMessageId?: string })?.activityMessageId !==
+                activityMessageKey
+            ) {
+              index = content.findIndex(
+                (contentItem) =>
+                  (contentItem as { type?: string }).type === ACTIVITY_CONTENT_TYPE &&
+                  (contentItem as { activityMessageId?: string }).activityMessageId ===
+                    activityMessageKey
+              );
+            }
+            const previousItem =
+              index === -1 ? null : (content[index] as Record<string, any>);
+            const mappedContent = mapActivityContent({
+              activityType,
+              eventType: activityEventType,
+              content: activityEvent?.content,
+              patch: activityEvent?.patch,
+              replace: activityEvent?.replace,
+              previousContent: previousItem?.content,
+            });
+            const activityContentItem = {
+              ...(previousItem ?? {}),
+              id: activityMessageKey,
+              type: ACTIVITY_CONTENT_TYPE,
+              activityMessageId: activityMessageKey,
+              activityType,
+              activityEventType,
+              content: mappedContent,
+              status:
+                activityEvent?.status ??
+                (activityEventType === ACTIVITY_EVENT_DELTA
+                  ? "in_progress"
+                  : "completed"),
+              timestamp:
+                activityEvent?.timestamp ??
+                rawEvent?.timestamp ??
+                Date.now(),
+            };
+            if (index === -1) {
+              index = content.length;
+              content.push(activityContentItem);
+            } else {
+              content[index] = activityContentItem;
+            }
+            activityMessageMapRef.current.set(activityMessageKey, {
+              runId,
+              index,
+            });
+            return {
+              ...message,
+              content,
+            };
+          });
+          return;
         }
       },
     });
@@ -772,25 +1009,6 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         id: message.id ?? `${message.role}-${index}`,
       })),
     [semiMessages]
-  );
-
-  const dialogueRenderConfig = useMemo(
-    () => ({
-      renderDialogueContent: ({
-        message,
-        defaultContent,
-      }: {
-        message?: SemiMessage;
-        defaultContent?: ReactNode;
-      }) => {
-        if (!message) return defaultContent;
-        if (message.role === "activity") {
-          return renderActivityMessage(message as unknown as ActivityMessage);
-        }
-        return defaultContent;
-      },
-    }),
-    [renderActivityMessage]
   );
 
   const roleConfig = useMemo(
@@ -819,8 +1037,34 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         if (!item?.text) return null;
         return <ToolResultCollapse text={item.text} />;
       },
+      [ACTIVITY_CONTENT_TYPE]: (item: {
+        id?: string;
+        activityMessageId?: string;
+        activityType?: string;
+        content?: unknown;
+      }) => {
+        if (!item?.activityType) return null;
+        const activityMessage: ActivityMessage = {
+          id: String(item.activityMessageId ?? item.id ?? createMessageId()),
+          role: "activity",
+          activityType: item.activityType,
+          content: toRecord(item.content),
+        };
+        const activityNode = renderActivityMessage(activityMessage);
+        if (!activityNode) return null;
+        return (
+          <div className="my-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50 px-3 py-2">
+              <span className="text-xs font-medium text-slate-600">
+                可视化内容
+              </span>
+            </div>
+            <div className="p-3">{activityNode}</div>
+          </div>
+        );
+      },
     }),
-    []
+    [renderActivityMessage]
   );
 
   // 发送：先回显 user 消息，再触发 run
@@ -882,7 +1126,6 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           align="leftRight"
           mode="bubble"
           chats={chats}
-          dialogueRenderConfig={dialogueRenderConfig}
           renderDialogueContentItem={renderDialogueContentItem}
           roleConfig={roleConfig}
           className="h-full"

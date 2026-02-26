@@ -31,6 +31,7 @@ const createThreadId = () => {
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
+const HISTORY_PAGE_SIZE = 10;
 export default function WorkspaceLayout({
   children,
 }: {
@@ -41,6 +42,8 @@ export default function WorkspaceLayout({
   const [historyItems, setHistoryItems] = useState<ThreadItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -81,42 +84,51 @@ export default function WorkspaceLayout({
   }, [readUserFromStorage]);
 
   const getValidToken = useCallback(() => readValidToken(router), [router]);
-  const fetchThreads = useCallback(async () => {
-    const token = getValidToken();
-    if (!token) return;
-    setHistoryLoading(true);
-    setHistoryError("");
-    try {
-      const params = new URLSearchParams();
-      params.set("page", "1");
-      params.set("page_size", "5");
-    const res = await fetch(`/api/backend/v1/threads?${params.toString()}`, {
-      headers: buildAuthHeaders(token),
-    });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "获取历史会话失败");
+  const fetchThreads = useCallback(
+    async (options?: { page?: number; append?: boolean }) => {
+      const token = getValidToken();
+      if (!token) return;
+      const nextPage = options?.page ?? 1;
+      const shouldAppend = options?.append ?? false;
+      setHistoryLoading(true);
+      setHistoryError("");
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(nextPage));
+        params.set("page_size", String(HISTORY_PAGE_SIZE));
+        const res = await fetch(`/api/backend/v1/threads?${params.toString()}`, {
+          headers: buildAuthHeaders(token),
+        });
+        updateTokenFromResponse(res);
+        const data = await res.json();
+        if (!res.ok || data.code !== 0) {
+          throw new Error(data.message || "获取历史会话失败");
+        }
+        const items = Array.isArray(data.data?.data) ? data.data.data : [];
+        const total = typeof data.data?.total === "number" ? data.data.total : 0;
+        setHistoryItems((prev) => (shouldAppend ? [...prev, ...items] : items));
+        setHistoryPage(nextPage);
+        setHistoryTotal(total);
+      } catch (err) {
+        if (err instanceof Error && err.message) {
+          setHistoryError(err.message);
+        } else {
+          setHistoryError("获取历史会话失败");
+        }
+      } finally {
+        setHistoryLoading(false);
       }
-      setHistoryItems(Array.isArray(data.data?.data) ? data.data.data : []);
-    } catch (err) {
-      if (err instanceof Error && err.message) {
-        setHistoryError(err.message);
-      } else {
-        setHistoryError("获取历史会话失败");
-      }
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [getValidToken, readUserFromStorage]);
+    },
+    [getValidToken]
+  );
 
   useEffect(() => {
-    fetchThreads();
+    fetchThreads({ page: 1, append: false });
   }, [fetchThreads]);
 
   useEffect(() => {
     const handleThreadsRefresh = () => {
-      fetchThreads();
+      fetchThreads({ page: 1, append: false });
     };
     window.addEventListener("threads-refresh", handleThreadsRefresh);
     return () => {
@@ -189,6 +201,7 @@ export default function WorkspaceLayout({
       setHistoryItems((items) =>
         items.filter((item) => item.thread_id !== deleteTarget.thread_id)
       );
+      setHistoryTotal((prev) => (prev > 0 ? prev - 1 : 0));
       closeDelete();
     } catch (err) {
       if (err instanceof Error && err.message) {
@@ -267,6 +280,12 @@ export default function WorkspaceLayout({
   const isChat = pathname === "/chat";
   const isSkill = pathname.startsWith("/skills");
   const isKB = pathname === "/kb";
+  const hasMoreHistory = historyItems.length < historyTotal;
+  const handleLoadMoreHistory = useCallback(() => {
+    if (historyLoading || !hasMoreHistory) return;
+    // 关键：仅在还有更多历史会话时追加加载下一页
+    fetchThreads({ page: historyPage + 1, append: true });
+  }, [fetchThreads, hasMoreHistory, historyLoading, historyPage]);
 
   return (
     <main
@@ -529,20 +548,29 @@ export default function WorkspaceLayout({
                         <span>{item.title || item.thread_id || "未命名会话"}</span>
                       </button>
                     ))}
-                    <button className="flex items-center gap-2 text-left text-sm font-semibold text-gray-800">
-                      查看全部
-                      <svg
-                        className="h-4 w-4 text-gray-500"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                    {hasMoreHistory && (
+                      <button
+                        type="button"
+                        onClick={handleLoadMoreHistory}
+                        disabled={historyLoading}
+                        className={`flex items-center gap-2 text-left text-sm font-semibold ${
+                          historyLoading ? "text-gray-400" : "text-gray-800"
+                        }`}
                       >
-                        <path d="M9 5l6 7-6 7" />
-                      </svg>
-                    </button>
+                        {historyLoading ? "加载中..." : "查看更多"}
+                        <svg
+                          className="h-4 w-4 text-gray-500"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 5l6 7-6 7" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
