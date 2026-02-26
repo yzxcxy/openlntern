@@ -674,23 +674,22 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           return;
         }
 
-      // RUN_FINISHED 标记 run 结束
+      // RUN_FINISHED 标记 run 结束，并清空 AG-UI 消息结构
         if (eventType === "RUN_FINISHED") {
           const runId = resolveRunId(rawEvent) ?? currentRunIdRef.current;
-          if (!runId) return;
-        updateRunMessage(runId, (message) => ({
-          ...message,
-          status: "completed",
-        }));
-        Array.from(activityMessageMapRef.current.entries()).forEach(
-          ([activityId, mapping]) => {
-            if (mapping.runId === runId) {
-              activityMessageMapRef.current.delete(activityId);
-            }
+          if (runId) {
+            updateRunMessage(runId, (message) => ({
+              ...message,
+              status: "completed",
+            }));
           }
-        );
-        currentRunIdRef.current = "";
-        return;
+          agent.setMessages([]);
+          currentRunIdRef.current = "";
+          textMessageMapRef.current.clear();
+          toolCallMapRef.current.clear();
+          reasoningMessageMapRef.current.clear();
+          activityMessageMapRef.current.clear();
+          return;
         }
 
       // TEXT_MESSAGE_* 流式拼接 output_text
