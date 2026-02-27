@@ -44,7 +44,6 @@ type GetA2UIInput struct {
 
 // SendA2UIInput 渲染数据并发送 A2UI 事件的入参
 type SendA2UIInput struct {
-	SurfaceID string `json:"surface_id" jsonschema_description:"Surface ID，如 default，可选"`
 	A2UIID    string `json:"a2ui_id" jsonschema_description:"A2UI 的业务 ID"`
 	DataJSON  string `json:"data_json" jsonschema_description:"数据模型更新内容的 JSON 字符串，注意如果查询对应A2UI返回的data_json为空，说明其是一个纯展示的A2UI，该字段就不应该被传入，可选"`
 }
@@ -118,10 +117,11 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 		return "", err
 	}
 	msgID := uuid.NewString()
+	surfaceId := uuid.NewString()
 	resp := a2ui.A2UIResponse{
 		// 关键注释：发送 A2UI 时统一由服务端生成消息 ID，避免上游重复
 		MsgID:     msgID,
-		SurfaceID: input.SurfaceID,
+		SurfaceID: surfaceId,
 		UIJSON:    a.UIJSON,
 		DataJSON:  input.DataJSON,
 	}

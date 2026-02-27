@@ -11,6 +11,7 @@ import (
 	"openIntern/internal/models"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	"openIntern/internal/services/tools"
+	"sort"
 	"strings"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
@@ -58,6 +59,11 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	if err != nil {
 		_ = s.Error(err.Error(), "history_unmarshal_failed")
 		log.Printf("RunAgent history merge failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+		return err
+	}
+	if err := applyForwardedPropsChain(mergedInput); err != nil {
+		_ = s.Error(err.Error(), "forwarded_props_handle_failed")
+		log.Printf("RunAgent forwarded props handle failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
 	einoMessages, err := agui.AGUIRunInputToEinoMessages(mergedInput)
@@ -309,6 +315,102 @@ func mergeRunAgentInputHistory(input *types.RunAgentInput, history []models.Mess
 		}
 	}
 	return &merged, nil
+}
+
+const (
+	forwardedPropKeyA2UIAction = "a2uiAction"
+	a2uiActionPromptPrefix     = "上一条消息你发送了前端卡片，用户触发的行为以及产生的数据为："
+)
+
+type forwardedPropsChainContext struct {
+	props map[string]any
+	input *types.RunAgentInput
+}
+
+type forwardedPropsChainHandler interface {
+	Handle(ctx *forwardedPropsChainContext) error
+}
+
+type a2uiActionForwardedPropsHandler struct{}
+
+func (h a2uiActionForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext) error {
+	if ctx == nil || ctx.input == nil || len(ctx.props) == 0 {
+		return nil
+	}
+	a2uiAction, ok := ctx.props[forwardedPropKeyA2UIAction]
+	if !ok {
+		return nil
+	}
+	delete(ctx.props, forwardedPropKeyA2UIAction)
+	b, err := json.Marshal(a2uiAction)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", forwardedPropKeyA2UIAction, err)
+	}
+	ctx.input.Messages = append(ctx.input.Messages, types.Message{
+		ID:      events.GenerateMessageID(),
+		Role:    types.RoleUser,
+		Content: a2uiActionPromptPrefix + string(b),
+	})
+	return nil
+}
+
+func applyForwardedPropsChain(input *types.RunAgentInput) error {
+	if input == nil {
+		return nil
+	}
+	props, err := normalizeForwardedPropsMap(input.ForwardedProps)
+	if err != nil {
+		return err
+	}
+	if len(props) == 0 {
+		return nil
+	}
+	chainCtx := &forwardedPropsChainContext{
+		props: props,
+		input: input,
+	}
+	handlers := []forwardedPropsChainHandler{
+		a2uiActionForwardedPropsHandler{},
+	}
+	for _, handler := range handlers {
+		if err := handler.Handle(chainCtx); err != nil {
+			return err
+		}
+	}
+	if len(chainCtx.props) > 0 {
+		keys := make([]string, 0, len(chainCtx.props))
+		for k := range chainCtx.props {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		log.Printf("RunAgent forwarded props ignored keys=%v", keys)
+	}
+	return nil
+}
+
+func normalizeForwardedPropsMap(raw any) (map[string]any, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	if v, ok := raw.(map[string]any); ok {
+		props := make(map[string]any, len(v))
+		for k, val := range v {
+			props[k] = val
+		}
+		return props, nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	if string(b) == "null" {
+		return nil, nil
+	}
+	var props map[string]any
+	if err := json.Unmarshal(b, &props); err != nil {
+		return nil, err
+	}
+	return props, nil
 }
 
 func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, messages []*schema.Message) error {
