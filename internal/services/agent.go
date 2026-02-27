@@ -69,6 +69,8 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	// 注入 A2UI 工具所需的 context：service 与 sender
 	ctx = context.WithValue(ctx, tools.ContextKeyA2UIService, A2UI)
 	ctx = context.WithValue(ctx, tools.ContextKeyA2UISender, s)
+	ctx = context.WithValue(ctx, tools.ContextKeyFileUploader, File)
+	ctx = context.WithValue(ctx, tools.ContextKeySandboxBaseURL, sandboxBaseURL)
 	err = runEinoStreaming(ctx, s, einoMessages)
 	if err != nil {
 		_ = s.Error(err.Error(), "eino_run_failed")
@@ -104,6 +106,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 var einoRunner *adk.Runner
 var apmplusShutdown func(context.Context) error
 var titleModel *deepseek.ChatModel
+var sandboxBaseURL string
 
 type openVikingSkillClient struct{}
 
@@ -189,11 +192,16 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 			return nil, err
 		}
 	}
-	sandboxTools, err := tools.GetSandboxTools(ctx, toolsCfg.Sandbox.Url)
+	sandboxBaseURL = strings.TrimSpace(toolsCfg.Sandbox.Url)
+	sandboxTools, err := tools.GetSandboxTools(ctx, sandboxBaseURL)
 	if err != nil {
 		return nil, err
 	}
 	a2uiTools, err := tools.GetA2UITools(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cosTools, err := tools.GetCOSTools(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +221,7 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 		return nil, err
 	}
 	allTools := append(sandboxTools, a2uiTools...)
+	allTools = append(allTools, cosTools...)
 	allTools = append(allTools, skillTools...)
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "openintern_agent",

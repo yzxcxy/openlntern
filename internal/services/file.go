@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -98,6 +99,28 @@ func (s *FileService) UploadPath(ctx context.Context, key string, filePath strin
 		options.ObjectPutHeaderOptions = &cos.ObjectPutHeaderOptions{ContentType: contentType}
 	}
 	_, err = s.client.Object.Put(ctx, key, file, options)
+	if err != nil {
+		return "", err
+	}
+	return s.client.Object.GetObjectURL(key).String(), nil
+}
+
+func (s *FileService) UploadReader(ctx context.Context, key string, reader io.Reader, contentType string) (string, error) {
+	if s.client == nil {
+		return "", errors.New("file service not configured")
+	}
+	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
+	if key == "" {
+		return "", errors.New("empty key")
+	}
+	if reader == nil {
+		return "", errors.New("empty reader")
+	}
+	options := &cos.ObjectPutOptions{}
+	if contentType != "" {
+		options.ObjectPutHeaderOptions = &cos.ObjectPutHeaderOptions{ContentType: contentType}
+	}
+	_, err := s.client.Object.Put(ctx, key, reader, options)
 	if err != nil {
 		return "", err
 	}
