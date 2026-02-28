@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageContainer } from "../components/layout/PageContainer";
 import { AppShell } from "../components/layout/AppShell";
 import { Sidebar } from "../components/layout/Sidebar";
@@ -100,6 +100,8 @@ export default function WorkspaceLayout({
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState("");
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -196,14 +198,35 @@ export default function WorkspaceLayout({
     };
   }, [contextMenu]);
 
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (userMenuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setIsUserMenuOpen(false);
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isUserMenuOpen]);
+
   const handleLogout = () => {
+    setIsUserMenuOpen(false);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     router.push("/login");
   };
 
   const handleUserManage = () => {
+    setIsUserMenuOpen(false);
     router.push("/user");
+  };
+
+  const handleUserSettings = () => {
+    setIsUserMenuOpen(false);
+    router.push("/user#settings");
   };
 
   const openContextMenu = (event: React.MouseEvent, item: ThreadItem) => {
@@ -642,53 +665,126 @@ export default function WorkspaceLayout({
             )}
 
             {!isSidebarCollapsed && (
-              <div className="motion-safe-fade-in mx-4 mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] px-3 py-2 shadow-[var(--shadow-sm)] backdrop-blur-sm">
-                <button
-                  onClick={handleUserManage}
-                  className="motion-safe-highlight flex w-full items-center gap-3 rounded-[var(--radius-md)] px-1 py-1 text-left hover:bg-[var(--color-bg-page)]"
-                >
-                  {userInfo?.avatar ? (
-                    <img
-                      src={userInfo.avatar}
-                      alt={displayName}
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-bg-page)] text-sm font-semibold text-[var(--color-text-secondary)]">
-                      {avatarLabel}
-                    </div>
-                  )}
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
-                      {displayName}
-                    </span>
-                    {displayEmail && (
-                      <span className="truncate text-xs text-[var(--color-text-muted)]">
-                        {displayEmail}
-                      </span>
-                    )}
+              <div
+                ref={userMenuRef}
+                className="motion-safe-fade-in relative mx-4 mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] px-3 py-2 shadow-[var(--shadow-sm)] backdrop-blur-sm"
+              >
+                {isUserMenuOpen && (
+                  <div className="motion-safe-slide-up absolute inset-x-0 bottom-full z-20 mb-2 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] p-2 shadow-[var(--shadow-lg)]">
+                    <button
+                      type="button"
+                      onClick={handleUserManage}
+                      className="motion-safe-highlight flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M4 20a8 8 0 0 1 16 0" />
+                      </svg>
+                      个人资料
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUserSettings}
+                      className="motion-safe-highlight mt-1 flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.7Z" />
+                      </svg>
+                      用户设置
+                    </button>
+                    <div className="mx-2 my-2 h-px bg-[var(--color-border-default)]" />
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="motion-safe-highlight flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[rgba(185,28,28,0.88)] hover:bg-[rgba(220,38,38,0.08)]"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <path d="M16 17l5-5-5-5" />
+                        <path d="M21 12H9" />
+                      </svg>
+                      退出登录
+                    </button>
                   </div>
-                </button>
-                <UiButton
-                  onClick={handleLogout}
-                  variant="danger"
-                  className="mt-3 w-full"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleUserManage}
+                    className="motion-safe-highlight flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] px-1 py-1 text-left hover:bg-[var(--color-bg-page)]"
                   >
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <path d="M16 17l5-5-5-5" />
-                    <path d="M21 12H9" />
-                  </svg>
-                  退出登录
-                </UiButton>
+                    {userInfo?.avatar ? (
+                      <img
+                        src={userInfo.avatar}
+                        alt={displayName}
+                        className="h-9 w-9 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-bg-page)] text-sm font-semibold text-[var(--color-text-secondary)]">
+                        {avatarLabel}
+                      </div>
+                    )}
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                        {displayName}
+                      </span>
+                      {displayEmail ? (
+                        <span className="truncate text-xs text-[var(--color-text-muted)]">
+                          {displayEmail}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[var(--color-text-muted)]">
+                          账户中心
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="打开账户菜单"
+                    aria-expanded={isUserMenuOpen}
+                    onClick={() => setIsUserMenuOpen((open) => !open)}
+                    className="motion-safe-highlight flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="5" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             )}
           </Sidebar>
