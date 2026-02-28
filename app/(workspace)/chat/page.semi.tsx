@@ -1177,7 +1177,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           }
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
-          className="rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 py-1 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+          className="ui-select-control--compact ui-select-control--glass rounded-full border-transparent px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
         >
           <option value="chat">Chat</option>
           <option value="agent">Agent</option>
@@ -1195,33 +1195,52 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         onClick={(event) => event.stopPropagation()}
       >
         {conversationMode === "chat" && (
-          <UiSelect
-            value={selectedModelId}
-            onChange={(event) => {
-              const nextModelId = event.target.value;
-              const nextItem = availableModels.find((item) => item.model_id === nextModelId);
-              setSelectedModelId(nextModelId);
-              setSelectedProviderId(nextItem?.provider_id ?? "");
-            }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            className="max-w-[220px] rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+          <div
+            className="ui-select-control--glass relative w-[280px] max-w-[70vw] rounded-full border border-transparent px-4 py-2 focus-within:border-[var(--color-action-primary)]"
+            title={
+              selectedModelOption
+                ? `${selectedModelOption.provider_name} / ${selectedModelOption.model_name}`
+                : "请先配置模型"
+            }
           >
-            {availableModels.length === 0 ? (
-              <option value="">请先配置模型</option>
-            ) : (
-              availableModels.map((item) => (
-                <option key={item.model_id} value={item.model_id}>
-                  {item.provider_name} / {item.model_name}
-                </option>
-              ))
-            )}
-          </UiSelect>
+            <span className="pointer-events-none block overflow-hidden pr-11 text-ellipsis whitespace-nowrap text-sm font-medium text-[var(--color-text-primary)]">
+              {selectedModelOption
+                ? `${selectedModelOption.provider_name} / ${selectedModelOption.model_name}`
+                : "请先配置模型"}
+            </span>
+            <UiSelect
+              value={selectedModelId}
+              onChange={(event) => {
+                const nextModelId = event.target.value;
+                const nextItem = availableModels.find((item) => item.model_id === nextModelId);
+                setSelectedModelId(nextModelId);
+                setSelectedProviderId(nextItem?.provider_id ?? "");
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              title={
+                selectedModelOption
+                  ? `${selectedModelOption.provider_name} / ${selectedModelOption.model_name}`
+                  : "请先配置模型"
+              }
+              className="absolute inset-0 h-full w-full cursor-pointer rounded-full opacity-0"
+            >
+              {availableModels.length === 0 ? (
+                <option value="">请先配置模型</option>
+              ) : (
+                availableModels.map((item) => (
+                  <option key={item.model_id} value={item.model_id}>
+                    {item.provider_name} / {item.model_name}
+                  </option>
+                ))
+              )}
+            </UiSelect>
+          </div>
         )}
         {props.menuItem}
       </div>
     ),
-    [availableModels, conversationMode, selectedModelId]
+    [availableModels, conversationMode, selectedModelId, selectedModelOption]
   );
 
   // 发送：先回显 user 消息，再触发 run

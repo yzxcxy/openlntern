@@ -23,6 +23,7 @@ export function UiSelect({
       <select
         {...rest}
         className={joinClasses(
+          "ui-select-control",
           "block w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)]",
           "bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)]",
           "outline-none transition-[border-color,box-shadow] duration-150",
@@ -40,6 +41,7 @@ export function UiSelect({
     <select
       {...rest}
       className={joinClasses(
+        "ui-select-control",
         "block w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)]",
         "bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)]",
         "outline-none transition-[border-color,box-shadow] duration-150",
