@@ -91,5 +91,26 @@ func SetupRouter() *gin.Engine {
 		kbGroup.DELETE("/entry", controllers.DeleteKnowledgeBaseEntry)
 	}
 
+	modelProviderGroup := r.Group("/v1/model-providers", middleware.AuthRequired())
+	{
+		modelProviderGroup.POST("", controllers.CreateModelProvider)
+		modelProviderGroup.GET("", controllers.ListModelProviders)
+		modelProviderGroup.GET("/:id", controllers.GetModelProvider)
+		modelProviderGroup.PUT("/:id", controllers.UpdateModelProvider)
+		modelProviderGroup.DELETE("/:id", controllers.DeleteModelProvider)
+	}
+
+	modelGroup := r.Group("/v1/models", middleware.AuthRequired())
+	{
+		modelGroup.POST("", controllers.CreateModel)
+		modelGroup.GET("", controllers.ListModels)
+		modelGroup.GET("/catalog", controllers.ListModelCatalog)
+		modelGroup.GET("/default", controllers.GetDefaultModel)
+		modelGroup.PUT("/default", controllers.UpdateDefaultModel)
+		modelGroup.GET("/:id", controllers.GetModel)
+		modelGroup.PUT("/:id", controllers.UpdateModel)
+		modelGroup.DELETE("/:id", controllers.DeleteModel)
+	}
+
 	return r
 }

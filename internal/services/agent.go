@@ -22,6 +22,8 @@ import (
 	"github.com/cloudwego/eino/adk"
 	einoSkill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/callbacks"
+	einoModel "github.com/cloudwego/eino/components/model"
+	einoTool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
@@ -61,9 +63,15 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		log.Printf("RunAgent history merge failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	if err := applyForwardedPropsChain(mergedInput); err != nil {
+	runtimeConfig, err := applyForwardedPropsChain(mergedInput)
+	if err != nil {
 		_ = s.Error(err.Error(), "forwarded_props_handle_failed")
 		log.Printf("RunAgent forwarded props handle failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+		return err
+	}
+	if runtimeConfig != nil && strings.EqualFold(runtimeConfig.Conversation.Mode, "agent") {
+		err := fmt.Errorf("agent mode is not available yet")
+		_ = s.Error(err.Error(), "agent_mode_not_available")
 		return err
 	}
 	einoMessages, err := agui.AGUIRunInputToEinoMessages(mergedInput)
@@ -77,7 +85,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	ctx = context.WithValue(ctx, tools.ContextKeyA2UISender, s)
 	ctx = context.WithValue(ctx, tools.ContextKeyFileUploader, File)
 	ctx = context.WithValue(ctx, tools.ContextKeySandboxBaseURL, sandboxBaseURL)
-	err = runEinoStreaming(ctx, s, einoMessages)
+	err = runEinoStreaming(ctx, s, einoMessages, runtimeConfig)
 	if err != nil {
 		_ = s.Error(err.Error(), "eino_run_failed")
 		log.Printf("RunAgent eino run failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
@@ -109,10 +117,12 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	return nil
 }
 
-var einoRunner *adk.Runner
 var apmplusShutdown func(context.Context) error
 var titleModel *deepseek.ChatModel
 var sandboxBaseURL string
+var agentTools []einoTool.BaseTool
+var agentMiddlewares []adk.AgentMiddleware
+var bootstrapChatConfig config.LLMConfig
 
 type openVikingSkillClient struct{}
 
@@ -165,6 +175,7 @@ func (skillFrontmatterStore) GetByName(name string) (*skillmiddleware.SkillFront
 
 func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
+	var err error
 	if apmCfg.Host != "" && apmCfg.AppKey != "" && apmCfg.ServiceName != "" {
 		cbh, shutdown, err := apmplus.NewApmplusHandler(&apmplus.Config{
 			Host:        apmCfg.Host,
@@ -181,13 +192,7 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	if apmplusShutdown == nil {
 		apmplusShutdown = func(context.Context) error { return nil }
 	}
-	chatModel, err := ark.NewChatModel(ctx, &ark.ChatModelConfig{
-		APIKey: cfg.APIKey,
-		Model:  cfg.Model,
-	})
-	if err != nil {
-		return nil, err
-	}
+	bootstrapChatConfig = cfg
 	titleModel = nil
 	if summaryCfg.APIKey != "" && summaryCfg.Model != "" {
 		titleModel, err = deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
@@ -229,21 +234,8 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	allTools := append(sandboxTools, a2uiTools...)
 	allTools = append(allTools, cosTools...)
 	allTools = append(allTools, skillTools...)
-	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name:        "openintern_agent",
-		Description: "openintern agent",
-		Model:       chatModel,
-		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: allTools,
-			},
-		},
-		Middlewares: []adk.AgentMiddleware{skillMiddleware},
-	})
-	if err != nil {
-		return nil, err
-	}
-	einoRunner = adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
+	agentTools = allTools
+	agentMiddlewares = []adk.AgentMiddleware{skillMiddleware}
 	return apmplusShutdown, nil
 }
 
@@ -318,13 +310,26 @@ func mergeRunAgentInputHistory(input *types.RunAgentInput, history []models.Mess
 }
 
 const (
-	forwardedPropKeyA2UIAction = "a2uiAction"
-	a2uiActionPromptPrefix     = "上一条消息你发送了前端卡片，用户触发的行为以及产生的数据为："
+	forwardedPropKeyA2UIAction  = "a2uiAction"
+	forwardedPropKeyAgentConfig = "agentConfig"
+	a2uiActionPromptPrefix      = "上一条消息你发送了前端卡片，用户触发的行为以及产生的数据为："
 )
 
+type AgentRuntimeConfig struct {
+	Conversation struct {
+		Mode string
+	}
+	Model struct {
+		ProviderID string
+		ModelID    string
+	}
+	Features map[string]any
+}
+
 type forwardedPropsChainContext struct {
-	props map[string]any
-	input *types.RunAgentInput
+	props         map[string]any
+	input         *types.RunAgentInput
+	runtimeConfig *AgentRuntimeConfig
 }
 
 type forwardedPropsChainHandler interface {
@@ -332,6 +337,7 @@ type forwardedPropsChainHandler interface {
 }
 
 type a2uiActionForwardedPropsHandler struct{}
+type agentConfigForwardedPropsHandler struct{}
 
 func (h a2uiActionForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext) error {
 	if ctx == nil || ctx.input == nil || len(ctx.props) == 0 {
@@ -354,27 +360,82 @@ func (h a2uiActionForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext)
 	return nil
 }
 
-func applyForwardedPropsChain(input *types.RunAgentInput) error {
-	if input == nil {
+func (h agentConfigForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext) error {
+	if ctx == nil || ctx.runtimeConfig == nil || len(ctx.props) == 0 {
 		return nil
+	}
+	raw, ok := ctx.props[forwardedPropKeyAgentConfig]
+	if !ok {
+		return nil
+	}
+	delete(ctx.props, forwardedPropKeyAgentConfig)
+	cfgMap, err := normalizeForwardedPropsMap(raw)
+	if err != nil {
+		return fmt.Errorf("normalize %s: %w", forwardedPropKeyAgentConfig, err)
+	}
+	if len(cfgMap) == 0 {
+		return nil
+	}
+	if conversationRaw, ok := cfgMap["conversation"]; ok {
+		conversationMap, err := normalizeForwardedPropsMap(conversationRaw)
+		if err != nil {
+			return fmt.Errorf("normalize %s.conversation: %w", forwardedPropKeyAgentConfig, err)
+		}
+		if mode, ok := conversationMap["mode"]; ok {
+			ctx.runtimeConfig.Conversation.Mode = strings.TrimSpace(fmt.Sprintf("%v", mode))
+		}
+	}
+	if modelRaw, ok := cfgMap["model"]; ok {
+		modelMap, err := normalizeForwardedPropsMap(modelRaw)
+		if err != nil {
+			return fmt.Errorf("normalize %s.model: %w", forwardedPropKeyAgentConfig, err)
+		}
+		if providerID, ok := modelMap["providerId"]; ok {
+			ctx.runtimeConfig.Model.ProviderID = strings.TrimSpace(fmt.Sprintf("%v", providerID))
+		}
+		if modelID, ok := modelMap["modelId"]; ok {
+			ctx.runtimeConfig.Model.ModelID = strings.TrimSpace(fmt.Sprintf("%v", modelID))
+		}
+	}
+	if featuresRaw, ok := cfgMap["features"]; ok {
+		featuresMap, err := normalizeForwardedPropsMap(featuresRaw)
+		if err != nil {
+			return fmt.Errorf("normalize %s.features: %w", forwardedPropKeyAgentConfig, err)
+		}
+		if len(featuresMap) > 0 {
+			ctx.runtimeConfig.Features = featuresMap
+		}
+	}
+	return nil
+}
+
+func applyForwardedPropsChain(input *types.RunAgentInput) (*AgentRuntimeConfig, error) {
+	runtimeConfig := &AgentRuntimeConfig{
+		Features: map[string]any{},
+	}
+	runtimeConfig.Conversation.Mode = "chat"
+	if input == nil {
+		return runtimeConfig, nil
 	}
 	props, err := normalizeForwardedPropsMap(input.ForwardedProps)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(props) == 0 {
-		return nil
+		return runtimeConfig, nil
 	}
 	chainCtx := &forwardedPropsChainContext{
-		props: props,
-		input: input,
+		props:         props,
+		input:         input,
+		runtimeConfig: runtimeConfig,
 	}
 	handlers := []forwardedPropsChainHandler{
 		a2uiActionForwardedPropsHandler{},
+		agentConfigForwardedPropsHandler{},
 	}
 	for _, handler := range handlers {
 		if err := handler.Handle(chainCtx); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if len(chainCtx.props) > 0 {
@@ -385,7 +446,7 @@ func applyForwardedPropsChain(input *types.RunAgentInput) error {
 		sort.Strings(keys)
 		log.Printf("RunAgent forwarded props ignored keys=%v", keys)
 	}
-	return nil
+	return chainCtx.runtimeConfig, nil
 }
 
 func normalizeForwardedPropsMap(raw any) (map[string]any, error) {
@@ -413,14 +474,15 @@ func normalizeForwardedPropsMap(raw any) (map[string]any, error) {
 	return props, nil
 }
 
-func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, messages []*schema.Message) error {
+func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, messages []*schema.Message, runtimeConfig *AgentRuntimeConfig) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	if einoRunner == nil {
-		return fmt.Errorf("eino runner not initialized")
+	runner, err := buildEinoRunner(ctx, runtimeConfig)
+	if err != nil {
+		return err
 	}
-	iter := einoRunner.Run(ctx, messages)
+	iter := runner.Run(ctx, messages)
 	for {
 		event, ok := iter.Next()
 		if !ok {
@@ -454,6 +516,77 @@ func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, mess
 		}
 	}
 	return nil
+}
+
+func buildEinoRunner(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (*adk.Runner, error) {
+	chatModel, err := buildRuntimeChatModel(ctx, runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
+	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
+		Name:        "openintern_agent",
+		Description: "openintern agent",
+		Model:       chatModel,
+		ToolsConfig: adk.ToolsConfig{
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools: agentTools,
+			},
+		},
+		Middlewares: agentMiddlewares,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true}), nil
+}
+
+func buildRuntimeChatModel(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (einoModel.ToolCallingChatModel, error) {
+	if runtimeConfig != nil {
+		selection, err := ModelCatalog.ResolveRuntimeSelection(runtimeConfig.Model.ModelID, runtimeConfig.Model.ProviderID)
+		if err != nil {
+			return nil, err
+		}
+		if selection != nil {
+			return buildChatModel(ctx, selection.Provider, selection.Model)
+		}
+	}
+	return buildBootstrapChatModel(ctx)
+}
+
+func buildBootstrapChatModel(ctx context.Context) (einoModel.ToolCallingChatModel, error) {
+	if strings.TrimSpace(bootstrapChatConfig.APIKey) == "" || strings.TrimSpace(bootstrapChatConfig.Model) == "" {
+		return nil, fmt.Errorf("no default chat model configured")
+	}
+	return ark.NewChatModel(ctx, &ark.ChatModelConfig{
+		APIKey: bootstrapChatConfig.APIKey,
+		Model:  bootstrapChatConfig.Model,
+	})
+}
+
+func buildChatModel(ctx context.Context, provider *models.ModelProvider, modelItem *models.ModelCatalog) (einoModel.ToolCallingChatModel, error) {
+	if provider == nil || modelItem == nil {
+		return nil, fmt.Errorf("provider and model are required")
+	}
+	apiKey, err := ModelProvider.ResolveAPIKey(provider)
+	if err != nil {
+		return nil, err
+	}
+	switch strings.ToLower(strings.TrimSpace(provider.APIType)) {
+	case "ark":
+		return ark.NewChatModel(ctx, &ark.ChatModelConfig{
+			APIKey:  apiKey,
+			BaseURL: strings.TrimSpace(provider.BaseURL),
+			Model:   strings.TrimSpace(modelItem.ModelKey),
+		})
+	case "deepseek", "openai_compatible":
+		return deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+			APIKey:  apiKey,
+			BaseURL: strings.TrimSpace(provider.BaseURL),
+			Model:   strings.TrimSpace(modelItem.ModelKey),
+		})
+	default:
+		return nil, fmt.Errorf("unsupported api_type: %s", provider.APIType)
+	}
 }
 
 func ensureThreadTitle(ctx context.Context, threadID string, messages []types.Message) error {
