@@ -398,8 +398,7 @@ export default function A2uiPage() {
           <UiButton
             type="button"
             onClick={openCreate}
-            size="lg"
-            className="ui-button-spotlight"
+            className="ui-button-soft-accent"
           >
             <svg
               className="h-4 w-4"

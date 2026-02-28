@@ -572,8 +572,7 @@ export default function KnowledgeBasePage() {
             <Space wrap>
               <UiButton
                 provider="semi"
-                size="lg"
-                className="ui-button-spotlight"
+                className="ui-button-soft-accent"
                 onClick={() => setCreateVisible(true)}
               >
                 <IconPlus />
@@ -675,8 +674,7 @@ export default function KnowledgeBasePage() {
                 >
                   <UiButton
                     provider="semi"
-                    size="lg"
-                    className="ui-button-spotlight"
+                    className="ui-button-soft-accent"
                     disabled={!selectedKb}
                     loading={uploading}
                   >

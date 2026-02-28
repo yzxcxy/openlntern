@@ -181,8 +181,7 @@ export default function SkillsPage() {
               type="button"
               onClick={handleUploadClick}
               disabled={uploading}
-              size="lg"
-              className="ui-button-spotlight"
+              className="ui-button-soft-accent"
             >
               {uploading ? "上传中..." : "上传 Skill"}
             </UiButton>

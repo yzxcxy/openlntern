@@ -63,14 +63,6 @@
     box-shadow: 0 18px 32px rgba(148, 163, 184, 0.16);
   }
 
-  .ui-button-spotlight {
-    box-shadow: 0 18px 38px rgba(14, 165, 233, 0.22);
-  }
-
-  .ui-semi-button.ui-button-spotlight.semi-button {
-    box-shadow: 0 18px 38px rgba(14, 165, 233, 0.22) !important;
-  }
-
   .sidebar-panel-surface {
     border-color: rgba(191, 219, 254, 0.44);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.92));
@@ -154,6 +146,42 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.14);
   }
 
+  .ui-button-primary.ui-button-soft-accent {
+    border-color: rgba(59, 130, 246, 0.18);
+    color: var(--color-action-primary);
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(239, 246, 255, 0.96),
+      rgba(224, 242, 254, 0.92)
+    );
+    box-shadow:
+      0 10px 20px rgba(37, 99, 235, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  }
+
+  .ui-button-primary.ui-button-soft-accent:hover:not(:disabled) {
+    filter: none;
+    transform: translateY(-1px);
+    border-color: rgba(59, 130, 246, 0.24);
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 1),
+      rgba(224, 242, 254, 0.98),
+      rgba(219, 234, 254, 0.9)
+    );
+    box-shadow:
+      0 14px 24px rgba(37, 99, 235, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  }
+
+  .ui-button-primary.ui-button-soft-accent:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow:
+      0 6px 14px rgba(37, 99, 235, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+
   .ui-button-secondary {
     border-color: rgba(125, 211, 252, 0.26);
     color: var(--color-text-primary);
@@ -235,6 +263,42 @@
     box-shadow:
       0 8px 20px rgba(14, 165, 233, 0.18),
       inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+
+  .ui-semi-button.ui-semi-button-primary.ui-button-soft-accent.semi-button {
+    border-color: rgba(59, 130, 246, 0.18) !important;
+    color: var(--color-action-primary) !important;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(239, 246, 255, 0.96),
+      rgba(224, 242, 254, 0.92)
+    ) !important;
+    box-shadow:
+      0 10px 20px rgba(37, 99, 235, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+  }
+
+  .ui-semi-button.ui-semi-button-primary.ui-button-soft-accent.semi-button:not(.semi-button-disabled):hover {
+    filter: none;
+    transform: translateY(-1px);
+    border-color: rgba(59, 130, 246, 0.24) !important;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 1),
+      rgba(224, 242, 254, 0.98),
+      rgba(219, 234, 254, 0.9)
+    ) !important;
+    box-shadow:
+      0 14px 24px rgba(37, 99, 235, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+  }
+
+  .ui-semi-button.ui-semi-button-primary.ui-button-soft-accent.semi-button:not(.semi-button-disabled):active {
+    transform: translateY(0);
+    box-shadow:
+      0 6px 14px rgba(37, 99, 235, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
   }
 
   .ui-semi-button.ui-semi-button-secondary.semi-button {
