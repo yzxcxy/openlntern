@@ -1321,25 +1321,6 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   return (
     <div className="chat-page workspace-gradient-surface workspace-gradient-surface--chat flex h-full w-full flex-col p-3 md:p-4">
       <div className="motion-safe-fade-in flex h-full min-h-0 flex-col gap-3">
-        <div className="motion-safe-slide-up flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.86)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm">
-          <div>
-            <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-              智能对话
-            </div>
-            <div className="text-xs text-[var(--color-text-muted)]">
-              实时展示回复、工具调用与可视化活动消息
-            </div>
-          </div>
-          <div
-            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${
-              agent.isRunning
-                ? "border-[rgba(37,99,255,0.2)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]"
-                : "border-[rgba(22,163,74,0.18)] bg-[rgba(22,163,74,0.08)] text-[var(--color-state-success)]"
-            }`}
-          >
-            {agent.isRunning ? "生成中" : "已就绪"}
-          </div>
-        </div>
 
         <div className="motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] shadow-[var(--shadow-sm)] backdrop-blur-sm">
           <div className="flex-1 overflow-hidden px-1 py-1">
