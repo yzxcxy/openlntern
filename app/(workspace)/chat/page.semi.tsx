@@ -1127,7 +1127,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   }, [agent]);
 
   return (
-    <div className="chat-page flex h-full w-full flex-col bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.08),transparent_28%),radial-gradient(circle_at_top_left,rgba(37,99,255,0.1),transparent_24%)] p-3 md:p-4">
+    <div className="chat-page workspace-gradient-surface workspace-gradient-surface--chat flex h-full w-full flex-col p-3 md:p-4">
       <div className="motion-safe-fade-in flex h-full min-h-0 flex-col gap-3">
         <div className="motion-safe-slide-up flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.86)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm">
           <div>

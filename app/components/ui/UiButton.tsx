@@ -24,14 +24,17 @@ const SIZE_CLASSES: Record<UiButtonSize, string> = {
 };
 
 const NATIVE_VARIANT_CLASSES: Record<UiButtonVariant, string> = {
-  primary:
-    "bg-[var(--color-action-primary)] text-white hover:bg-[var(--color-action-primary-hover)] active:bg-[var(--color-action-primary-active)]",
-  secondary:
-    "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] hover:bg-[var(--color-bg-page)]",
-  ghost:
-    "bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)]",
-  danger:
-    "bg-[var(--color-state-error)] text-white hover:opacity-95 active:opacity-90",
+  primary: "ui-button-primary border",
+  secondary: "ui-button-secondary border",
+  ghost: "ui-button-ghost border",
+  danger: "ui-button-danger border",
+};
+
+const SEMI_VARIANT_CLASSES: Record<UiButtonVariant, string> = {
+  primary: "ui-semi-button ui-semi-button-primary",
+  secondary: "ui-semi-button ui-semi-button-secondary",
+  ghost: "ui-semi-button ui-semi-button-ghost",
+  danger: "ui-semi-button ui-semi-button-danger",
 };
 
 export function UiButton({
@@ -67,7 +70,7 @@ export function UiButton({
         disabled={disabled || loading}
         type={semiType as "danger" | "primary" | "tertiary"}
         theme={semiTheme as "borderless" | "light" | "solid"}
-        className={className}
+        className={joinClasses(SEMI_VARIANT_CLASSES[variant], className)}
         style={{ borderRadius: "var(--radius-md)", ...(style as CSSProperties) }}
       >
         {children}
@@ -79,7 +82,7 @@ export function UiButton({
     <button
       type={type}
       className={joinClasses(
-        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-semibold transition-[background-color,border-color,box-shadow,opacity] duration-150 outline-none",
+        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-semibold transition-[background-color,border-color,box-shadow,opacity,color,transform,filter] duration-150 outline-none",
         "focus-visible:ring-2 focus-visible:ring-[var(--color-action-primary-soft)] focus-visible:ring-offset-2",
         "disabled:pointer-events-none disabled:opacity-60",
         SIZE_CLASSES[size],

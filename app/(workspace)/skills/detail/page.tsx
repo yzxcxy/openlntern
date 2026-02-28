@@ -660,7 +660,7 @@ export default function SkillDetailPage() {
   const fileCount = fileItems?.length ?? 0;
 
   return (
-    <div className="h-full overflow-auto p-6">
+    <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-6">
       <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
         <UiButton
           className="mb-4 px-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
