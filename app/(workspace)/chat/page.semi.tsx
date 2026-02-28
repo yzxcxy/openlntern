@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -33,6 +34,7 @@ import type {
 } from "@ag-ui/client";
 import type { MessageContent } from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
 import { theme } from "../../theme";
+import { UiSelect } from "../../components/ui/UiSelect";
 import {
   buildAuthHeaders,
   getUserIdFromToken,
@@ -150,6 +152,21 @@ type BackendResult<T> = {
   message: string;
   data?: T;
 };
+
+type ModelCatalogOption = {
+  provider_id: string;
+  provider_name: string;
+  provider_avatar?: string;
+  api_type: string;
+  model_id: string;
+  model_key: string;
+  model_name: string;
+  model_avatar?: string;
+  is_system_default?: boolean;
+};
+
+const joinClasses = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
 
 // 后端消息中的 content 为 JSON 字符串，解析失败时返回 null
 const safeParseJson = <T,>(value: string): T | null => {
@@ -518,6 +535,78 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [inputError, setInputError] = useState("");
   const [threadId, setThreadId] = useState("");
   const [semiMessages, setSemiMessages] = useState<SemiMessage[]>([]);
+  const [conversationMode, setConversationMode] = useState<"chat" | "agent">("chat");
+  const [availableModels, setAvailableModels] = useState<ModelCatalogOption[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [selectedModelId, setSelectedModelId] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const loadModelCatalog = async () => {
+      if (!token) return;
+      try {
+        const response = await fetch("/api/backend/v1/models/catalog", {
+          headers: buildAuthHeaders(token, userId),
+        });
+        updateTokenFromResponse(response);
+        const data = (await response
+          .json()
+          .catch(() => null)) as BackendResult<ModelCatalogOption[]> | null;
+        if (!response.ok || !data || data.code !== 0) {
+          if (!active) return;
+          setAvailableModels([]);
+          setSelectedModelId("");
+          setSelectedProviderId("");
+          return;
+        }
+        const nextItems = Array.isArray(data.data) ? data.data : [];
+        if (!active) return;
+        setAvailableModels(nextItems);
+        const defaultItem =
+          nextItems.find((item) => item.is_system_default) ?? nextItems[0] ?? null;
+        setSelectedModelId((prev) => {
+          const matched = nextItems.find((item) => item.model_id === prev);
+          return matched?.model_id ?? defaultItem?.model_id ?? "";
+        });
+        setSelectedProviderId(defaultItem?.provider_id ?? "");
+      } catch {
+        if (!active) return;
+        setAvailableModels([]);
+        setSelectedModelId("");
+        setSelectedProviderId("");
+      }
+    };
+    loadModelCatalog();
+    return () => {
+      active = false;
+    };
+  }, [token, userId]);
+
+  useEffect(() => {
+    if (!availableModels.length) {
+      setSelectedModelId("");
+      setSelectedProviderId("");
+      return;
+    }
+    const selected =
+      availableModels.find((item) => item.model_id === selectedModelId) ??
+      availableModels.find((item) => item.is_system_default) ??
+      availableModels[0];
+    if (!selected) {
+      return;
+    }
+    if (selected.model_id !== selectedModelId) {
+      setSelectedModelId(selected.model_id);
+    }
+    if (selected.provider_id !== selectedProviderId) {
+      setSelectedProviderId(selected.provider_id);
+    }
+  }, [availableModels, selectedModelId, selectedProviderId]);
+
+  const selectedModelOption = useMemo(
+    () => availableModels.find((item) => item.model_id === selectedModelId) ?? null,
+    [availableModels, selectedModelId]
+  );
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // 根据 query 参数或生成新 thread_id
@@ -1074,10 +1163,79 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     [renderActivityMessage]
   );
 
+  const renderConfigureArea = useCallback(
+    () => (
+      <div
+        className="flex items-center gap-2"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <UiSelect
+          value={conversationMode}
+          onChange={(event) =>
+            setConversationMode(event.target.value === "agent" ? "agent" : "chat")
+          }
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          className="rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 py-1 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+        >
+          <option value="chat">Chat</option>
+          <option value="agent">Agent</option>
+        </UiSelect>
+      </div>
+    ),
+    [conversationMode]
+  );
+
+  const renderActionArea = useCallback(
+    (props: { menuItem: ReactNode[]; className: string }) => (
+      <div
+        className={joinClasses(props.className, "flex items-center gap-2")}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {conversationMode === "chat" && (
+          <UiSelect
+            value={selectedModelId}
+            onChange={(event) => {
+              const nextModelId = event.target.value;
+              const nextItem = availableModels.find((item) => item.model_id === nextModelId);
+              setSelectedModelId(nextModelId);
+              setSelectedProviderId(nextItem?.provider_id ?? "");
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            className="max-w-[220px] rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+          >
+            {availableModels.length === 0 ? (
+              <option value="">请先配置模型</option>
+            ) : (
+              availableModels.map((item) => (
+                <option key={item.model_id} value={item.model_id}>
+                  {item.provider_name} / {item.model_name}
+                </option>
+              ))
+            )}
+          </UiSelect>
+        )}
+        {props.menuItem}
+      </div>
+    ),
+    [availableModels, conversationMode, selectedModelId]
+  );
+
   // 发送：先回显 user 消息，再触发 run
   const handleMessageSend = useCallback(
     (payload: MessageContent) => {
       if (agent.isRunning) return;
+      if (conversationMode === "agent") {
+        setInputError("Agent 模式暂未开放");
+        return;
+      }
+      if (!selectedModelOption) {
+        setInputError("请先配置模型服务并选择模型");
+        return;
+      }
       const inputContents = payload?.inputContents ?? [];
       if (!inputContents.length) {
         setInputError("请输入内容");
@@ -1111,15 +1269,30 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         },
       ]);
       agent.setMessages([message]);
-      agent.runAgent().catch((error) => {
-        if (error instanceof Error && error.message) {
-          setInputError(error.message);
-        } else {
-          setInputError("发送失败");
-        }
-      });
+      agent
+        .runAgent({
+          forwardedProps: {
+            agentConfig: {
+              conversation: {
+                mode: conversationMode,
+              },
+              model: {
+                providerId: selectedProviderId || selectedModelOption.provider_id,
+                modelId: selectedModelOption.model_id,
+              },
+              features: {},
+            },
+          },
+        })
+        .catch((error) => {
+          if (error instanceof Error && error.message) {
+            setInputError(error.message);
+          } else {
+            setInputError("发送失败");
+          }
+        });
     },
-    [agent]
+    [agent, conversationMode, selectedModelOption, selectedProviderId]
   );
 
   const handleStopGenerate = useCallback(() => {
@@ -1229,6 +1402,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
               showReference={false}
               round
               immediatelyRender={false}
+              renderConfigureArea={renderConfigureArea}
+              renderActionArea={renderActionArea}
             />
             {inputError && (
               <div

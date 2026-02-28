@@ -346,6 +346,7 @@ export default function WorkspaceLayout({
   const isChat = pathname === "/chat";
   const isSkill = pathname.startsWith("/skills");
   const isKB = pathname === "/kb";
+  const isModel = pathname === "/models";
   const hasMoreHistory = historyItems.length < historyTotal;
   const activeThreadId = isChat ? searchParams.get("threadId") ?? "" : "";
   const historyInitialLoading = historyLoading && historyItems.length === 0;
@@ -559,6 +560,42 @@ export default function WorkspaceLayout({
                             </svg>
                           </span>
                           <span className="truncate text-[13px] font-semibold">知识库管理</span>
+                        </span>
+                        <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
+                          <svg
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 5l6 7-6 7" />
+                          </svg>
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => router.push("/models")}
+                        className={quickEntryClass(isModel)}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="sidebar-quick-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border text-[var(--color-action-primary)]">
+                            <svg
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M6 6h12v12H6z" />
+                              <path d="M9 9h6v6H9z" />
+                            </svg>
+                          </span>
+                          <span className="truncate text-[13px] font-semibold">模型服务</span>
                         </span>
                         <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
                           <svg
