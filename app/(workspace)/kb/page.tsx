@@ -546,7 +546,7 @@ export default function KnowledgeBasePage() {
   return (
     <div className="kb-page workspace-gradient-surface workspace-gradient-surface--kb h-full overflow-auto p-4 md:p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <div className="motion-safe-fade-in rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.88)] p-4 shadow-[var(--shadow-sm)] backdrop-blur-sm">
+        <div className="workspace-panel-card motion-safe-fade-in rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5 backdrop-blur-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">
               <div>
@@ -570,7 +570,12 @@ export default function KnowledgeBasePage() {
               </div>
             </div>
             <Space wrap>
-              <UiButton provider="semi" onClick={() => setCreateVisible(true)}>
+              <UiButton
+                provider="semi"
+                size="lg"
+                className="ui-button-spotlight"
+                onClick={() => setCreateVisible(true)}
+              >
                 <IconPlus />
                 新建知识库
               </UiButton>
@@ -670,6 +675,8 @@ export default function KnowledgeBasePage() {
                 >
                   <UiButton
                     provider="semi"
+                    size="lg"
+                    className="ui-button-spotlight"
                     disabled={!selectedKb}
                     loading={uploading}
                   >

@@ -46,22 +46,21 @@ const sidebarIconButtonClass =
   "motion-safe-highlight flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-secondary)]";
 
 const sidebarPanelClass =
-  "motion-safe-lift rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] p-3 shadow-[var(--shadow-sm)] backdrop-blur-sm";
+  "motion-safe-lift sidebar-panel-surface rounded-[20px] border p-3 backdrop-blur-md";
 
 const quickEntryClass = (active: boolean) =>
   joinClasses(
-    "motion-safe-highlight flex w-full items-center justify-between rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-2 text-[var(--color-text-secondary)]",
-    "hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]",
-    active &&
-      "border-[rgba(37,99,255,0.2)] bg-[linear-gradient(90deg,rgba(37,99,255,0.14),rgba(37,99,255,0.04))] text-[var(--color-text-primary)]"
+    "motion-safe-highlight sidebar-quick-entry group flex w-full items-center justify-between rounded-[16px] border px-2.5 py-2 text-[var(--color-text-secondary)]",
+    "hover:-translate-y-0.5 hover:text-[var(--color-text-primary)]",
+    active && "sidebar-quick-entry-active text-[var(--color-text-primary)]"
   );
 
 const historyEntryClass = (active: boolean) =>
   joinClasses(
-    "motion-safe-highlight flex w-full items-center gap-3 rounded-[var(--radius-md)] border px-2.5 py-2 text-left",
+    "motion-safe-highlight history-entry-surface flex w-full items-center gap-2.5 rounded-[14px] border px-2.5 py-1.5 text-left",
     active
-      ? "border-[rgba(37,99,255,0.18)] bg-[linear-gradient(90deg,rgba(37,99,255,0.12),rgba(37,99,255,0.03))] text-[var(--color-text-primary)]"
-      : "border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border-default)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]"
+      ? "history-entry-surface-active text-[var(--color-text-primary)]"
+      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
   );
 
 const formatThreadTime = (value?: string) => {
@@ -450,7 +449,7 @@ export default function WorkspaceLayout({
 
             {!isSidebarCollapsed && (
               <div className="motion-safe-fade-in flex-1 overflow-auto px-4 pb-4 pt-4">
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className={sidebarPanelClass}>
                     <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
                       <svg
@@ -469,28 +468,29 @@ export default function WorkspaceLayout({
                       </svg>
                       快捷入口
                     </div>
-                    <div className="mt-3 space-y-2 text-sm">
+                    <div className="mt-2.5 space-y-1.5 text-sm">
                       <button
                         onClick={() => router.push("/a2ui")}
                         className={quickEntryClass(isA2ui)}
                       >
-                        <span className="flex items-center gap-2">
-                          <svg
-                            className="h-4 w-4 text-[var(--color-text-muted)]"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <rect x="3" y="5" width="18" height="14" rx="2" />
-                            <path d="M7 9h10M7 13h6" />
-                          </svg>
-                          A2UI 管理
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="sidebar-quick-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border text-[var(--color-action-primary)]">
+                            <svg
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <rect x="3" y="5" width="18" height="14" rx="2" />
+                              <path d="M7 9h10M7 13h6" />
+                            </svg>
+                          </span>
+                          <span className="truncate text-[13px] font-semibold">A2UI 管理</span>
                         </span>
-                        <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-                          查看
+                        <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
                           <svg
                             className="h-3.5 w-3.5"
                             viewBox="0 0 24 24"
@@ -509,22 +509,23 @@ export default function WorkspaceLayout({
                         onClick={() => router.push("/skills")}
                         className={quickEntryClass(isSkill)}
                       >
-                        <span className="flex items-center gap-2">
-                          <svg
-                            className="h-4 w-4 text-[var(--color-text-muted)]"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.7-4.9 2.7.9-5.5-4-3.9 5.5-.8L12 3z" />
-                          </svg>
-                          Skill 市场
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="sidebar-quick-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border text-[var(--color-action-primary)]">
+                            <svg
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.7-4.9 2.7.9-5.5-4-3.9 5.5-.8L12 3z" />
+                            </svg>
+                          </span>
+                          <span className="truncate text-[13px] font-semibold">Skill 市场</span>
                         </span>
-                        <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-                          查看
+                        <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
                           <svg
                             className="h-3.5 w-3.5"
                             viewBox="0 0 24 24"
@@ -543,22 +544,23 @@ export default function WorkspaceLayout({
                         onClick={() => router.push("/kb")}
                         className={quickEntryClass(isKB)}
                       >
-                        <span className="flex items-center gap-2">
-                          <svg
-                            className="h-4 w-4 text-[var(--color-text-muted)]"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M4 4h7l2 2h7v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
-                          </svg>
-                          知识库管理
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="sidebar-quick-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border text-[var(--color-action-primary)]">
+                            <svg
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M4 4h7l2 2h7v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+                            </svg>
+                          </span>
+                          <span className="truncate text-[13px] font-semibold">知识库管理</span>
                         </span>
-                        <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-                          查看
+                        <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
                           <svg
                             className="h-3.5 w-3.5"
                             viewBox="0 0 24 24"
@@ -591,12 +593,12 @@ export default function WorkspaceLayout({
                       </svg>
                       历史会话
                     </div>
-                    <div className="mt-3 space-y-3 text-sm text-[var(--color-text-secondary)]">
+                    <div className="mt-2.5 space-y-1.5 text-sm text-[var(--color-text-secondary)]">
                       {historyInitialLoading && (
-                        <div className="space-y-2">
-                          <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.12)]" />
-                          <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.08)]" />
-                          <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.06)]" />
+                        <div className="space-y-1">
+                          <div className="h-8 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.12)]" />
+                          <div className="h-8 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.08)]" />
+                          <div className="h-8 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.06)]" />
                         </div>
                       )}
                       {historyError && (
@@ -616,17 +618,17 @@ export default function WorkspaceLayout({
                         >
                           <span
                             className={joinClasses(
-                              "h-8 w-1 shrink-0 rounded-full",
+                              "mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full",
                               item.thread_id === activeThreadId
-                                ? "bg-[var(--color-action-primary)]"
-                                : "bg-[rgba(148,163,184,0.18)]"
+                                ? "bg-[var(--color-action-primary)] ring-2 ring-[var(--color-action-primary-soft)]"
+                                : "bg-[var(--color-border-default)]"
                             )}
                           />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
+                          <span className="min-w-0 flex-1 space-y-0">
+                            <span className="block truncate text-[13px] font-semibold leading-5">
                               {item.title || item.thread_id || "未命名会话"}
                             </span>
-                            <span className="block truncate text-xs text-[var(--color-text-muted)]">
+                            <span className="block truncate text-[11px] leading-4 text-[var(--color-text-muted)]">
                               {formatThreadTime(item.updated_at || item.created_at) || "最近更新"}
                             </span>
                           </span>

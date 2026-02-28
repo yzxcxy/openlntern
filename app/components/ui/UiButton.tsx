@@ -70,7 +70,11 @@ export function UiButton({
         disabled={disabled || loading}
         type={semiType as "danger" | "primary" | "tertiary"}
         theme={semiTheme as "borderless" | "light" | "solid"}
-        className={joinClasses(SEMI_VARIANT_CLASSES[variant], className)}
+        className={joinClasses(
+          SIZE_CLASSES[size],
+          SEMI_VARIANT_CLASSES[variant],
+          className
+        )}
         style={{ borderRadius: "var(--radius-md)", ...(style as CSSProperties) }}
       >
         {children}
