@@ -1,4 +1,5 @@
 import { Modal } from "./Modal";
+import { UiButton } from "../../../components/ui/UiButton";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -28,13 +29,9 @@ export function ConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <button
-            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            type="button"
-            onClick={onCancel}
-          >
+          <UiButton type="button" variant="secondary" onClick={onCancel}>
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -46,13 +43,8 @@ export function ConfirmDialog({
               <path d="M6 18L18 6" />
             </svg>
             {cancelText}
-          </button>
-          <button
-            className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-500 disabled:opacity-60"
-            type="button"
-            onClick={onConfirm}
-            disabled={confirming}
-          >
+          </UiButton>
+          <UiButton type="button" variant="danger" onClick={onConfirm} disabled={confirming}>
             <svg
               className="h-4 w-4"
               viewBox="0 0 24 24"
@@ -66,11 +58,13 @@ export function ConfirmDialog({
               <path d="M6 6l12 12" />
             </svg>
             {confirming ? "处理中..." : confirmText}
-          </button>
+          </UiButton>
         </>
       }
     >
-      <div className="text-sm text-gray-600">{description}</div>
+      <div className="rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.12)] bg-[rgba(248,250,252,0.9)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+        {description}
+      </div>
     </Modal>
   );
 }

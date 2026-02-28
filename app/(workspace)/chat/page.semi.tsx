@@ -71,21 +71,20 @@ function ToolResultCollapse({ text }: ToolResultCollapseProps) {
   );
 
   return (
-    <div>
+    <div className="motion-safe-slide-up">
       <div
-        className="semi-ai-chat-dialogue-content-tool-call"
+        className="semi-ai-chat-dialogue-content-tool-call motion-safe-highlight"
         onClick={toggleOpen}
         role="button"
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        style={{ cursor: "pointer" }}
       >
         <IconWrench />
         <span>工具执行结果</span>
         {isOpen ? <IconChevronUp /> : <IconChevronDown />}
       </div>
       <Collapsible isOpen={isOpen}>
-        <div className="semi-ai-chat-dialogue-content-bubble">
+        <div className="semi-ai-chat-dialogue-content-bubble px-3 py-3">
           <MarkdownRender format="md" raw={text} />
         </div>
       </Collapsible>
@@ -519,6 +518,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [inputError, setInputError] = useState("");
   const [threadId, setThreadId] = useState("");
   const [semiMessages, setSemiMessages] = useState<SemiMessage[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // 根据 query 参数或生成新 thread_id
   const resolvedThreadId = useMemo(() => {
@@ -541,6 +541,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       agent.setMessages([]);
       setInputError("");
       setSemiMessages([]);
+      setHistoryLoading(false);
       currentRunIdRef.current = "";
       textMessageMapRef.current.clear();
       toolCallMapRef.current.clear();
@@ -552,6 +553,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   // 拉取历史消息并映射为 SemiMessage[]
   const loadHistory = useCallback(async () => {
     if (!token || !threadId) return;
+    setHistoryLoading(true);
+    setInputError("");
     try {
       const response = await fetch(`/api/backend/v1/threads/${threadId}/messages`, {
         headers: buildAuthHeaders(token, userId),
@@ -587,6 +590,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       } else {
         setInputError("历史消息加载失败");
       }
+    } finally {
+      setHistoryLoading(false);
     }
   }, [threadId, token, userId]);
 
@@ -1009,6 +1014,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       })),
     [semiMessages]
   );
+  const showHistorySkeleton = historyLoading && chats.length === 0;
+  const showEmptyState =
+    !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
 
   const roleConfig = useMemo(
     () => ({
@@ -1052,9 +1060,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         const activityNode = renderActivityMessage(activityMessage);
         if (!activityNode) return null;
         return (
-          <div className="my-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.08)]">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50 px-3 py-2">
-              <span className="text-xs font-medium text-slate-600">
+          <div className="motion-safe-slide-up my-2 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-md)]">
+            <div className="border-b border-[var(--color-border-default)] bg-[linear-gradient(90deg,rgba(37,99,255,0.08),rgba(14,165,233,0.08))] px-3 py-2">
+              <span className="text-xs font-medium text-[var(--color-text-secondary)]">
                 可视化内容
               </span>
             </div>
@@ -1119,33 +1127,120 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   }, [agent]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-white">
-      <div className="flex-1 overflow-hidden">
-        <AIChatDialogue
-          align="leftRight"
-          mode="bubble"
-          chats={chats}
-          renderDialogueContentItem={renderDialogueContentItem}
-          roleConfig={roleConfig}
-          className="h-full"
-        />
-      </div>
-      <div className="border-t bg-white px-4 py-3">
-        <AIChatInput
-          keepSkillAfterSend={false}
-          onMessageSend={handleMessageSend}
-          onStopGenerate={handleStopGenerate}
-          generating={agent.isRunning}
-          canSend={!agent.isRunning}
-          showUploadButton={false}
-          showUploadFile={false}
-          showReference={false}
-          round
-          immediatelyRender = {false}
-        />
-        {inputError && (
-          <div className="mt-2 text-xs text-red-500">{inputError}</div>
-        )}
+    <div className="chat-page flex h-full w-full flex-col bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.08),transparent_28%),radial-gradient(circle_at_top_left,rgba(37,99,255,0.1),transparent_24%)] p-3 md:p-4">
+      <div className="motion-safe-fade-in flex h-full min-h-0 flex-col gap-3">
+        <div className="motion-safe-slide-up flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.86)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm">
+          <div>
+            <div className="text-sm font-semibold text-[var(--color-text-primary)]">
+              智能对话
+            </div>
+            <div className="text-xs text-[var(--color-text-muted)]">
+              实时展示回复、工具调用与可视化活动消息
+            </div>
+          </div>
+          <div
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${
+              agent.isRunning
+                ? "border-[rgba(37,99,255,0.2)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]"
+                : "border-[rgba(22,163,74,0.18)] bg-[rgba(22,163,74,0.08)] text-[var(--color-state-success)]"
+            }`}
+          >
+            {agent.isRunning ? "生成中" : "已就绪"}
+          </div>
+        </div>
+
+        <div className="motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] shadow-[var(--shadow-sm)] backdrop-blur-sm">
+          <div className="flex-1 overflow-hidden px-1 py-1">
+            {showHistorySkeleton ? (
+              <div className="flex h-full flex-col gap-4 px-4 py-5">
+                <div className="flex justify-start">
+                  <div className="w-full max-w-[68%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(226,232,240,0.8)] bg-[rgba(248,250,252,0.82)] p-4">
+                    <div className="h-3 w-20 animate-pulse rounded-full bg-[rgba(148,163,184,0.16)]" />
+                    <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(148,163,184,0.12)]" />
+                    <div className="h-3 w-4/5 animate-pulse rounded-full bg-[rgba(148,163,184,0.1)]" />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <div className="w-full max-w-[52%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(37,99,255,0.12)] bg-[rgba(37,99,255,0.06)] p-4">
+                    <div className="h-3 w-16 animate-pulse rounded-full bg-[rgba(37,99,255,0.12)]" />
+                    <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(37,99,255,0.08)]" />
+                  </div>
+                </div>
+                <div className="flex justify-start">
+                  <div className="w-full max-w-[74%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(226,232,240,0.8)] bg-[rgba(248,250,252,0.82)] p-4">
+                    <div className="h-3 w-24 animate-pulse rounded-full bg-[rgba(148,163,184,0.14)]" />
+                    <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(148,163,184,0.1)]" />
+                    <div className="h-3 w-3/4 animate-pulse rounded-full bg-[rgba(148,163,184,0.08)]" />
+                  </div>
+                </div>
+              </div>
+            ) : showEmptyState ? (
+              <div className="motion-safe-fade-in flex h-full items-center justify-center px-6 py-8">
+                <div className="max-w-md rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.94))] p-6 text-center shadow-[var(--shadow-sm)]">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-6 w-6"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M8 10h8" />
+                      <path d="M8 14h5" />
+                      <path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 2-2z" />
+                    </svg>
+                  </div>
+                  <div className="mt-4 text-sm font-semibold text-[var(--color-text-primary)]">
+                    开始新的对话
+                  </div>
+                  <div className="mt-2 text-sm text-[var(--color-text-muted)]">
+                    输入你的问题，系统会实时展示回复、工具调用和可视化内容。
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <AIChatDialogue
+                align="leftRight"
+                mode="bubble"
+                chats={chats}
+                renderDialogueContentItem={renderDialogueContentItem}
+                roleConfig={roleConfig}
+                className="h-full"
+              />
+            )}
+          </div>
+          <div className="border-t border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.96))] px-4 py-3">
+            {agent.isRunning && (
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
+                AI 正在生成回复
+              </div>
+            )}
+            <AIChatInput
+              keepSkillAfterSend={false}
+              onMessageSend={handleMessageSend}
+              onStopGenerate={handleStopGenerate}
+              generating={agent.isRunning}
+              canSend={!agent.isRunning}
+              showUploadButton={false}
+              showUploadFile={false}
+              showReference={false}
+              round
+              immediatelyRender={false}
+            />
+            {inputError && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="motion-safe-slide-up mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
+              >
+                {inputError}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

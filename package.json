@@ -7,7 +7,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "lint:style-guard": "eslint app"
   },
   "dependencies": {
     "@a2ui/lit": "^0.8.1",

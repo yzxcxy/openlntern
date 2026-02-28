@@ -11,6 +11,7 @@ import {
 } from "react";
 import remarkGfm from "remark-gfm";
 import { useRouter, useSearchParams } from "next/navigation";
+import { UiButton } from "../../../components/ui/UiButton";
 import {
   buildAuthHeaders,
   readValidToken,
@@ -34,35 +35,35 @@ type SkillFileItem = {
 const API_BASE = "/api/backend";
 const markdownComponents = {
   h1: (props: ComponentPropsWithoutRef<"h1">) => (
-    <h1 className="mb-4 text-2xl font-semibold text-gray-900" {...props} />
+    <h1 className="mb-4 text-2xl font-semibold text-[var(--color-text-primary)]" {...props} />
   ),
   h2: (props: ComponentPropsWithoutRef<"h2">) => (
-    <h2 className="mb-3 mt-6 text-xl font-semibold text-gray-900" {...props} />
+    <h2 className="mb-3 mt-6 text-xl font-semibold text-[var(--color-text-primary)]" {...props} />
   ),
   h3: (props: ComponentPropsWithoutRef<"h3">) => (
-    <h3 className="mb-2 mt-5 text-lg font-semibold text-gray-900" {...props} />
+    <h3 className="mb-2 mt-5 text-lg font-semibold text-[var(--color-text-primary)]" {...props} />
   ),
   p: (props: ComponentPropsWithoutRef<"p">) => (
-    <p className="my-3 text-sm text-gray-700" {...props} />
+    <p className="my-3 text-sm text-[var(--color-text-secondary)]" {...props} />
   ),
   ul: (props: ComponentPropsWithoutRef<"ul">) => (
     <ul
-      className="my-3 list-disc space-y-1 pl-6 text-sm text-gray-700"
+      className="my-3 list-disc space-y-1 pl-6 text-sm text-[var(--color-text-secondary)]"
       {...props}
     />
   ),
   ol: (props: ComponentPropsWithoutRef<"ol">) => (
     <ol
-      className="my-3 list-decimal space-y-1 pl-6 text-sm text-gray-700"
+      className="my-3 list-decimal space-y-1 pl-6 text-sm text-[var(--color-text-secondary)]"
       {...props}
     />
   ),
   li: (props: ComponentPropsWithoutRef<"li">) => (
-    <li className="text-sm text-gray-700" {...props} />
+    <li className="text-sm text-[var(--color-text-secondary)]" {...props} />
   ),
   a: (props: ComponentPropsWithoutRef<"a">) => (
     <a
-      className="text-sm text-blue-600 underline"
+      className="text-sm text-[var(--color-action-primary)] underline"
       target="_blank"
       rel="noreferrer"
       {...props}
@@ -70,13 +71,13 @@ const markdownComponents = {
   ),
   code: (props: ComponentPropsWithoutRef<"code">) => (
     <code
-      className="rounded bg-gray-200 px-1 py-0.5 text-xs text-gray-800"
+      className="rounded bg-[var(--color-bg-page)] px-1 py-0.5 text-xs text-[var(--color-text-primary)]"
       {...props}
     />
   ),
   pre: (props: ComponentPropsWithoutRef<"pre">) => (
     <pre
-      className="my-3 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100"
+      className="my-3 overflow-auto rounded-lg bg-[var(--color-text-primary)] p-4 text-xs text-[var(--color-bg-surface)]"
       {...props}
     />
   ),
@@ -86,37 +87,37 @@ const markdownComponents = {
   }: ComponentPropsWithoutRef<"table">) => (
     <div className="my-4 w-full overflow-x-auto">
       <table
-        className={`w-full border-collapse text-sm text-gray-700 ${className ?? ""}`}
+        className={`w-full border-collapse text-sm text-[var(--color-text-secondary)] ${className ?? ""}`}
         {...props}
       />
     </div>
   ),
   thead: (props: ComponentPropsWithoutRef<"thead">) => (
-    <thead className="bg-gray-100" {...props} />
+    <thead className="bg-[var(--color-bg-page)]" {...props} />
   ),
   tbody: (props: ComponentPropsWithoutRef<"tbody">) => (
-    <tbody className="divide-y divide-gray-200" {...props} />
+    <tbody className="divide-y divide-[var(--color-border-default)]" {...props} />
   ),
   tr: (props: ComponentPropsWithoutRef<"tr">) => (
-    <tr className="hover:bg-gray-50" {...props} />
+    <tr className="hover:bg-[var(--color-bg-page)]" {...props} />
   ),
   th: (props: ComponentPropsWithoutRef<"th">) => (
     <th
-      className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold text-gray-700"
+      className="border border-[var(--color-border-default)] px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-secondary)]"
       {...props}
     />
   ),
   td: (props: ComponentPropsWithoutRef<"td">) => (
-    <td className="border border-gray-200 px-3 py-2 text-sm" {...props} />
+    <td className="border border-[var(--color-border-default)] px-3 py-2 text-sm" {...props} />
   ),
   blockquote: (props: ComponentPropsWithoutRef<"blockquote">) => (
     <blockquote
-      className="my-3 border-l-4 border-gray-300 pl-4 text-sm text-gray-600"
+      className="my-3 border-l-4 border-[var(--color-border-strong)] pl-4 text-sm text-[var(--color-text-muted)]"
       {...props}
     />
   ),
   hr: (props: ComponentPropsWithoutRef<"hr">) => (
-    <hr className="my-6 border-gray-200" {...props} />
+    <hr className="my-6 border-[var(--color-border-default)]" {...props} />
   ),
 };
 
@@ -389,7 +390,7 @@ export default function SkillDetailPage() {
     if (["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "rb"].includes(ext)) {
       return (
         <svg
-          className="h-4 w-4 text-blue-500"
+          className="h-4 w-4 text-[var(--color-action-primary)]"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -439,7 +440,7 @@ export default function SkillDetailPage() {
     }
     return (
       <svg
-        className="h-4 w-4 text-gray-500"
+        className="h-4 w-4 text-[var(--color-text-muted)]"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -524,7 +525,7 @@ export default function SkillDetailPage() {
       ...props
     }: ComponentPropsWithoutRef<"a">) => {
       const docLink = isDocLink(href);
-      const mergedClassName = ["text-sm text-blue-600 underline", className]
+      const mergedClassName = ["text-sm text-[var(--color-action-primary)] underline", className]
         .filter(Boolean)
         .join(" ");
       return (
@@ -660,9 +661,11 @@ export default function SkillDetailPage() {
 
   return (
     <div className="h-full overflow-auto p-6">
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <button
-          className="mb-4 flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+      <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
+        <UiButton
+          className="mb-4 px-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+          variant="ghost"
+          size="sm"
           type="button"
           onClick={() => router.push("/skills")}
         >
@@ -678,58 +681,60 @@ export default function SkillDetailPage() {
             <path d="M15 18l-6-6 6-6" />
           </svg>
           返回 Skill 市场
-        </button>
+        </UiButton>
         {loading ? (
-          <div className="text-sm text-gray-500">加载中...</div>
+          <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
         ) : error ? (
-          <div className="text-sm text-red-600">{error}</div>
+          <div className="text-sm text-[var(--color-state-error)]">{error}</div>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-2xl">
+              <div className="flex h-12 w-12 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--color-bg-page)] text-2xl">
                 {headerIcon}
               </div>
               <div className="flex-1">
-                <div className="text-lg font-semibold text-gray-900">
+                <div className="text-lg font-semibold text-[var(--color-text-primary)]">
                   {headerName}
                 </div>
-                <div className="mt-1 text-sm text-gray-500">{headerDesc}</div>
+                <div className="mt-1 text-sm text-[var(--color-text-muted)]">{headerDesc}</div>
               </div>
-              <button
-                className="rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60"
+              <UiButton
+                className="px-3"
                 type="button"
+                variant="danger"
+                size="sm"
                 onClick={handleDeleteSkill}
                 disabled={deletingSkill || !normalizedName}
               >
                 {deletingSkill ? "删除中..." : "删除"}
-              </button>
+              </UiButton>
             </div>
             {deleteError && (
-              <div className="mt-4 text-sm text-red-600">{deleteError}</div>
+              <div className="mt-4 text-sm text-[var(--color-state-error)]">{deleteError}</div>
             )}
             {deleteSuccess && (
-              <div className="mt-4 text-sm text-green-600">
+              <div className="mt-4 text-sm text-[var(--color-state-success)]">
                 {deleteSuccess}
               </div>
             )}
             <div className="mt-6">
               {frontmatter ? (
                 parsedFrontmatter.error ? (
-                  <div className="text-sm text-red-600">
+                  <div className="text-sm text-[var(--color-state-error)]">
                     {parsedFrontmatter.error}
                   </div>
                 ) : frontmatterEntries.length > 0 ? (
-                  <div className="rounded-lg border bg-gray-50 p-4">
-                    <div className="text-sm font-semibold text-gray-900">
+                  <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-4">
+                    <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                       元信息
                     </div>
-                    <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm text-gray-600 sm:grid-cols-2">
+                    <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm text-[var(--color-text-secondary)] sm:grid-cols-2">
                       {frontmatterEntries.map(([key, value]) => (
                         <div key={key} className="flex flex-col">
-                          <dt className="text-xs font-medium uppercase text-gray-500">
+                          <dt className="text-xs font-medium uppercase text-[var(--color-text-muted)]">
                             {key}
                           </dt>
-                          <dd className="mt-1 text-gray-700">
+                          <dd className="mt-1 text-[var(--color-text-secondary)]">
                             {formatFrontmatterValue(value)}
                           </dd>
                         </div>
@@ -738,13 +743,15 @@ export default function SkillDetailPage() {
                   </div>
                 ) : null
               ) : null}
-              <div className="mt-4 flex flex-wrap items-center gap-3 border-b">
-                <button
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-b border-[var(--color-border-default)]">
+                <UiButton
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={`flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${
                     activeTab === "doc"
-                      ? "border-gray-900 text-gray-900"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
+                      ? "border-[var(--color-text-primary)] text-[var(--color-text-primary)]"
+                      : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
                   }`}
                   onClick={() => setActiveTab("doc")}
                 >
@@ -762,13 +769,15 @@ export default function SkillDetailPage() {
                     <path d="M9 12h6M9 16h6" />
                   </svg>
                   说明文档
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={`flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${
                     activeTab === "files"
-                      ? "border-gray-900 text-gray-900"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
+                      ? "border-[var(--color-text-primary)] text-[var(--color-text-primary)]"
+                      : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
                   }`}
                   onClick={() => setActiveTab("files")}
                 >
@@ -786,13 +795,13 @@ export default function SkillDetailPage() {
                     <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                   技能文件
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                  <span className="rounded-full bg-[var(--color-bg-page)] px-2 py-0.5 text-xs text-[var(--color-text-muted)]">
                     {fileCount}
                   </span>
-                </button>
+                </UiButton>
               </div>
               {activeTab === "doc" ? (
-                <div className="mt-4 rounded-lg border bg-gray-50 p-5">
+                <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-5">
                   {parsedContent.body ? (
                     <ReactMarkdown
                       components={markdownComponentsWithLinks}
@@ -801,17 +810,19 @@ export default function SkillDetailPage() {
                       {parsedContent.body}
                     </ReactMarkdown>
                   ) : (
-                    <div className="text-sm text-gray-500">暂无文档内容</div>
+                    <div className="text-sm text-[var(--color-text-muted)]">暂无文档内容</div>
                   )}
                 </div>
               ) : (
                 <div className="mt-4">
-                  <div className="rounded-lg border bg-gray-50 p-3">
-                    <div className="flex items-center justify-between px-2 py-1 text-xs font-medium text-gray-500">
+                  <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-3">
+                    <div className="flex items-center justify-between px-2 py-1 text-xs font-medium text-[var(--color-text-muted)]">
                       <span>文件列表</span>
-                      <button
+                      <UiButton
                         type="button"
-                        className="flex items-center gap-1 text-gray-400 hover:text-gray-600"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto px-0 py-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
                         onClick={fetchFileList}
                       >
                         <svg
@@ -827,18 +838,18 @@ export default function SkillDetailPage() {
                           <path d="M20 4v7h-7" />
                         </svg>
                         刷新
-                      </button>
+                      </UiButton>
                     </div>
                     {fileLoading ? (
-                      <div className="px-2 py-3 text-sm text-gray-500">
+                      <div className="px-2 py-3 text-sm text-[var(--color-text-muted)]">
                         加载中...
                       </div>
                     ) : fileError ? (
-                      <div className="px-2 py-3 text-sm text-red-600">
+                      <div className="px-2 py-3 text-sm text-[var(--color-state-error)]">
                         {fileError}
                       </div>
                     ) : (fileItems?.length ?? 0) === 0 ? (
-                      <div className="px-2 py-3 text-sm text-gray-500">
+                      <div className="px-2 py-3 text-sm text-[var(--color-text-muted)]">
                         暂无文件
                       </div>
                     ) : (
@@ -852,13 +863,15 @@ export default function SkillDetailPage() {
                             "未知文件";
                           const isActive = fileId === selectedFile;
                           return (
-                            <button
+                            <UiButton
                               key={`${fileId}-${index}`}
                               type="button"
-                              className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
+                              variant="ghost"
+                              size="sm"
+                              className={`flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-2 text-left text-sm ${
                                 isActive
-                                  ? "bg-white text-gray-900 shadow-sm"
-                                  : "text-gray-600 hover:bg-white hover:text-gray-900"
+                                  ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]"
+                                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)] hover:text-[var(--color-text-primary)]"
                               }`}
                               onClick={() => openFileModal(fileId)}
                             >
@@ -866,7 +879,7 @@ export default function SkillDetailPage() {
                               <span className="whitespace-normal break-all">
                                 {displayName}
                               </span>
-                            </button>
+                            </UiButton>
                           );
                         })}
                       </div>
@@ -884,26 +897,28 @@ export default function SkillDetailPage() {
           onClick={closeDocModal}
         >
           <div
-            className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+            className="flex w-full max-w-3xl flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-lg)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
+            <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-4 py-3">
+              <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--color-text-primary)]">
                 <div className="truncate">{docModalPath || "文档内容"}</div>
               </div>
-              <button
-                className="ml-3 text-sm text-gray-500 hover:text-gray-700"
+              <UiButton
+                className="ml-3 h-auto px-0 py-0 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={closeDocModal}
               >
                 关闭
-              </button>
+              </UiButton>
             </div>
             <div className="max-h-[70vh] overflow-auto p-4">
               {docModalLoading ? (
-                <div className="text-sm text-gray-500">加载中...</div>
+                <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
               ) : docModalError ? (
-                <div className="text-sm text-red-600">{docModalError}</div>
+                <div className="text-sm text-[var(--color-state-error)]">{docModalError}</div>
               ) : docIsMarkdown && parsedDocContent.body ? (
                 <ReactMarkdown
                   components={markdownComponentsWithLinks}
@@ -912,11 +927,11 @@ export default function SkillDetailPage() {
                   {parsedDocContent.body}
                 </ReactMarkdown>
               ) : docModalContent ? (
-                <pre className="whitespace-pre-wrap text-sm text-gray-700">
+                <pre className="whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">
                   {docModalContent}
                 </pre>
               ) : (
-                <div className="text-sm text-gray-500">暂无文档内容</div>
+                <div className="text-sm text-[var(--color-text-muted)]">暂无文档内容</div>
               )}
             </div>
           </div>
@@ -928,34 +943,36 @@ export default function SkillDetailPage() {
           onClick={closeFileModal}
         >
           <div
-            className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+            className="flex w-full max-w-3xl flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-lg)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
+            <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-4 py-3">
+              <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--color-text-primary)]">
                 <div className="truncate">
                   {fileModalPath || "文件内容"}
                 </div>
               </div>
-              <button
-                className="ml-3 text-sm text-gray-500 hover:text-gray-700"
+              <UiButton
+                className="ml-3 h-auto px-0 py-0 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={closeFileModal}
               >
                 关闭
-              </button>
+              </UiButton>
             </div>
             <div className="max-h-[70vh] overflow-auto p-4">
               {fileContentLoading ? (
-                <div className="text-sm text-gray-500">加载中...</div>
+                <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
               ) : fileContentError ? (
-                <div className="text-sm text-red-600">{fileContentError}</div>
+                <div className="text-sm text-[var(--color-state-error)]">{fileContentError}</div>
               ) : fileContent ? (
-                <pre className="whitespace-pre-wrap text-sm text-gray-700">
+                <pre className="whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">
                   {fileContent}
                 </pre>
               ) : (
-                <div className="text-sm text-gray-500">暂无文件内容</div>
+                <div className="text-sm text-[var(--color-text-muted)]">暂无文件内容</div>
               )}
             </div>
           </div>

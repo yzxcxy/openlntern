@@ -9,6 +9,10 @@ import {
 } from "./components/A2uiEditorModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { Modal } from "./components/Modal";
+import { UiButton } from "../../components/ui/UiButton";
+import { UiInput } from "../../components/ui/UiInput";
+import { UiSelect } from "../../components/ui/UiSelect";
+import { UiTextarea } from "../../components/ui/UiTextarea";
 import {
   buildAuthHeaders,
   getUserIdFromToken,
@@ -35,6 +39,7 @@ type UserInfo = {
 };
 
 const API_BASE = "/api/backend";
+
 export default function A2uiPage() {
   const [keyword, setKeyword] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -67,6 +72,7 @@ export default function A2uiPage() {
     }
     return getUserIdFromToken(token);
   }, []);
+
   const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   useEffect(() => {
@@ -335,6 +341,7 @@ export default function A2uiPage() {
   }, [previewTarget]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   const formatDateDisplay = (value?: string) => {
     if (!value) {
       return { label: "-", full: "-" };
@@ -354,19 +361,15 @@ export default function A2uiPage() {
 
   return (
     <div className="h-full overflow-auto p-6">
-      <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-sm)]">
         <div className="flex flex-wrap items-center gap-3">
-          <input
-            className="w-full max-w-xs rounded-md border px-3 py-2 text-sm"
+          <UiInput
+            className="w-full max-w-xs"
             placeholder="搜索名称或描述"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          <button
-            className="flex items-center gap-2 rounded-md border bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
-            type="button"
-            onClick={handleSearch}
-          >
+          <UiButton type="button" variant="secondary" onClick={handleSearch}>
             <svg
               className="h-4 w-4"
               viewBox="0 0 24 24"
@@ -380,20 +383,14 @@ export default function A2uiPage() {
               <path d="M20 20l-3.5-3.5" />
             </svg>
             搜索
-          </button>
+          </UiButton>
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <div className="text-sm text-gray-500">
-            共 {total} 条
-          </div>
-          <button
-            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            type="button"
-            onClick={openCreate}
-          >
+          <div className="text-sm text-[var(--color-text-muted)]">共 {total} 条</div>
+          <UiButton type="button" onClick={openCreate}>
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -405,7 +402,7 @@ export default function A2uiPage() {
               <path d="M5 12h14" />
             </svg>
             新增 A2UI
-          </button>
+          </UiButton>
         </div>
 
         <A2uiEditorModal
@@ -418,13 +415,13 @@ export default function A2uiPage() {
           saving={saving}
         />
 
-        {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
+        {error && <div className="mt-4 text-sm text-[var(--color-state-error)]">{error}</div>}
 
         <div className="mt-4 space-y-3">
           {loading ? (
-            <div className="text-sm text-gray-500">加载中...</div>
+            <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
           ) : items.length === 0 ? (
-            <div className="text-sm text-gray-500">暂无数据</div>
+            <div className="text-sm text-[var(--color-text-muted)]">暂无数据</div>
           ) : (
             items.map((item) => {
               const createdAt = formatDateDisplay(item.created_at);
@@ -432,25 +429,27 @@ export default function A2uiPage() {
               return (
                 <div
                   key={item.a2ui_id}
-                  className="rounded-lg border bg-white p-4"
+                  className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">
+                      <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                         {item.name}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">
+                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
                         {item.description || "暂无描述"}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                      <UiButton
+                        className="px-3"
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => openPreview(item)}
                       >
                         <svg
-                          className="h-3.5 w-3.5 text-gray-500"
+                          className="h-3.5 w-3.5"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -462,14 +461,16 @@ export default function A2uiPage() {
                           <path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6z" />
                         </svg>
                         预览
-                      </button>
-                      <button
-                        className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                      </UiButton>
+                      <UiButton
+                        className="px-3"
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => openEdit(item)}
                       >
                         <svg
-                          className="h-3.5 w-3.5 text-gray-500"
+                          className="h-3.5 w-3.5"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -481,10 +482,12 @@ export default function A2uiPage() {
                           <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
                         </svg>
                         编辑
-                      </button>
-                      <button
-                        className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+                      </UiButton>
+                      <UiButton
+                        className="px-3"
                         type="button"
+                        variant="danger"
+                        size="sm"
                         onClick={() => openDelete(item)}
                       >
                         <svg
@@ -501,10 +504,10 @@ export default function A2uiPage() {
                           <path d="M6 6l1 14h10l1-14" />
                         </svg>
                         删除
-                      </button>
+                      </UiButton>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                  <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-muted)]">
                     <div title={createdAt.full}>创建：{createdAt.label}</div>
                     <div title={updatedAt.full}>更新：{updatedAt.label}</div>
                   </div>
@@ -514,11 +517,11 @@ export default function A2uiPage() {
           )}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-gray-600">
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-[var(--color-text-secondary)]">
           <div className="flex items-center gap-2">
             <span>每页</span>
-            <select
-              className="rounded-md border px-2 py-1 text-sm"
+            <UiSelect
+              className="w-24"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
@@ -528,16 +531,17 @@ export default function A2uiPage() {
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
-            </select>
+            </UiSelect>
           </div>
-          <button
-            className="flex items-center gap-2 rounded-md border px-3 py-1 disabled:opacity-50"
+          <UiButton
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={page <= 1}
           >
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -548,21 +552,20 @@ export default function A2uiPage() {
               <path d="M15 6l-6 6 6 6" />
             </svg>
             上一页
-          </button>
+          </UiButton>
           <span>
             {page} / {totalPages}
           </span>
-          <button
-            className="flex items-center gap-2 rounded-md border px-3 py-1 disabled:opacity-50"
+          <UiButton
             type="button"
-            onClick={() =>
-              setPage((prev) => Math.min(totalPages, prev + 1))
-            }
+            variant="secondary"
+            size="sm"
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={page >= totalPages}
           >
             下一页
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -572,9 +575,10 @@ export default function A2uiPage() {
             >
               <path d="M9 6l6 6-6 6" />
             </svg>
-          </button>
+          </UiButton>
         </div>
       </div>
+
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="删除 A2UI"
@@ -586,15 +590,16 @@ export default function A2uiPage() {
         onConfirm={handleDelete}
         onCancel={closeDelete}
       />
+
       <Modal
         open={Boolean(previewTarget)}
         title={previewTarget?.name ? `预览：${previewTarget.name}` : "预览"}
         onClose={closePreview}
       >
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-          <div className="rounded-lg border bg-white p-3">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3">
             {previewContent.error ? (
-              <div className="text-sm text-red-600">{previewContent.error}</div>
+              <div className="text-sm text-[var(--color-state-error)]">{previewContent.error}</div>
             ) : previewContent.components && previewContent.root ? (
               <div className="min-h-[220px]">
                 <A2UIViewer
@@ -605,19 +610,19 @@ export default function A2uiPage() {
                 />
               </div>
             ) : (
-              <div className="text-sm text-gray-500">暂无可预览内容</div>
+              <div className="text-sm text-[var(--color-text-muted)]">暂无可预览内容</div>
             )}
           </div>
           <div className="space-y-3">
-            <label className="block text-xs text-gray-500">UI JSON</label>
-            <textarea
-              className="min-h-[160px] w-full rounded-md border px-3 py-2 text-xs text-gray-700"
+            <label className="block text-xs text-[var(--color-text-muted)]">UI JSON</label>
+            <UiTextarea
+              className="min-h-[160px] text-xs"
               value={previewTarget?.ui_json ?? ""}
               readOnly
             />
-            <label className="block text-xs text-gray-500">数据 JSON</label>
-            <textarea
-              className="min-h-[120px] w-full rounded-md border px-3 py-2 text-xs text-gray-700"
+            <label className="block text-xs text-[var(--color-text-muted)]">数据 JSON</label>
+            <UiTextarea
+              className="min-h-[120px] text-xs"
               value={previewTarget?.data_json ?? ""}
               readOnly
             />

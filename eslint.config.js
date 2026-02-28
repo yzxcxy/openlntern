@@ -8,6 +8,11 @@ import pluginNext from "@next/eslint-plugin-next";
 import turboPlugin from "eslint-plugin-turbo";
 import onlyWarn from "eslint-plugin-only-warn";
 
+const HARD_CODED_PALETTE_CLASS_PATTERN =
+  "(?:^|\\s)(?:bg|text|border|from|via|to)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d{2,3}(?=\\s|$)";
+const HARD_CODED_ARBITRARY_COLOR_PATTERN =
+  "(?:^|\\s)(?:bg|text|border)-\\[[^\\]]*(?:#|rgba?|hsla?|linear-gradient)[^\\]]*\\]";
+
 /**
  * A shared ESLint configuration for the repository.
  *
@@ -34,9 +39,12 @@ import onlyWarn from "eslint-plugin-only-warn";
     ignores: ["dist/**"],
   },
   {
-    ...pluginReact.configs.flat.recommended,
+    files: ["app/**/*.{ts,tsx}"],
+    plugins: {
+      react: pluginReact,
+    },
+    settings: { react: { version: "detect" } },
     languageOptions: {
-      ...pluginReact.configs.flat.recommended.languageOptions,
       globals: {
         ...globals.serviceworker,
       },
@@ -55,11 +63,33 @@ import onlyWarn from "eslint-plugin-only-warn";
     plugins: {
       "react-hooks": pluginReactHooks,
     },
-    settings: { react: { version: "detect" } },
     rules: {
       ...pluginReactHooks.configs.recommended.rules,
-      // React scope no longer necessary with new JSX transform.
-      "react/react-in-jsx-scope": "off",
+    },
+  },
+  {
+    files: ["app/**/*.{ts,tsx}"],
+    ignores: ["app/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector:
+            "JSXOpeningElement[name.name='button'], JSXOpeningElement[name.name='input'], JSXOpeningElement[name.name='select'], JSXOpeningElement[name.name='textarea']",
+          message:
+            "Use app/components/ui primitives instead of raw form controls outside the shared UI layer.",
+        },
+        {
+          selector: `JSXAttribute[name.name='className'] > Literal[value=/${HARD_CODED_PALETTE_CLASS_PATTERN}/]`,
+          message:
+            "Avoid hard-coded Tailwind palette classes in page code. Use semantic tokens or shared UI variants.",
+        },
+        {
+          selector: `JSXAttribute[name.name='className'] > Literal[value=/${HARD_CODED_ARBITRARY_COLOR_PATTERN}/]`,
+          message:
+            "Avoid raw rgba/hex/gradient class values in page code. Move the style into semantic tokens or shared components.",
+        },
+      ],
     },
   },
 ];

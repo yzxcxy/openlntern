@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 import "./a2ui-theme.css";
 import "../node_modules/@douyinfe/semi-ui-19/dist/css/semi.min.css";
+import "./styles/tokens.css";
+import "./styles/motion.css";
 import "@copilotkit/react-core/v2/styles.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
@@ -13,14 +15,14 @@ const geistSans = localFont({
 });
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",  
+  variable: "--font-geist-mono",
 });
 
 export const metadata: Metadata = {
   title: "让你专注更美好的事",
   description: "让你专注更美好的事",
   icons: {
-    icon: "/openIntern_logo_concept_1_open_connection.svg", 
+    icon: "/openIntern_logo_concept_1_open_connection.svg",
   },
 };
 

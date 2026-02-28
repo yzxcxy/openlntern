@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UiButton } from "../../components/ui/UiButton";
+import { UiInput } from "../../components/ui/UiInput";
 import {
   buildAuthHeaders,
   readStoredUser,
@@ -21,6 +23,7 @@ type UserInfo = {
 };
 
 const API_BASE = "/api/backend";
+
 export default function UserPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(() =>
     readStoredUser<UserInfo>()
@@ -224,7 +227,7 @@ export default function UserPage() {
 
   return (
     <div className="flex h-full w-full items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg rounded-xl border bg-white p-6 shadow-sm">
+      <div className="w-full max-w-lg rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
         <div className="flex items-center gap-4">
           {userInfo?.avatar ? (
             <img
@@ -233,25 +236,26 @@ export default function UserPage() {
               className="h-14 w-14 rounded-full object-cover"
             />
           ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-200 text-lg font-semibold text-gray-700">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-bg-page)] text-lg font-semibold text-[var(--color-text-secondary)]">
               {avatarLabel}
             </div>
           )}
           <div className="flex-1">
-            <div className="text-lg font-semibold text-gray-900">
+            <div className="text-lg font-semibold text-[var(--color-text-primary)]">
               {displayName}
             </div>
             {userInfo?.email && (
-              <div className="text-sm text-gray-500">{userInfo.email}</div>
+              <div className="text-sm text-[var(--color-text-muted)]">{userInfo.email}</div>
             )}
             <div className="mt-2 flex items-center gap-2">
-              <button
+              <UiButton
                 onClick={handleAvatarClick}
-                className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                variant="secondary"
+                size="sm"
                 type="button"
               >
                 <svg
-                  className="h-3.5 w-3.5 text-gray-500"
+                  className="h-3.5 w-3.5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -263,7 +267,7 @@ export default function UserPage() {
                   <circle cx="12" cy="13" r="3" />
                 </svg>
                 更换头像
-              </button>
+              </UiButton>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -275,15 +279,15 @@ export default function UserPage() {
           </div>
         </div>
         {loading ? (
-          <div className="mt-6 text-sm text-gray-500">加载中...</div>
+          <div className="mt-6 text-sm text-[var(--color-text-muted)]">加载中...</div>
         ) : (
           <div className="mt-6 space-y-4">
             {editing ? (
               <div className="grid gap-4">
-                <label className="space-y-1 text-sm text-gray-600">
+                <label className="space-y-1 text-sm text-[var(--color-text-secondary)]">
                   <span className="flex items-center gap-2">
                     <svg
-                      className="h-3.5 w-3.5 text-gray-400"
+                      className="h-3.5 w-3.5 text-[var(--color-text-muted)]"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -296,8 +300,7 @@ export default function UserPage() {
                     </svg>
                     用户名
                   </span>
-                  <input
-                    className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
+                  <UiInput
                     value={formValues.username}
                     onChange={(e) =>
                       setFormValues((prev) => ({
@@ -307,10 +310,10 @@ export default function UserPage() {
                     }
                   />
                 </label>
-                <label className="space-y-1 text-sm text-gray-600">
+                <label className="space-y-1 text-sm text-[var(--color-text-secondary)]">
                   <span className="flex items-center gap-2">
                     <svg
-                      className="h-3.5 w-3.5 text-gray-400"
+                      className="h-3.5 w-3.5 text-[var(--color-text-muted)]"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -323,8 +326,7 @@ export default function UserPage() {
                     </svg>
                     邮箱
                   </span>
-                  <input
-                    className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
+                  <UiInput
                     value={formValues.email}
                     onChange={(e) =>
                       setFormValues((prev) => ({
@@ -334,10 +336,10 @@ export default function UserPage() {
                     }
                   />
                 </label>
-                <label className="space-y-1 text-sm text-gray-600">
+                <label className="space-y-1 text-sm text-[var(--color-text-secondary)]">
                   <span className="flex items-center gap-2">
                     <svg
-                      className="h-3.5 w-3.5 text-gray-400"
+                      className="h-3.5 w-3.5 text-[var(--color-text-muted)]"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -350,8 +352,7 @@ export default function UserPage() {
                     </svg>
                     手机号
                   </span>
-                  <input
-                    className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
+                  <UiInput
                     value={formValues.phone}
                     onChange={(e) =>
                       setFormValues((prev) => ({
@@ -361,10 +362,10 @@ export default function UserPage() {
                     }
                   />
                 </label>
-                <label className="space-y-1 text-sm text-gray-600">
+                <label className="space-y-1 text-sm text-[var(--color-text-secondary)]">
                   <span className="flex items-center gap-2">
                     <svg
-                      className="h-3.5 w-3.5 text-gray-400"
+                      className="h-3.5 w-3.5 text-[var(--color-text-muted)]"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -378,9 +379,8 @@ export default function UserPage() {
                     </svg>
                     密码
                   </span>
-                  <input
+                  <UiInput
                     type="password"
-                    className="w-full rounded-md border px-3 py-2 text-sm text-gray-900"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="不修改可留空"
@@ -388,9 +388,9 @@ export default function UserPage() {
                 </label>
               </div>
             ) : (
-              <div className="grid gap-3 text-sm text-gray-600">
-                <div className="rounded-lg border px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="grid gap-3 text-sm text-[var(--color-text-secondary)]">
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <svg
                       className="h-3.5 w-3.5"
                       viewBox="0 0 24 24"
@@ -405,12 +405,12 @@ export default function UserPage() {
                     </svg>
                     用户名
                   </div>
-                  <div className="text-gray-900">
+                  <div className="text-[var(--color-text-primary)]">
                     {userInfo?.username || "-"}
                   </div>
                 </div>
-                <div className="rounded-lg border px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <svg
                       className="h-3.5 w-3.5"
                       viewBox="0 0 24 24"
@@ -425,12 +425,12 @@ export default function UserPage() {
                     </svg>
                     邮箱
                   </div>
-                  <div className="text-gray-900">
+                  <div className="text-[var(--color-text-primary)]">
                     {userInfo?.email || "-"}
                   </div>
                 </div>
-                <div className="rounded-lg border px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <svg
                       className="h-3.5 w-3.5"
                       viewBox="0 0 24 24"
@@ -445,12 +445,12 @@ export default function UserPage() {
                     </svg>
                     手机号
                   </div>
-                  <div className="text-gray-900">
+                  <div className="text-[var(--color-text-primary)]">
                     {userInfo?.phone || "-"}
                   </div>
                 </div>
-                <div className="rounded-lg border px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <svg
                       className="h-3.5 w-3.5"
                       viewBox="0 0 24 24"
@@ -464,7 +464,7 @@ export default function UserPage() {
                     </svg>
                     角色
                   </div>
-                  <div className="text-gray-900">
+                  <div className="text-[var(--color-text-primary)]">
                     {userInfo?.role || "-"}
                   </div>
                 </div>
@@ -472,21 +472,21 @@ export default function UserPage() {
             )}
           </div>
         )}
-        {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
+        {error && <div className="mt-4 text-sm text-[var(--color-state-error)]">{error}</div>}
         {success && (
-          <div className="mt-4 text-sm text-emerald-600">{success}</div>
+          <div className="mt-4 text-sm text-[var(--color-state-success)]">{success}</div>
         )}
         <div className="mt-6 flex justify-end gap-2">
           {editing ? (
             <>
-              <button
+              <UiButton
                 onClick={cancelEdit}
-                className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                variant="secondary"
                 type="button"
                 disabled={saving}
               >
                 <svg
-                  className="h-4 w-4 text-gray-500"
+                  className="h-4 w-4"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -498,10 +498,9 @@ export default function UserPage() {
                   <path d="M6 18L18 6" />
                 </svg>
                 取消
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 onClick={handleSave}
-                className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-60"
                 type="button"
                 disabled={saving}
               >
@@ -517,17 +516,17 @@ export default function UserPage() {
                   <path d="M5 12l4 4L19 6" />
                 </svg>
                 {saving ? "保存中..." : "保存"}
-              </button>
+              </UiButton>
             </>
           ) : (
-            <button
+            <UiButton
               onClick={startEdit}
-              className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              variant="secondary"
               type="button"
               disabled={loading}
             >
               <svg
-                className="h-4 w-4 text-gray-500"
+                className="h-4 w-4"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -539,15 +538,11 @@ export default function UserPage() {
                 <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
               </svg>
               编辑信息
-            </button>
+            </UiButton>
           )}
-          <button
-            onClick={() => router.push("/")}
-            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            type="button"
-          >
+          <UiButton onClick={() => router.push("/")} variant="secondary" type="button">
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -560,7 +555,7 @@ export default function UserPage() {
               <path d="M9 20v-6h6v6" />
             </svg>
             返回首页
-          </button>
+          </UiButton>
         </div>
       </div>
     </div>

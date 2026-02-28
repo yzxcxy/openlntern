@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UiButton } from "../../components/ui/UiButton";
+import { UiInput } from "../../components/ui/UiInput";
+import { UiSelect } from "../../components/ui/UiSelect";
 import {
   buildAuthHeaders,
   readValidToken,
@@ -17,6 +20,7 @@ type Skill = {
 };
 
 const API_BASE = "/api/backend";
+
 export default function SkillsPage() {
   const [keyword, setKeyword] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -144,19 +148,15 @@ export default function SkillsPage() {
 
   return (
     <div className="h-full overflow-auto p-6">
-      <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-sm)]">
         <div className="flex flex-wrap items-center gap-3">
-          <input
-            className="w-full max-w-xs rounded-md border px-3 py-2 text-sm"
+          <UiInput
+            className="w-full max-w-xs"
             placeholder="搜索名称或描述"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          <button
-            className="flex items-center gap-2 rounded-md border bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
-            type="button"
-            onClick={handleSearch}
-          >
+          <UiButton type="button" variant="secondary" onClick={handleSearch}>
             <svg
               className="h-4 w-4"
               viewBox="0 0 24 24"
@@ -170,15 +170,14 @@ export default function SkillsPage() {
               <path d="M20 20l-3.5-3.5" />
             </svg>
             搜索
-          </button>
-          <button
-            className="flex items-center gap-2 rounded-md border bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+          </UiButton>
+          <UiButton
             type="button"
             onClick={handleUploadClick}
             disabled={uploading}
           >
             {uploading ? "上传中..." : "上传 Skill"}
-          </button>
+          </UiButton>
           <input
             ref={uploadInputRef}
             type="file"
@@ -189,56 +188,52 @@ export default function SkillsPage() {
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <div className="text-sm text-gray-500">共 {total} 条</div>
+          <div className="text-sm text-[var(--color-text-muted)]">共 {total} 条</div>
         </div>
 
-        {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
+        {error && <div className="mt-4 text-sm text-[var(--color-state-error)]">{error}</div>}
         {uploadError && (
-          <div className="mt-2 text-sm text-red-600">{uploadError}</div>
+          <div className="mt-2 text-sm text-[var(--color-state-error)]">{uploadError}</div>
         )}
         {uploadSuccess && (
-          <div className="mt-2 text-sm text-green-600">{uploadSuccess}</div>
+          <div className="mt-2 text-sm text-[var(--color-state-success)]">{uploadSuccess}</div>
         )}
         <div className="mt-4">
           {loading ? (
-            <div className="text-sm text-gray-500">加载中...</div>
+            <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
           ) : cards.length === 0 ? (
-            <div className="text-sm text-gray-500">暂无数据</div>
+            <div className="text-sm text-[var(--color-text-muted)]">暂无数据</div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {cards.map((item) => (
                 <div
                   key={item.path ?? item.skillName}
-                  className="flex h-full flex-col rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-gray-300 hover:shadow"
+                  className="flex h-full flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 text-left shadow-[var(--shadow-sm)] transition hover:border-[var(--color-border-strong)] hover:shadow-[var(--shadow-md)]"
                   role="button"
                   tabIndex={0}
                   onClick={() =>
                     router.push(
-                      `/skills/detail?name=${encodeURIComponent(
-                        item.skillName
-                      )}`
+                      `/skills/detail?name=${encodeURIComponent(item.skillName)}`
                     )
                   }
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       router.push(
-                        `/skills/detail?name=${encodeURIComponent(
-                          item.skillName
-                        )}`
+                        `/skills/detail?name=${encodeURIComponent(item.skillName)}`
                       );
                     }
                   }}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-xl">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-bg-page)] text-xl">
                       {item.icon || "🧩"}
                     </div>
                     <div className="flex-1">
-                      <div className="text-sm font-semibold text-gray-900">
+                      <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                         {item.name || item.skillName}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">
+                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
                         {item.description || "暂无描述"}
                       </div>
                     </div>
@@ -249,11 +244,11 @@ export default function SkillsPage() {
           )}
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-end gap-3 text-sm text-gray-600">
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3 text-sm text-[var(--color-text-secondary)]">
           <div className="flex items-center gap-2">
             <span>每页</span>
-            <select
-              className="rounded-md border px-2 py-1 text-sm"
+            <UiSelect
+              className="w-24"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
@@ -263,16 +258,17 @@ export default function SkillsPage() {
               <option value={12}>12</option>
               <option value={24}>24</option>
               <option value={48}>48</option>
-            </select>
+            </UiSelect>
           </div>
-          <button
-            className="flex items-center gap-2 rounded-md border px-3 py-1 disabled:opacity-50"
+          <UiButton
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={page <= 1}
           >
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -283,19 +279,20 @@ export default function SkillsPage() {
               <path d="M15 6l-6 6 6 6" />
             </svg>
             上一页
-          </button>
+          </UiButton>
           <span>
             {page} / {totalPages}
           </span>
-          <button
-            className="flex items-center gap-2 rounded-md border px-3 py-1 disabled:opacity-50"
+          <UiButton
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             disabled={page >= totalPages}
           >
             下一页
             <svg
-              className="h-4 w-4 text-gray-500"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -305,7 +302,7 @@ export default function SkillsPage() {
             >
               <path d="M9 6l6 6-6 6" />
             </svg>
-          </button>
+          </UiButton>
         </div>
       </div>
     </div>
