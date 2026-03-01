@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
@@ -93,6 +100,22 @@ type PluginDraft = {
   tool: ToolDraft;
 };
 
+type DetailFieldSection = {
+  key: string;
+  label: string;
+  fields: PluginField[];
+};
+
+type FlatFieldRow = {
+  id: string;
+  name: string;
+  type: FieldType;
+  required: boolean;
+  description: string;
+  enumText: string;
+  depth: number;
+};
+
 const API_BASE = "/api/backend";
 
 const createId = () => {
@@ -145,6 +168,14 @@ const runtimeLabel: Record<Exclude<RuntimeType, "">, string> = {
   code: "Code",
 };
 
+const responseModeLabel: Record<Exclude<ResponseMode, "">, string> = {
+  streaming: "流式",
+  non_streaming: "非流式",
+};
+
+const getToolKey = (tool: PluginTool, index: number) =>
+  tool.tool_id || tool.tool_name || `tool-${index}`;
+
 const formatTime = (value?: string | null) => {
   if (!value) return "未记录";
   const parsed = Date.parse(value);
@@ -161,13 +192,15 @@ const formatTime = (value?: string | null) => {
 function PluginAvatar({
   src,
   name,
+  fallbackSrc,
   className = "",
 }: {
   src?: string;
   name?: string;
+  fallbackSrc?: string;
   className?: string;
 }) {
-  const imageURL = src?.trim() ?? "";
+  const imageURL = src?.trim() || fallbackSrc?.trim() || "";
   const fallbackLabel = (name?.trim().slice(0, 1) || "P").toUpperCase();
 
   if (imageURL) {
@@ -194,6 +227,16 @@ const parseFields = (value: unknown): PluginField[] => {
   return value.map((item) => parseField(item)).filter(Boolean) as PluginField[];
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const normalizeFieldType = (value: unknown): FieldType => {
+  if (typeof value === "string" && ["string", "number", "integer", "boolean", "object", "array"].includes(value)) {
+    return value as FieldType;
+  }
+  return "string";
+};
+
 const parseField = (value: unknown): PluginField | null => {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -218,6 +261,147 @@ const parseField = (value: unknown): PluginField | null => {
     children,
     item: type === "array" ? item ?? createField("string") : null,
   };
+};
+
+const parseSchemaField = (
+  name: string,
+  value: unknown,
+  required = false,
+  isArrayItem = false
+): PluginField | null => {
+  if (!isRecord(value)) return null;
+
+  const hasProperties = isRecord(value.properties);
+  const rawType =
+    typeof value.type === "string"
+      ? value.type
+      : hasProperties
+        ? "object"
+        : value.items
+          ? "array"
+          : "string";
+  const type = normalizeFieldType(rawType);
+  const requiredFields = new Set(
+    Array.isArray(value.required)
+      ? value.required.filter((item): item is string => typeof item === "string")
+      : []
+  );
+  const enumValues = Array.isArray(value.enum)
+    ? value.enum.filter((item): item is string => typeof item === "string")
+    : [];
+
+  const children =
+    type === "object" && hasProperties
+      ? Object.entries(value.properties as Record<string, unknown>)
+          .map(([childName, childValue]) =>
+            parseSchemaField(childName, childValue, requiredFields.has(childName))
+          )
+          .filter(Boolean) as PluginField[]
+      : [];
+
+  const item =
+    type === "array"
+      ? parseSchemaField("", value.items, false, true) ?? createField("string")
+      : null;
+
+  return {
+    id: createId(),
+    name: isArrayItem ? "" : name,
+    type,
+    required,
+    description: typeof value.description === "string" ? value.description : "",
+    enumText: enumValues.join(", "),
+    children,
+    item,
+  };
+};
+
+const parseSchemaFieldsFromJSON = (raw: string | undefined, fallbackName: string): PluginField[] => {
+  const trimmed = raw?.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (isRecord(parsed) && isRecord(parsed.properties)) {
+      const requiredFields = new Set(
+        Array.isArray(parsed.required)
+          ? parsed.required.filter((item): item is string => typeof item === "string")
+          : []
+      );
+      return Object.entries(parsed.properties as Record<string, unknown>)
+        .map(([name, value]) => parseSchemaField(name, value, requiredFields.has(name)))
+        .filter(Boolean) as PluginField[];
+    }
+    const rootField = parseSchemaField(fallbackName, parsed);
+    return rootField ? [rootField] : [];
+  } catch {
+    return [];
+  }
+};
+
+const getInputSections = (
+  runtimeType: RuntimeType | undefined,
+  tool: PluginTool
+): DetailFieldSection[] => {
+  if (runtimeType === "api") {
+    return [
+      { key: "header", label: "Header", fields: parseFields(tool.header_fields) },
+      { key: "query", label: "Query", fields: parseFields(tool.query_fields) },
+      { key: "body", label: "Body", fields: parseFields(tool.body_fields) },
+    ].filter((section) => section.fields.length > 0);
+  }
+
+  if (runtimeType === "code") {
+    const bodyFields = parseFields(tool.body_fields);
+    return bodyFields.length > 0 ? [{ key: "body", label: "输入参数", fields: bodyFields }] : [];
+  }
+
+  const schemaFields = parseSchemaFieldsFromJSON(tool.input_schema_json, "input");
+  if (schemaFields.length === 0) return [];
+
+  const splitSections = schemaFields
+    .filter((field) => field.type === "object")
+    .map((field) => ({
+      key: field.name || field.id,
+      label: field.name || "输入参数",
+      fields: field.children,
+    }))
+    .filter((section) => section.fields.length > 0);
+
+  if (splitSections.length > 0) {
+    return splitSections;
+  }
+
+  return [{ key: "input", label: "输入参数", fields: schemaFields }];
+};
+
+const getOutputFields = (tool: PluginTool) => parseSchemaFieldsFromJSON(tool.output_schema_json, "result");
+
+const flattenFields = (fields: PluginField[]): FlatFieldRow[] => {
+  const rows: FlatFieldRow[] = [];
+
+  const walk = (field: PluginField, depth: number, label?: string) => {
+    const name = (label ?? field.name) || "item";
+    rows.push({
+      id: `${field.id}-${depth}-${name}`,
+      name,
+      type: field.type,
+      required: field.required,
+      description: field.description,
+      enumText: field.enumText,
+      depth,
+    });
+
+    if (field.type === "object") {
+      field.children.forEach((child) => walk(child, depth + 1));
+    }
+    if (field.type === "array" && field.item) {
+      walk(field.item, depth + 1, `${name}[]`);
+    }
+  };
+
+  fields.forEach((field) => walk(field, 0));
+  return rows;
 };
 
 const toFieldPayload = (
@@ -517,6 +701,65 @@ function FieldEditor({
   );
 }
 
+function DetailSectionTitle({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="h-6 w-1 rounded-full bg-[var(--color-action-primary)]" />
+      <div className="text-base font-semibold text-[var(--color-text-primary)]">{title}</div>
+    </div>
+  );
+}
+
+function FieldTable({
+  fields,
+  emptyText = "暂无参数",
+}: {
+  fields: PluginField[];
+  emptyText?: string;
+}) {
+  const rows = flattenFields(fields);
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] px-4 py-5 text-sm text-[var(--color-text-muted)]">
+        {emptyText}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-default)]">
+      <div className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]">
+        <span>参数名称</span>
+        <span>参数类型</span>
+        <span>必填</span>
+        <span>参数描述</span>
+        <span>枚举值</span>
+      </div>
+      <div className="divide-y divide-[var(--color-border-default)] bg-white">
+        {rows.map((row) => (
+          <div
+            key={row.id}
+            className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 px-4 py-3 text-sm text-[var(--color-text-secondary)]"
+          >
+            <span
+              className="truncate text-[var(--color-text-primary)]"
+              style={{ paddingLeft: `${row.depth * 16}px` }}
+              title={row.name}
+            >
+              {row.name}
+            </span>
+            <span>{row.type}</span>
+            <span>{row.required ? "是" : "否"}</span>
+            <span>{row.description || "-"}</span>
+            <span>{row.enumText || "-"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PluginsPage() {
   const router = useRouter();
   const [keyword, setKeyword] = useState("");
@@ -536,11 +779,44 @@ export default function PluginsPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [selectedToolKey, setSelectedToolKey] = useState("");
+  const [uploadingIcon, setUploadingIcon] = useState(false);
+  const [defaultPluginIconURL, setDefaultPluginIconURL] = useState("");
+  const iconUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const previewJSON = useMemo(() => JSON.stringify(buildPayload(draft), null, 2), [draft]);
+  const activeTool = useMemo(() => {
+    const tools = selectedPlugin?.tools ?? [];
+    if (tools.length === 0) return null;
+    return (
+      tools.find((tool, index) => getToolKey(tool, index) === selectedToolKey) ?? tools[0] ?? null
+    );
+  }, [selectedPlugin, selectedToolKey]);
+  const activeToolInputSections = useMemo(
+    () =>
+      activeTool ? getInputSections(selectedPlugin?.runtime_type, activeTool) : [],
+    [activeTool, selectedPlugin?.runtime_type]
+  );
+  const activeToolOutputFields = useMemo(
+    () => (activeTool ? getOutputFields(activeTool) : []),
+    [activeTool]
+  );
 
   const getToken = useCallback(() => readValidToken(router), [router]);
+
+  useEffect(() => {
+    const tools = selectedPlugin?.tools ?? [];
+    if (tools.length === 0) {
+      setSelectedToolKey("");
+      return;
+    }
+
+    const nextKeys = tools.map((tool, index) => getToolKey(tool, index));
+    setSelectedToolKey((current) =>
+      current && nextKeys.includes(current) ? current : (nextKeys[0] ?? "")
+    );
+  }, [selectedPlugin]);
 
   const fetchList = useCallback(async () => {
     const token = getToken();
@@ -581,6 +857,30 @@ export default function PluginsPage() {
   useEffect(() => {
     void fetchList();
   }, [fetchList]);
+
+  const fetchPluginDefaults = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/v1/plugins/defaults`, {
+        headers: buildAuthHeaders(token),
+      });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "获取插件默认配置失败");
+      }
+      const nextURL =
+        typeof data.data?.default_icon_url === "string" ? data.data.default_icon_url.trim() : "";
+      setDefaultPluginIconURL(nextURL);
+    } catch {
+      setDefaultPluginIconURL("");
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    void fetchPluginDefaults();
+  }, [fetchPluginDefaults]);
 
   const fetchPluginDetail = async (pluginId: string) => {
     const token = getToken();
@@ -675,6 +975,44 @@ export default function PluginsPage() {
 
   const closeDetail = () => {
     setSelectedPlugin(null);
+  };
+
+  const openIconUpload = () => {
+    setFormError("");
+    iconUploadInputRef.current?.click();
+  };
+
+  const handleIconFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const token = getToken();
+    if (!token) return;
+    setUploadingIcon(true);
+    setFormError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_BASE}/v1/plugins/icon`, {
+        method: "POST",
+        headers: buildAuthHeaders(token),
+        body: formData,
+      });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "上传头像失败");
+      }
+      const url = typeof data.data?.url === "string" ? data.data.url : "";
+      if (!url) {
+        throw new Error("上传头像失败");
+      }
+      setDraft((current) => ({ ...current, icon: url }));
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "上传头像失败");
+    } finally {
+      setUploadingIcon(false);
+    }
   };
 
   const goNext = async () => {
@@ -964,6 +1302,7 @@ export default function PluginsPage() {
                         <PluginAvatar
                           src={item.icon}
                           name={item.name}
+                          fallbackSrc={defaultPluginIconURL}
                           className="h-11 w-11 shrink-0"
                         />
                         <div className="min-w-0 flex-1">
@@ -1075,11 +1414,17 @@ export default function PluginsPage() {
                 <PluginAvatar
                   src={selectedPlugin.icon}
                   name={selectedPlugin.name}
+                  fallbackSrc={defaultPluginIconURL}
                   className="h-14 w-14 shrink-0"
                 />
                 <div className="min-w-0">
-                  <div className="truncate text-lg font-semibold text-[var(--color-text-primary)]">
-                    {selectedPlugin.name || "未命名插件"}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <div className="truncate text-lg font-semibold text-[var(--color-text-primary)]">
+                      {selectedPlugin.name || "未命名插件"}
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      更新时间：{formatTime(selectedPlugin.updated_at)}
+                    </div>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <span>{selectedPlugin.source === "builtin" ? "内建" : "自定义"}</span>
@@ -1137,48 +1482,107 @@ export default function PluginsPage() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 text-sm md:grid-cols-3">
-              <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white px-3 py-3">
-                工具数：{selectedPlugin.tool_count ?? selectedPlugin.tools?.length ?? 0}
-              </div>
-              <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white px-3 py-3">
-                最近同步：{formatTime(selectedPlugin.last_sync_at)}
-              </div>
-              <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white px-3 py-3">
-                更新时间：{formatTime(selectedPlugin.updated_at)}
-              </div>
-            </div>
+            {selectedPlugin.tools && selectedPlugin.tools.length > 0 && activeTool ? (
+              <div className="mt-5 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white">
+                <div className="flex flex-wrap gap-2 border-b border-[var(--color-border-default)] px-5 py-4">
+                  {selectedPlugin.tools.map((tool, index) => {
+                    const key = getToolKey(tool, index);
+                    const active = key === selectedToolKey;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedToolKey(key)}
+                        className={`rounded-[var(--radius-md)] border px-4 py-2 text-sm transition ${
+                          active
+                            ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.08)] font-semibold text-[var(--color-action-primary)]"
+                            : "border-[var(--color-border-default)] text-[var(--color-text-secondary)]"
+                        }`}
+                      >
+                        {tool.tool_name || `工具 ${index + 1}`}
+                      </button>
+                    );
+                  })}
+                </div>
 
-            {selectedPlugin.tools && selectedPlugin.tools.length > 0 ? (
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {selectedPlugin.tools.map((tool) => (
-                  <div
-                    key={tool.tool_id || tool.tool_name}
-                    className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                        {tool.tool_name || "未命名工具"}
+                <div className="space-y-6 px-5 py-5">
+                  <section className="space-y-4">
+                    <DetailSectionTitle title="基础信息" />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3">
+                        <div className="text-xs text-[var(--color-text-muted)]">调用方式</div>
+                        <div className="mt-1 text-sm font-semibold text-[var(--color-text-primary)]">
+                          {activeTool.tool_response_mode
+                            ? responseModeLabel[
+                                activeTool.tool_response_mode as Exclude<ResponseMode, "">
+                              ] || activeTool.tool_response_mode
+                            : "-"}
+                        </div>
                       </div>
-                      <div className="text-xs text-[var(--color-text-muted)]">
-                        {tool.tool_response_mode || "non_streaming"}
+                      {selectedPlugin.runtime_type === "api" && (
+                        <>
+                          <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3">
+                            <div className="text-xs text-[var(--color-text-muted)]">请求方式</div>
+                            <div className="mt-1 text-sm font-semibold text-[var(--color-text-primary)]">
+                              {activeTool.api_request_type || "-"}
+                            </div>
+                          </div>
+                          <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3 md:col-span-2">
+                            <div className="text-xs text-[var(--color-text-muted)]">请求地址</div>
+                            <div className="mt-1 break-all text-sm font-semibold text-[var(--color-text-primary)]">
+                              {activeTool.request_url || "-"}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {selectedPlugin.runtime_type === "code" && (
+                        <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3">
+                          <div className="text-xs text-[var(--color-text-muted)]">代码语言</div>
+                          <div className="mt-1 text-sm font-semibold text-[var(--color-text-primary)]">
+                            {activeTool.code_language || "-"}
+                          </div>
+                        </div>
+                      )}
+                      {selectedPlugin.runtime_type === "mcp" && (
+                        <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3 md:col-span-2">
+                          <div className="text-xs text-[var(--color-text-muted)]">MCP 地址</div>
+                          <div className="mt-1 break-all text-sm font-semibold text-[var(--color-text-primary)]">
+                            {selectedPlugin.mcp_url || "-"}
+                          </div>
+                        </div>
+                      )}
+                      <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3 md:col-span-2">
+                        <div className="text-xs text-[var(--color-text-muted)]">工具描述</div>
+                        <div className="mt-1 text-sm text-[var(--color-text-primary)]">
+                          {activeTool.description || "暂无描述"}
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                      {tool.description || "暂无描述"}
-                    </div>
-                    {tool.request_url && (
-                      <div className="mt-2 break-all text-xs text-[var(--color-text-secondary)]">
-                        URL: {tool.request_url}
+                  </section>
+
+                  <section className="space-y-4">
+                    <DetailSectionTitle title="入参数" />
+                    {activeToolInputSections.length > 0 ? (
+                      <div className="space-y-4">
+                        {activeToolInputSections.map((section) => (
+                          <div key={section.key} className="space-y-2">
+                            <div className="text-sm font-semibold text-[var(--color-text-primary)]">
+                              {section.label}
+                            </div>
+                            <FieldTable fields={section.fields} />
+                          </div>
+                        ))}
                       </div>
+                    ) : (
+                      <FieldTable fields={[]} emptyText="暂无入参数配置" />
                     )}
-                    {tool.code_language && (
-                      <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
-                        Code: {tool.code_language}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  </section>
+
+                  <section className="space-y-4">
+                    <DetailSectionTitle title="出参数" />
+                    <FieldTable fields={activeToolOutputFields} emptyText="暂无结构化出参数配置" />
+                  </section>
+                </div>
               </div>
             ) : (
               <div className="mt-5 text-sm text-[var(--color-text-muted)]">暂无工具</div>
@@ -1210,7 +1614,12 @@ export default function PluginsPage() {
 
             <div className="grid gap-6 px-6 py-5 lg:grid-cols-[220px_minmax(0,1fr)]">
               <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-4">
-                {["选择类型", "基础信息", "运行配置", "预览确认"].map((label, index) => {
+                {[
+                  draft.pluginId ? "插件类型" : "选择类型",
+                  "基础信息",
+                  "运行配置",
+                  "预览确认",
+                ].map((label, index) => {
                   const step = index + 1;
                   const active = step === wizardStep;
                   return (
@@ -1235,51 +1644,71 @@ export default function PluginsPage() {
                 {wizardStep === 1 && (
                   <div>
                     <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                      第一步：选择来源与运行方式
+                      {draft.pluginId ? "第一步：查看插件类型" : "第一步：选择来源与运行方式"}
                     </div>
                     <div className="mt-2 text-xs text-[var(--color-text-muted)]">
-                      来源固定为 `custom`，`builtin` 保持只读。
-                    </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                      {(["api", "mcp", "code"] as Array<Exclude<RuntimeType, "">>).map(
-                        (runtime) => (
-                          <button
-                            key={runtime}
-                            type="button"
-                            onClick={() =>
-                              setDraft((current) => ({
-                                ...current,
-                                runtimeType: runtime,
-                                tool: {
-                                  ...current.tool,
-                                  toolResponseMode:
-                                    runtime === "code"
-                                      ? "non_streaming"
-                                      : current.tool.toolResponseMode,
-                                },
-                              }))
-                            }
-                            className={`rounded-[var(--radius-lg)] border p-4 text-left ${
-                              draft.runtimeType === runtime
-                                ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.06)]"
-                                : "border-[var(--color-border-default)]"
-                            }`}
-                          >
-                            <div className="text-base font-semibold text-[var(--color-text-primary)]">
-                              {runtimeLabel[runtime]}
-                            </div>
-                            <div className="mt-2 text-xs text-[var(--color-text-muted)]">
-                              {runtime === "api" &&
-                                "向导式配置请求方式、响应模式和 query/header/body 参数。"}
-                              {runtime === "mcp" &&
-                                "维护连接地址与同步状态，当前主要管理定义与手动同步。"}
-                              {runtime === "code" &&
-                                "配置输入参数、语言和脚本内容，并强制使用 non_streaming。"}
-                            </div>
-                          </button>
-                        )
+                      {draft.pluginId ? (
+                        "插件类型在创建时已确定，编辑时不可修改。"
+                      ) : (
+                        <>来源固定为 `custom`，`builtin` 保持只读。</>
                       )}
                     </div>
+                    {draft.pluginId ? (
+                      <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.06)] p-4">
+                        <div className="text-base font-semibold text-[var(--color-text-primary)]">
+                          {draft.runtimeType ? runtimeLabel[draft.runtimeType] : "未设置"}
+                        </div>
+                        <div className="mt-2 text-xs text-[var(--color-text-muted)]">
+                          {draft.runtimeType === "api" &&
+                            "向导式配置请求方式、响应模式和 query/header/body 参数。"}
+                          {draft.runtimeType === "mcp" &&
+                            "维护连接地址与同步状态，当前主要管理定义与手动同步。"}
+                          {draft.runtimeType === "code" &&
+                            "配置输入参数、语言和脚本内容，并强制使用 non_streaming。"}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        {(["api", "mcp", "code"] as Array<Exclude<RuntimeType, "">>).map(
+                          (runtime) => (
+                            <button
+                              key={runtime}
+                              type="button"
+                              onClick={() =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  runtimeType: runtime,
+                                  tool: {
+                                    ...current.tool,
+                                    toolResponseMode:
+                                      runtime === "code"
+                                        ? "non_streaming"
+                                        : current.tool.toolResponseMode,
+                                  },
+                                }))
+                              }
+                              className={`rounded-[var(--radius-lg)] border p-4 text-left ${
+                                draft.runtimeType === runtime
+                                  ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.06)]"
+                                  : "border-[var(--color-border-default)]"
+                              }`}
+                            >
+                              <div className="text-base font-semibold text-[var(--color-text-primary)]">
+                                {runtimeLabel[runtime]}
+                              </div>
+                              <div className="mt-2 text-xs text-[var(--color-text-muted)]">
+                                {runtime === "api" &&
+                                  "向导式配置请求方式、响应模式和 query/header/body 参数。"}
+                                {runtime === "mcp" &&
+                                  "维护连接地址与同步状态，当前主要管理定义与手动同步。"}
+                                {runtime === "code" &&
+                                  "配置输入参数、语言和脚本内容，并强制使用 non_streaming。"}
+                              </div>
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1288,7 +1717,7 @@ export default function PluginsPage() {
                     <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                       第二步：填写基础信息
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid items-start gap-4 md:grid-cols-2">
                       <UiInput
                         placeholder="插件名称"
                         value={draft.name}
@@ -1296,14 +1725,54 @@ export default function PluginsPage() {
                           setDraft((current) => ({ ...current, name: event.target.value }))
                         }
                       />
-                      <UiInput
-                        type="url"
-                        placeholder="头像地址（可选）"
-                        value={draft.icon}
-                        onChange={(event) =>
-                          setDraft((current) => ({ ...current, icon: event.target.value }))
-                        }
-                      />
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <UiInput
+                            type="text"
+                            inputMode="url"
+                            autoComplete="off"
+                            spellCheck={false}
+                            placeholder="头像地址（可选）"
+                            value={draft.icon}
+                            onChange={(event) =>
+                              setDraft((current) => ({ ...current, icon: event.target.value }))
+                            }
+                            className="sm:flex-1"
+                          />
+                          <UiButton
+                            variant="secondary"
+                            onClick={openIconUpload}
+                            loading={uploadingIcon}
+                          >
+                            上传头像
+                          </UiButton>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                          <PluginAvatar
+                            src={draft.icon}
+                            name={draft.name}
+                            fallbackSrc={defaultPluginIconURL}
+                            className="h-12 w-12 shrink-0"
+                          />
+                          <span className="truncate">
+                            {draft.icon.trim()
+                              ? "已回填头像地址，可继续手动调整"
+                              : defaultPluginIconURL
+                                ? "未填写时将使用后端默认头像，也可上传后回填 URL"
+                                : "支持直接输入 URL，或上传图片后自动回填 URL"}
+                          </span>
+                        </div>
+                        {/* eslint-disable-next-line no-restricted-syntax */}
+                        <input
+                          ref={iconUploadInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            void handleIconFileChange(event);
+                          }}
+                        />
+                      </div>
                     </div>
                     <UiInput
                       placeholder="描述"
