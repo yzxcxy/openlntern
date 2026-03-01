@@ -345,6 +345,7 @@ export default function WorkspaceLayout({
   const isA2ui = pathname === "/a2ui";
   const isChat = pathname === "/chat";
   const isSkill = pathname.startsWith("/skills");
+  const isPlugin = pathname.startsWith("/plugins");
   const isKB = pathname === "/kb";
   const isModel = pathname === "/models";
   const hasMoreHistory = historyItems.length < historyTotal;
@@ -525,6 +526,42 @@ export default function WorkspaceLayout({
                             </svg>
                           </span>
                           <span className="truncate text-[13px] font-semibold">Skill 市场</span>
+                        </span>
+                        <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
+                          <svg
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 5l6 7-6 7" />
+                          </svg>
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => router.push("/plugins")}
+                        className={quickEntryClass(isPlugin)}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="sidebar-quick-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border text-[var(--color-action-primary)]">
+                            <svg
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 2l2.5 4.8 5.3.8-3.9 3.8.9 5.3-4.8-2.5-4.8 2.5.9-5.3L4.2 7.6l5.3-.8L12 2z" />
+                              <circle cx="12" cy="12" r="2.2" />
+                            </svg>
+                          </span>
+                          <span className="truncate text-[13px] font-semibold">插件管理</span>
                         </span>
                         <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
                           <svg

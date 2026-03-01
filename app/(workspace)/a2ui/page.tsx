@@ -531,8 +531,8 @@ export default function A2uiPage() {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-[var(--color-text-secondary)]">
-          <div className="flex items-center gap-2">
-            <span>每页</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="shrink-0 whitespace-nowrap">每页</span>
             <UiSelect
               className="w-24"
               value={pageSize}

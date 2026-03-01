@@ -25,7 +25,7 @@ export function UiSelect({
         className={joinClasses(
           "ui-select-control",
           "block w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)]",
-          "bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)]",
+          "bg-[var(--color-bg-surface)] pl-3 pr-14 py-2 text-sm text-[var(--color-text-primary)]",
           "outline-none transition-[border-color,box-shadow] duration-150",
           "focus:border-[var(--color-action-primary)] focus:ring-2 focus:ring-[var(--color-action-primary-soft)]",
           "disabled:cursor-not-allowed disabled:opacity-60",
@@ -43,7 +43,7 @@ export function UiSelect({
       className={joinClasses(
         "ui-select-control",
         "block w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)]",
-        "bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)]",
+        "bg-[var(--color-bg-surface)] pl-3 pr-14 py-2 text-sm text-[var(--color-text-primary)]",
         "outline-none transition-[border-color,box-shadow] duration-150",
         "focus:border-[var(--color-action-primary)] focus:ring-2 focus:ring-[var(--color-action-primary-soft)]",
         "disabled:cursor-not-allowed disabled:opacity-60",

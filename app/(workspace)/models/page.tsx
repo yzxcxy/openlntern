@@ -325,8 +325,9 @@ export default function ModelsPage() {
       setSelectedProviderId("");
       return;
     }
+    const firstProviderId = providers[0]?.provider_id ?? "";
     setSelectedProviderId((prev) =>
-      providers.some((item) => item.provider_id === prev) ? prev : providers[0].provider_id
+      providers.some((item) => item.provider_id === prev) ? prev : firstProviderId
     );
   }, [providers]);
 
