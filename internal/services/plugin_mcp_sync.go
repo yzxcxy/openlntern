@@ -1,0 +1,559 @@
+package services
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"openIntern/internal/config"
+	"openIntern/internal/database"
+	"openIntern/internal/models"
+
+	mcpTool "github.com/cloudwego/eino-ext/components/tool/mcp"
+	einoTool "github.com/cloudwego/eino/components/tool"
+	"github.com/google/uuid"
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
+)
+
+const (
+	mcpSyncQueueRedisKey        = "openintern:plugin:mcp:sync"
+	defaultMCPSyncDelay         = 3 * time.Second
+	defaultMCPSyncPollInterval  = 3 * time.Second
+	defaultMCPSyncScanInterval  = time.Minute
+	defaultMCPSyncRefreshWindow = 15 * time.Minute
+	defaultMCPSyncTimeout       = 30 * time.Second
+	defaultMCPSyncRetryDelay    = time.Minute
+	defaultMCPSyncWorkerBatch   = 5
+)
+
+var (
+	mcpSyncDelay         = defaultMCPSyncDelay
+	mcpSyncPollInterval  = defaultMCPSyncPollInterval
+	mcpSyncScanInterval  = defaultMCPSyncScanInterval
+	mcpSyncRefreshWindow = defaultMCPSyncRefreshWindow
+	mcpSyncTimeout       = defaultMCPSyncTimeout
+	mcpSyncRetryDelay    = defaultMCPSyncRetryDelay
+
+	mcpSyncStartOnce sync.Once
+)
+
+func initPluginMCPSync(cfg config.PluginConfig) {
+	mcpSyncDelay = durationFromSeconds(cfg.MCPSyncDelaySeconds, defaultMCPSyncDelay)
+	mcpSyncPollInterval = durationFromSeconds(cfg.MCPSyncPollSeconds, defaultMCPSyncPollInterval)
+	mcpSyncScanInterval = durationFromSeconds(cfg.MCPSyncScanSeconds, defaultMCPSyncScanInterval)
+	mcpSyncRefreshWindow = durationFromSeconds(cfg.MCPSyncIntervalSeconds, defaultMCPSyncRefreshWindow)
+	mcpSyncTimeout = durationFromSeconds(cfg.MCPSyncTimeoutSeconds, defaultMCPSyncTimeout)
+	mcpSyncRetryDelay = durationFromSeconds(cfg.MCPSyncRetrySeconds, defaultMCPSyncRetryDelay)
+
+	mcpSyncStartOnce.Do(func() {
+		go Plugin.runMCPSyncScheduler()
+		go Plugin.runMCPSyncQueueWorker()
+	})
+}
+
+func durationFromSeconds(seconds int, fallback time.Duration) time.Duration {
+	if seconds <= 0 {
+		return fallback
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *PluginService) queueMCPPluginSync(pluginID string, delay time.Duration) error {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return nil
+	}
+	if delay < 0 {
+		delay = 0
+	}
+
+	redisClient := database.GetRedis()
+	if redisClient == nil {
+		time.AfterFunc(delay, func() {
+			s.triggerScheduledMCPSync(pluginID)
+		})
+		return nil
+	}
+
+	runAt := time.Now().Add(delay).UnixMilli()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return redisClient.ZAdd(ctx, mcpSyncQueueRedisKey, redis.Z{
+		Score:  float64(runAt),
+		Member: pluginID,
+	}).Err()
+}
+
+func (s *PluginService) clearMCPPluginSync(pluginID string) {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return
+	}
+	redisClient := database.GetRedis()
+	if redisClient == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := redisClient.ZRem(ctx, mcpSyncQueueRedisKey, pluginID).Err(); err != nil {
+		log.Printf("clear mcp sync queue failed plugin_id=%s err=%v", pluginID, err)
+	}
+}
+
+func (s *PluginService) runMCPSyncQueueWorker() {
+	if mcpSyncPollInterval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(mcpSyncPollInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := s.processQueuedMCPSyncTasks(context.Background(), defaultMCPSyncWorkerBatch); err != nil {
+			log.Printf("process queued mcp sync tasks failed err=%v", err)
+		}
+	}
+}
+
+func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int64) error {
+	redisClient := database.GetRedis()
+	if redisClient == nil {
+		return nil
+	}
+	if limit <= 0 {
+		limit = defaultMCPSyncWorkerBatch
+	}
+
+	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	ids, err := redisClient.ZRangeByScore(readCtx, mcpSyncQueueRedisKey, &redis.ZRangeBy{
+		Min:   "-inf",
+		Max:   strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Count: limit,
+	}).Result()
+	if err != nil {
+		return err
+	}
+
+	for _, pluginID := range ids {
+		removeCtx, removeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		removed, removeErr := redisClient.ZRem(removeCtx, mcpSyncQueueRedisKey, pluginID).Result()
+		removeCancel()
+		if removeErr != nil {
+			log.Printf("remove queued mcp sync task failed plugin_id=%s err=%v", pluginID, removeErr)
+			continue
+		}
+		if removed == 0 {
+			continue
+		}
+		s.triggerScheduledMCPSync(pluginID)
+	}
+
+	return nil
+}
+
+func (s *PluginService) runMCPSyncScheduler() {
+	if mcpSyncScanInterval <= 0 {
+		return
+	}
+
+	if err := s.scheduleDueMCPSyncs(context.Background()); err != nil {
+		log.Printf("initial mcp sync scheduling failed err=%v", err)
+	}
+
+	ticker := time.NewTicker(mcpSyncScanInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := s.scheduleDueMCPSyncs(context.Background()); err != nil {
+			log.Printf("periodic mcp sync scheduling failed err=%v", err)
+		}
+	}
+}
+
+func (s *PluginService) scheduleDueMCPSyncs(ctx context.Context) error {
+	if database.DB == nil {
+		return nil
+	}
+
+	var plugins []models.Plugin
+	cutoff := time.Now().Add(-mcpSyncRefreshWindow)
+	if err := database.DB.
+		Where("runtime_type = ? AND status = ?", pluginRuntimeMCP, pluginStatusEnabled).
+		Where("last_sync_at IS NULL OR last_sync_at <= ?", cutoff).
+		Find(&plugins).Error; err != nil {
+		return err
+	}
+
+	for _, plugin := range plugins {
+		if err := s.queueMCPPluginSync(plugin.PluginID, 0); err != nil {
+			log.Printf("enqueue scheduled mcp sync failed plugin_id=%s err=%v", plugin.PluginID, err)
+			go s.triggerScheduledMCPSync(plugin.PluginID)
+		}
+	}
+
+	return nil
+}
+
+func (s *PluginService) triggerScheduledMCPSync(pluginID string) {
+	if err := s.syncMCPPluginNow(context.Background(), pluginID, true); err != nil {
+		log.Printf("scheduled mcp sync failed plugin_id=%s err=%v", pluginID, err)
+		if mcpSyncRetryDelay > 0 && s.shouldRetryMCPPluginSync(pluginID) {
+			if queueErr := s.queueMCPPluginSync(pluginID, mcpSyncRetryDelay); queueErr != nil {
+				log.Printf("requeue mcp sync failed plugin_id=%s err=%v", pluginID, queueErr)
+			}
+		}
+	}
+}
+
+func (s *PluginService) shouldRetryMCPPluginSync(pluginID string) bool {
+	plugin, err := s.getPluginRecord(pluginID)
+	if err != nil {
+		return false
+	}
+	return plugin.RuntimeType == pluginRuntimeMCP && plugin.Status == pluginStatusEnabled
+}
+
+func (s *PluginService) syncMCPPluginNow(ctx context.Context, pluginID string, allowDisabled bool) error {
+	plugin, err := s.getPluginRecord(pluginID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return err
+	}
+	if plugin.RuntimeType != pluginRuntimeMCP {
+		return nil
+	}
+	if !allowDisabled && plugin.Status != pluginStatusEnabled {
+		return nil
+	}
+
+	syncCtx := ctx
+	cancel := func() {}
+	if syncCtx == nil {
+		syncCtx = context.Background()
+	}
+	if _, hasDeadline := syncCtx.Deadline(); !hasDeadline && mcpSyncTimeout > 0 {
+		syncCtx, cancel = context.WithTimeout(syncCtx, mcpSyncTimeout)
+	}
+	defer cancel()
+
+	return s.syncMCPPluginRecord(syncCtx, plugin)
+}
+
+func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.Plugin) error {
+	if plugin == nil {
+		return fmt.Errorf("plugin not found")
+	}
+
+	remoteTools, err := fetchMCPToolDefinitions(ctx, plugin.MCPURL, plugin.MCPProtocol)
+	if err != nil {
+		return err
+	}
+
+	var existingTools []models.Tool
+	if err := database.DB.Where("plugin_id = ?", plugin.PluginID).Find(&existingTools).Error; err != nil {
+		return err
+	}
+
+	syncedTools, err := buildSyncedMCPToolRecords(plugin.PluginID, remoteTools, existingTools)
+	if err != nil {
+		return err
+	}
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, syncedTools)
+		if len(removedToolIDs) > 0 {
+			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
+				return err
+			}
+		}
+		for _, tool := range toolsToUpdate {
+			if err := tx.Model(&models.Tool{}).
+				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, plugin.PluginID).
+				Updates(buildToolUpdateMap(tool)).Error; err != nil {
+				return err
+			}
+		}
+		if len(toolsToCreate) > 0 {
+			if err := tx.Create(&toolsToCreate).Error; err != nil {
+				return err
+			}
+		}
+		now := time.Now()
+		return tx.Model(&models.Plugin{}).
+			Where("plugin_id = ?", plugin.PluginID).
+			Update("last_sync_at", &now).Error
+	})
+}
+
+func fetchMCPToolDefinitions(ctx context.Context, baseURL string, protocol string) ([]mcp.Tool, error) {
+	cli, err := openMCPClient(ctx, baseURL, protocol)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = cli.Close()
+	}()
+
+	result, err := cli.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list mcp tools failed: %w", err)
+	}
+	return result.Tools, nil
+}
+
+func openMCPClient(ctx context.Context, baseURL string, protocol string) (*client.Client, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return nil, fmt.Errorf("mcp_url is required for mcp plugins")
+	}
+
+	var (
+		cli *client.Client
+		err error
+	)
+
+	switch normalizeMCPProtocol(protocol) {
+	case mcpProtocolSSE:
+		cli, err = client.NewSSEMCPClient(baseURL)
+	case mcpProtocolStreamableHTTP:
+		cli, err = client.NewStreamableHttpClient(baseURL)
+	default:
+		return nil, fmt.Errorf("mcp_protocol must be sse or streamableHttp")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cli.Start(ctx); err != nil {
+		_ = cli.Close()
+		return nil, err
+	}
+
+	initRequest := mcp.InitializeRequest{}
+	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initRequest.Params.ClientInfo = mcp.Implementation{
+		Name:    "openintern",
+		Version: "1.0.0",
+	}
+	if _, err := cli.Initialize(ctx, initRequest); err != nil {
+		_ = cli.Close()
+		return nil, err
+	}
+
+	return cli, nil
+}
+
+func buildSyncedMCPToolRecords(pluginID string, remoteTools []mcp.Tool, existingTools []models.Tool) ([]models.Tool, error) {
+	byName := make(map[string]models.Tool, len(existingTools))
+	for _, tool := range existingTools {
+		byName[tool.ToolName] = tool
+	}
+
+	defaultOutputSchema, err := normalizeOutputSchema("")
+	if err != nil {
+		return nil, err
+	}
+
+	synced := make([]models.Tool, 0, len(remoteTools))
+	for _, remoteTool := range remoteTools {
+		toolName := strings.TrimSpace(remoteTool.Name)
+		if toolName == "" {
+			continue
+		}
+
+		inputSchemaJSON, err := marshalMCPToolSchema(remoteTool.InputSchema)
+		if err != nil {
+			return nil, fmt.Errorf("marshal input schema for %s: %w", toolName, err)
+		}
+
+		outputSchemaJSON := defaultOutputSchema
+		if hasMCPOutputSchema(remoteTool) {
+			outputSchemaJSON, err = marshalMCPToolSchema(remoteTool.OutputSchema)
+			if err != nil {
+				return nil, fmt.Errorf("marshal output schema for %s: %w", toolName, err)
+			}
+		}
+
+		existing := byName[toolName]
+		toolID := strings.TrimSpace(existing.ToolID)
+		if toolID == "" {
+			toolID = uuid.NewString()
+		}
+
+		toolResponseMode := strings.TrimSpace(existing.ToolResponseMode)
+		if toolResponseMode == "" {
+			toolResponseMode = toolResponseNonStreaming
+		}
+
+		timeoutMS := existing.TimeoutMS
+		if timeoutMS <= 0 {
+			timeoutMS = defaultPluginTimeoutMS
+		}
+
+		synced = append(synced, models.Tool{
+			ToolID:           toolID,
+			PluginID:         pluginID,
+			ToolName:         toolName,
+			Description:      strings.TrimSpace(remoteTool.Description),
+			InputSchemaJSON:  inputSchemaJSON,
+			OutputSchemaJSON: outputSchemaJSON,
+			ToolResponseMode: toolResponseMode,
+			Enabled:          existing.ToolID == "" || existing.Enabled,
+			TimeoutMS:        timeoutMS,
+		})
+	}
+
+	sort.SliceStable(synced, func(i, j int) bool {
+		return synced[i].ToolName < synced[j].ToolName
+	})
+	return synced, nil
+}
+
+func marshalMCPToolSchema(schemaValue any) (string, error) {
+	raw, err := json.Marshal(schemaValue)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func hasMCPOutputSchema(tool mcp.Tool) bool {
+	return tool.OutputSchema.Type != "" ||
+		len(tool.OutputSchema.Properties) > 0 ||
+		len(tool.OutputSchema.Required) > 0 ||
+		len(tool.OutputSchema.Defs) > 0 ||
+		tool.OutputSchema.AdditionalProperties != nil
+}
+
+func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, pluginIDs []string, toolIDs []string) ([]einoTool.BaseTool, func(), error) {
+	pluginIDs = normalizeUniqueStringList(pluginIDs)
+	toolIDs = normalizeUniqueStringList(toolIDs)
+	if len(pluginIDs) == 0 && len(toolIDs) == 0 {
+		return nil, nil, nil
+	}
+
+	db := database.DB.Model(&models.Tool{}).
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
+		Where("plugin.runtime_type = ? AND plugin.status = ? AND tool.enabled = ?", pluginRuntimeMCP, pluginStatusEnabled, true)
+	if len(pluginIDs) > 0 {
+		db = db.Where("tool.plugin_id IN ?", pluginIDs)
+	}
+	if len(toolIDs) > 0 {
+		db = db.Where("tool.tool_id IN ?", toolIDs)
+	}
+
+	var toolRows []models.Tool
+	if err := db.Order("tool.tool_name ASC").Find(&toolRows).Error; err != nil {
+		return nil, nil, err
+	}
+	if len(toolRows) == 0 {
+		return nil, nil, nil
+	}
+
+	pluginIDSet := make(map[string]struct{}, len(toolRows))
+	toolNamesByPlugin := make(map[string][]string, len(toolRows))
+	for _, tool := range toolRows {
+		pluginIDSet[tool.PluginID] = struct{}{}
+		toolNamesByPlugin[tool.PluginID] = append(toolNamesByPlugin[tool.PluginID], tool.ToolName)
+	}
+
+	pluginIDList := make([]string, 0, len(pluginIDSet))
+	for pluginID := range pluginIDSet {
+		pluginIDList = append(pluginIDList, pluginID)
+	}
+	sort.Strings(pluginIDList)
+
+	var plugins []models.Plugin
+	if err := database.DB.
+		Where("plugin_id IN ? AND runtime_type = ? AND status = ?", pluginIDList, pluginRuntimeMCP, pluginStatusEnabled).
+		Find(&plugins).Error; err != nil {
+		return nil, nil, err
+	}
+
+	pluginByID := make(map[string]models.Plugin, len(plugins))
+	for _, plugin := range plugins {
+		pluginByID[plugin.PluginID] = plugin
+	}
+
+	var (
+		runtimeTools []einoTool.BaseTool
+		closers      []*client.Client
+	)
+
+	for _, pluginID := range pluginIDList {
+		plugin, ok := pluginByID[pluginID]
+		if !ok {
+			continue
+		}
+
+		cli, err := openMCPClient(ctx, plugin.MCPURL, plugin.MCPProtocol)
+		if err != nil {
+			closeMCPClients(closers)
+			return nil, nil, fmt.Errorf("connect mcp plugin %s failed: %w", pluginID, err)
+		}
+
+		pluginTools, err := mcpTool.GetTools(ctx, &mcpTool.Config{
+			Cli:          cli,
+			ToolNameList: toolNamesByPlugin[pluginID],
+		})
+		if err != nil {
+			_ = cli.Close()
+			closeMCPClients(closers)
+			return nil, nil, fmt.Errorf("load mcp plugin %s tools failed: %w", pluginID, err)
+		}
+
+		runtimeTools = append(runtimeTools, pluginTools...)
+		closers = append(closers, cli)
+	}
+
+	cleanup := func() {
+		closeMCPClients(closers)
+	}
+	return runtimeTools, cleanup, nil
+}
+
+func closeMCPClients(clients []*client.Client) {
+	for _, cli := range clients {
+		if cli == nil {
+			continue
+		}
+		if err := cli.Close(); err != nil {
+			log.Printf("close mcp client failed err=%v", err)
+		}
+	}
+}
+
+func normalizeUniqueStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}

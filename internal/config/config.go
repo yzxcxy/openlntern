@@ -13,6 +13,7 @@ type Config struct {
 	Redis        RedisConfig        `yaml:"redis"`
 	JWT          JWTConfig          `yaml:"jwt"`
 	COS          COSConfig          `yaml:"cos"`
+	Plugin       PluginConfig       `yaml:"plugin"`
 	LLM          LLMConfig          `yaml:"llm"`
 	SummaryLLM   LLMConfig          `yaml:"summary_llm"`
 	EmbeddingLLM EmbeddingLLMConfig `yaml:"embedding_llm"`
@@ -41,6 +42,16 @@ type COSConfig struct {
 	SecretKey string `yaml:"secret_key"`
 	Bucket    string `yaml:"bucket"`
 	Region    string `yaml:"region"`
+}
+
+type PluginConfig struct {
+	DefaultIconURL         string `yaml:"default_icon_url"`
+	MCPSyncDelaySeconds    int    `yaml:"mcp_sync_delay_seconds"`
+	MCPSyncPollSeconds     int    `yaml:"mcp_sync_poll_seconds"`
+	MCPSyncScanSeconds     int    `yaml:"mcp_sync_scan_seconds"`
+	MCPSyncIntervalSeconds int    `yaml:"mcp_sync_interval_seconds"`
+	MCPSyncTimeoutSeconds  int    `yaml:"mcp_sync_timeout_seconds"`
+	MCPSyncRetrySeconds    int    `yaml:"mcp_sync_retry_seconds"`
 }
 
 type LLMConfig struct {

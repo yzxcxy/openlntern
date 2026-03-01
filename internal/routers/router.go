@@ -79,6 +79,21 @@ func SetupRouter() *gin.Engine {
 		skillMetaGroup.GET("/:name", controllers.GetSkillMetaByName)
 	}
 
+	pluginGroup := r.Group("/v1/plugins", middleware.AuthRequired())
+	{
+		pluginGroup.GET("", controllers.ListPlugins)
+		pluginGroup.POST("", controllers.CreatePlugin)
+		pluginGroup.GET("/defaults", controllers.GetPluginDefaults)
+		pluginGroup.POST("/icon", controllers.UploadPluginIcon)
+		pluginGroup.GET("/available-for-chat", controllers.ListAvailablePluginsForChat)
+		pluginGroup.GET("/:id", controllers.GetPlugin)
+		pluginGroup.PUT("/:id", controllers.UpdatePlugin)
+		pluginGroup.POST("/:id/enable", controllers.EnablePlugin)
+		pluginGroup.POST("/:id/disable", controllers.DisablePlugin)
+		pluginGroup.POST("/:id/sync", controllers.SyncPlugin)
+		pluginGroup.DELETE("/:id", controllers.DeletePlugin)
+	}
+
 	kbGroup := r.Group("/v1/kbs", middleware.AuthRequired())
 	{
 		kbGroup.GET("", controllers.ListKnowledgeBases)

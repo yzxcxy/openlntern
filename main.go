@@ -23,6 +23,7 @@ func main() {
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
+	services.InitPlugin(cfg.Plugin)
 	if err := embedding.InitEmbedding(cfg.EmbeddingLLM); err != nil {
 		log.Fatalf("failed to init embedding service: %v", err)
 	}

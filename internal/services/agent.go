@@ -323,6 +323,11 @@ type AgentRuntimeConfig struct {
 		ProviderID string
 		ModelID    string
 	}
+	Plugins struct {
+		Mode              string
+		SelectedPluginIDs []string
+		SelectedToolIDs   []string
+	}
 	Features map[string]any
 }
 
@@ -397,6 +402,29 @@ func (h agentConfigForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext
 			ctx.runtimeConfig.Model.ModelID = strings.TrimSpace(fmt.Sprintf("%v", modelID))
 		}
 	}
+	if pluginsRaw, ok := cfgMap["plugins"]; ok {
+		pluginsMap, err := normalizeForwardedPropsMap(pluginsRaw)
+		if err != nil {
+			return fmt.Errorf("normalize %s.plugins: %w", forwardedPropKeyAgentConfig, err)
+		}
+		if mode, ok := pluginsMap["mode"]; ok {
+			ctx.runtimeConfig.Plugins.Mode = strings.TrimSpace(fmt.Sprintf("%v", mode))
+		}
+		if selectedPluginIDsRaw, ok := pluginsMap["selectedPluginIds"]; ok {
+			selectedPluginIDs, err := normalizeForwardedPropsStringList(selectedPluginIDsRaw)
+			if err != nil {
+				return fmt.Errorf("normalize %s.plugins.selectedPluginIds: %w", forwardedPropKeyAgentConfig, err)
+			}
+			ctx.runtimeConfig.Plugins.SelectedPluginIDs = selectedPluginIDs
+		}
+		if selectedToolIDsRaw, ok := pluginsMap["selectedToolIds"]; ok {
+			selectedToolIDs, err := normalizeForwardedPropsStringList(selectedToolIDsRaw)
+			if err != nil {
+				return fmt.Errorf("normalize %s.plugins.selectedToolIds: %w", forwardedPropKeyAgentConfig, err)
+			}
+			ctx.runtimeConfig.Plugins.SelectedToolIDs = selectedToolIDs
+		}
+	}
 	if featuresRaw, ok := cfgMap["features"]; ok {
 		featuresMap, err := normalizeForwardedPropsMap(featuresRaw)
 		if err != nil {
@@ -414,6 +442,7 @@ func applyForwardedPropsChain(input *types.RunAgentInput) (*AgentRuntimeConfig, 
 		Features: map[string]any{},
 	}
 	runtimeConfig.Conversation.Mode = "chat"
+	runtimeConfig.Plugins.Mode = "select"
 	if input == nil {
 		return runtimeConfig, nil
 	}
@@ -474,13 +503,73 @@ func normalizeForwardedPropsMap(raw any) (map[string]any, error) {
 	return props, nil
 }
 
+func normalizeForwardedPropsStringList(raw any) ([]string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	if values, ok := raw.([]string); ok {
+		return normalizeUniqueStringList(values), nil
+	}
+	if values, ok := raw.([]any); ok {
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			text := strings.TrimSpace(fmt.Sprintf("%v", value))
+			if text != "" {
+				result = append(result, text)
+			}
+		}
+		return normalizeUniqueStringList(result), nil
+	}
+	if text, ok := raw.(string); ok {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return nil, nil
+		}
+		return []string{text}, nil
+	}
+
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	if string(b) == "null" {
+		return nil, nil
+	}
+
+	var values []any
+	if err := json.Unmarshal(b, &values); err == nil {
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			text := strings.TrimSpace(fmt.Sprintf("%v", value))
+			if text != "" {
+				result = append(result, text)
+			}
+		}
+		return normalizeUniqueStringList(result), nil
+	}
+
+	var single string
+	if err := json.Unmarshal(b, &single); err == nil {
+		single = strings.TrimSpace(single)
+		if single == "" {
+			return nil, nil
+		}
+		return []string{single}, nil
+	}
+
+	return nil, fmt.Errorf("must be a string or string list")
+}
+
 func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, messages []*schema.Message, runtimeConfig *AgentRuntimeConfig) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	runner, err := buildEinoRunner(ctx, runtimeConfig)
+	runner, cleanup, err := buildEinoRunner(ctx, runtimeConfig)
 	if err != nil {
 		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
 	}
 	iter := runner.Run(ctx, messages)
 	for {
@@ -518,10 +607,14 @@ func runEinoStreaming(ctx context.Context, sender *agui.AccumulatingSender, mess
 	return nil
 }
 
-func buildEinoRunner(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (*adk.Runner, error) {
+func buildEinoRunner(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (*adk.Runner, func(), error) {
 	chatModel, err := buildRuntimeChatModel(ctx, runtimeConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	runtimeTools, cleanup, err := resolveRuntimeTools(ctx, runtimeConfig)
+	if err != nil {
+		return nil, nil, err
 	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "openintern_agent",
@@ -529,15 +622,39 @@ func buildEinoRunner(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (*a
 		Model:       chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: agentTools,
+				Tools: runtimeTools,
 			},
 		},
 		Middlewares: agentMiddlewares,
 	})
 	if err != nil {
-		return nil, err
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, nil, err
 	}
-	return adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true}), nil
+	return adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true}), cleanup, nil
+}
+
+func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig) ([]einoTool.BaseTool, func(), error) {
+	resolved := make([]einoTool.BaseTool, 0, len(agentTools))
+	resolved = append(resolved, agentTools...)
+
+	if runtimeConfig == nil || strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
+		return resolved, nil, nil
+	}
+
+	pluginTools, cleanup, err := Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedPluginIDs, runtimeConfig.Plugins.SelectedToolIDs)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, nil, err
+	}
+	if len(pluginTools) > 0 {
+		resolved = append(resolved, pluginTools...)
+	}
+	return resolved, cleanup, nil
 }
 
 func buildRuntimeChatModel(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (einoModel.ToolCallingChatModel, error) {
