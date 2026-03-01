@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
@@ -22,6 +23,7 @@ type RuntimeType = "" | "api" | "mcp" | "code";
 type ResponseMode = "" | "streaming" | "non_streaming";
 type RequestType = "GET" | "POST";
 type FieldType = "string" | "number" | "integer" | "boolean" | "object" | "array";
+type MCPProtocol = "sse" | "streamableHttp";
 
 type PluginField = {
   id: string;
@@ -29,6 +31,7 @@ type PluginField = {
   type: FieldType;
   required: boolean;
   description: string;
+  defaultValue: string;
   enumText: string;
   children: PluginField[];
   item: PluginField | null;
@@ -96,7 +99,7 @@ type PluginDraft = {
   enabled: boolean;
   runtimeType: RuntimeType;
   mcpURL: string;
-  mcpProtocol: string;
+  mcpProtocol: MCPProtocol;
   tool: ToolDraft;
 };
 
@@ -112,6 +115,7 @@ type FlatFieldRow = {
   type: FieldType;
   required: boolean;
   description: string;
+  defaultValue: string;
   enumText: string;
   depth: number;
 };
@@ -131,6 +135,7 @@ const createField = (type: FieldType = "string"): PluginField => ({
   type,
   required: false,
   description: "",
+  defaultValue: "",
   enumText: "",
   children: [],
   item: type === "array" ? createField("string") : null,
@@ -139,7 +144,7 @@ const createField = (type: FieldType = "string"): PluginField => ({
 const createToolDraft = (): ToolDraft => ({
   toolName: "",
   description: "",
-  toolResponseMode: "",
+  toolResponseMode: "non_streaming",
   apiRequestType: "GET",
   requestURL: "",
   authConfigRef: "",
@@ -172,6 +177,14 @@ const responseModeLabel: Record<Exclude<ResponseMode, "">, string> = {
   streaming: "流式",
   non_streaming: "非流式",
 };
+
+const mcpProtocolLabel: Record<MCPProtocol, string> = {
+  sse: "服务器发送事件（SSE）",
+  streamableHttp: "可流式传输的 HTTP（streamableHttp）",
+};
+
+const normalizeMCPProtocolValue = (value: unknown): MCPProtocol =>
+  value === "streamableHttp" ? "streamableHttp" : "sse";
 
 const getToolKey = (tool: PluginTool, index: number) =>
   tool.tool_id || tool.tool_name || `tool-${index}`;
@@ -237,6 +250,19 @@ const normalizeFieldType = (value: unknown): FieldType => {
   return "string";
 };
 
+const stringifyDefaultValue = (value: unknown): string => {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+};
+
 const parseField = (value: unknown): PluginField | null => {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -257,6 +283,7 @@ const parseField = (value: unknown): PluginField | null => {
     type,
     required: Boolean(record.required),
     description: typeof record.description === "string" ? record.description : "",
+    defaultValue: stringifyDefaultValue(record.default_value),
     enumText: enumValues.join(", "),
     children,
     item: type === "array" ? item ?? createField("string") : null,
@@ -310,6 +337,7 @@ const parseSchemaField = (
     type,
     required,
     description: typeof value.description === "string" ? value.description : "",
+    defaultValue: stringifyDefaultValue(value.default),
     enumText: enumValues.join(", "),
     children,
     item,
@@ -388,6 +416,7 @@ const flattenFields = (fields: PluginField[]): FlatFieldRow[] => {
       type: field.type,
       required: field.required,
       description: field.description,
+      defaultValue: field.defaultValue,
       enumText: field.enumText,
       depth,
     });
@@ -412,6 +441,7 @@ const toFieldPayload = (
   type: field.type,
   required: field.required,
   description: field.description.trim(),
+  ...(field.defaultValue.trim() ? { default_value: field.defaultValue.trim() } : {}),
   enum_values:
     field.type === "string"
       ? field.enumText
@@ -437,7 +467,7 @@ const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
 
   if (draft.runtimeType === "mcp") {
     payload.mcp_url = draft.mcpURL.trim();
-    payload.mcp_protocol = draft.mcpProtocol.trim();
+    payload.mcp_protocol = draft.mcpProtocol;
     payload.tools = [];
     return payload;
   }
@@ -453,8 +483,11 @@ const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
     toolPayload.tool_response_mode = draft.tool.toolResponseMode;
     toolPayload.api_request_type = draft.tool.apiRequestType;
     toolPayload.request_url = draft.tool.requestURL.trim();
-    toolPayload.auth_config_ref = draft.tool.authConfigRef.trim();
-    toolPayload.timeout_ms = Number(draft.tool.timeoutMS) || 30000;
+    toolPayload.auth_config_ref = "";
+    toolPayload.timeout_ms =
+      Number.isFinite(draft.tool.timeoutMS) && draft.tool.timeoutMS >= 1
+        ? draft.tool.timeoutMS
+        : 30000;
     toolPayload.query_fields = draft.tool.queryFields.map((field) => toFieldPayload(field));
     toolPayload.header_fields = draft.tool.headerFields.map((field) => toFieldPayload(field));
     toolPayload.body_fields =
@@ -483,6 +516,40 @@ const validateURL = (value: string) => {
   }
 };
 
+const validateDefaultValue = (field: PluginField, sectionLabel: string) => {
+  const raw = field.defaultValue.trim();
+  if (!raw) return "";
+
+  if (field.type === "string") {
+    return "";
+  }
+  if (field.type === "number" && Number.isFinite(Number(raw))) {
+    return "";
+  }
+  if (field.type === "integer" && /^[-+]?\d+$/.test(raw)) {
+    return "";
+  }
+  if (field.type === "boolean" && /^(true|false|1|0)$/i.test(raw)) {
+    return "";
+  }
+
+  if (field.type === "object" || field.type === "array") {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (field.type === "object" && isRecord(parsed)) {
+        return "";
+      }
+      if (field.type === "array" && Array.isArray(parsed)) {
+        return "";
+      }
+    } catch {
+      return `${sectionLabel}的默认值格式不正确`;
+    }
+  }
+
+  return `${sectionLabel}的默认值与字段类型不匹配`;
+};
+
 const validateFieldList = (
   fields: PluginField[],
   sectionLabel: string,
@@ -500,6 +567,8 @@ const validateFieldList = (
       }
       names.add(name);
     }
+    const defaultValueError = validateDefaultValue(field, `${sectionLabel}/${name || "字段"}`);
+    if (defaultValueError) return defaultValueError;
     if (field.type === "string" && field.enumText.trim()) {
       const enums = field.enumText
         .split(",")
@@ -533,7 +602,7 @@ const validateDraft = (draft: PluginDraft) => {
   if (!draft.name.trim()) return "请输入插件名称";
   if (draft.runtimeType === "api") {
     if (!draft.tool.toolName.trim()) return "请输入工具名称";
-    if (!draft.tool.toolResponseMode) return "请选择 ToolResponseMode";
+    if (!draft.tool.toolResponseMode) return "请选择响应模式";
     if (!draft.tool.requestURL.trim() || !validateURL(draft.tool.requestURL.trim())) {
       return "请输入合法的 RequestURL";
     }
@@ -574,8 +643,8 @@ function FieldListEditor({
   onChange: (next: PluginField[]) => void;
 }) {
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-default)] px-4 py-3">
         <div className="text-sm font-semibold text-[var(--color-text-primary)]">{label}</div>
         <UiButton
           type="button"
@@ -586,47 +655,94 @@ function FieldListEditor({
           新增字段
         </UiButton>
       </div>
-      <div className="mt-3 space-y-3">
-        {fields.length === 0 ? (
-          <div className="text-xs text-[var(--color-text-muted)]">暂无字段</div>
-        ) : (
-          fields.map((field, index) => (
-            <FieldEditor
-              key={field.id}
-              field={field}
-              onChange={(nextField) =>
-                onChange(fields.map((item, itemIndex) => (itemIndex === index ? nextField : item)))
-              }
-              onRemove={() => onChange(fields.filter((_, itemIndex) => itemIndex !== index))}
-            />
-          ))
-        )}
+      <div className="overflow-x-auto">
+        <div className="min-w-[1320px]">
+          <div className="grid grid-cols-[minmax(220px,2fr)_minmax(220px,2fr)_140px_minmax(180px,1.4fr)_minmax(220px,1.8fr)_96px_160px] gap-3 border-b border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]">
+            <span>参数名称</span>
+            <span>参数描述</span>
+            <span>参数类型</span>
+            <span>默认值</span>
+            <span>枚举值</span>
+            <span>必填</span>
+            <span>操作</span>
+          </div>
+          {fields.length === 0 ? (
+            <div className="px-4 py-5 text-sm text-[var(--color-text-muted)]">暂无字段</div>
+          ) : (
+            <div className="divide-y divide-[var(--color-border-default)]">
+              <FieldRowsEditor fields={fields} depth={0} onChange={onChange} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+function FieldRowsEditor({
+  fields,
+  depth,
+  onChange,
+}: {
+  fields: PluginField[];
+  depth: number;
+  onChange: (next: PluginField[]) => void;
+}) {
+  return (
+    <>
+      {fields.map((field, index) => (
+        <FieldEditor
+          key={field.id}
+          field={field}
+          depth={depth}
+          onChange={(nextField) =>
+            onChange(fields.map((item, itemIndex) => (itemIndex === index ? nextField : item)))
+          }
+          onRemove={() => onChange(fields.filter((_, itemIndex) => itemIndex !== index))}
+        />
+      ))}
+    </>
+  );
+}
+
 function FieldEditor({
   field,
+  depth,
   onChange,
   onRemove,
   isArrayItem = false,
 }: {
   field: PluginField;
+  depth: number;
   onChange: (next: PluginField) => void;
   onRemove?: () => void;
   isArrayItem?: boolean;
 }) {
+  const showEnumEditor = field.type === "string";
+  const showObjectChildren = field.type === "object";
+  const showArrayItem = field.type === "array" && field.item;
+
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        {!isArrayItem && (
-          <UiInput
-            placeholder="字段名"
-            value={field.name}
-            onChange={(event) => onChange({ ...field, name: event.target.value })}
-          />
-        )}
+    <>
+      <div className="grid grid-cols-[minmax(220px,2fr)_minmax(220px,2fr)_140px_minmax(180px,1.4fr)_minmax(220px,1.8fr)_96px_160px] gap-3 px-4 py-3">
+        <div style={{ paddingLeft: `${depth * 24}px` }}>
+          {isArrayItem ? (
+            <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 text-sm text-[var(--color-text-secondary)]">
+              数组元素
+            </div>
+          ) : (
+            <UiInput
+              placeholder="参数名称"
+              value={field.name}
+              onChange={(event) => onChange({ ...field, name: event.target.value })}
+            />
+          )}
+        </div>
+        <UiInput
+          placeholder="参数描述"
+          value={field.description}
+          onChange={(event) => onChange({ ...field, description: event.target.value })}
+        />
         <UiSelect
           value={field.type}
           onChange={(event) => {
@@ -648,11 +764,26 @@ function FieldEditor({
           <option value="array">array</option>
         </UiSelect>
         <UiInput
-          placeholder="描述"
-          value={field.description}
-          onChange={(event) => onChange({ ...field, description: event.target.value })}
+          placeholder={
+            field.type === "object" || field.type === "array"
+              ? "JSON 默认值（可选）"
+              : "默认值（可选）"
+          }
+          value={field.defaultValue}
+          onChange={(event) => onChange({ ...field, defaultValue: event.target.value })}
         />
-        <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 text-sm text-[var(--color-text-secondary)]">
+        {showEnumEditor ? (
+          <UiInput
+            placeholder="逗号分隔，可选"
+            value={field.enumText}
+            onChange={(event) => onChange({ ...field, enumText: event.target.value })}
+          />
+        ) : (
+          <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[rgba(148,163,184,0.05)] px-3 text-xs text-[var(--color-text-muted)]">
+            仅 string 可配置
+          </div>
+        )}
+        <label className="flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 text-sm text-[var(--color-text-secondary)]">
           <input
             type="checkbox"
             checked={field.required}
@@ -660,44 +791,59 @@ function FieldEditor({
           />
           必填
         </label>
+        <div className="flex items-center justify-end gap-2">
+          {showObjectChildren && (
+            <UiButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                onChange({
+                  ...field,
+                  children: [...field.children, createField()],
+                })
+              }
+            >
+              添加子项
+            </UiButton>
+          )}
+          {onRemove ? (
+            <UiButton type="button" variant="ghost" size="sm" onClick={onRemove}>
+              删除
+            </UiButton>
+          ) : (
+            <div className="h-8" />
+          )}
+        </div>
       </div>
-      {field.type === "string" && (
-        <UiInput
-          className="mt-3"
-          placeholder="枚举值，逗号分隔（可选）"
-          value={field.enumText}
-          onChange={(event) => onChange({ ...field, enumText: event.target.value })}
-        />
-      )}
-      {field.type === "object" && (
-        <div className="mt-3">
-          <FieldListEditor
-            label={`${field.name || "对象字段"}子字段`}
-            fields={field.children}
-            onChange={(nextChildren) => onChange({ ...field, children: nextChildren })}
-          />
+      {showObjectChildren && field.children.length === 0 && (
+        <div className="px-4 pb-3">
+          <div
+            className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-2 text-xs text-[var(--color-text-muted)]"
+            style={{ marginLeft: `${(depth + 1) * 24}px` }}
+          >
+            当前对象还没有子字段，点击“添加子项”继续配置。
+          </div>
         </div>
       )}
-      {field.type === "array" && field.item && (
-        <div className="mt-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] p-3">
-          <div className="mb-2 text-xs font-semibold text-[var(--color-text-secondary)]">
-            数组元素定义
-          </div>
+      {showObjectChildren && field.children.length > 0 && (
+        <FieldRowsEditor
+          fields={field.children}
+          depth={depth + 1}
+          onChange={(nextChildren) => onChange({ ...field, children: nextChildren })}
+        />
+      )}
+      {showArrayItem && (
+        <div className="border-t border-dashed border-[var(--color-border-default)] bg-[rgba(148,163,184,0.04)]">
           <FieldEditor
-            field={field.item}
+            field={field.item!}
+            depth={depth + 1}
             isArrayItem
             onChange={(nextItem) => onChange({ ...field, item: nextItem })}
           />
         </div>
       )}
-      {onRemove && (
-        <div className="mt-3 flex justify-end">
-          <UiButton type="button" variant="secondary" size="sm" onClick={onRemove}>
-            删除字段
-          </UiButton>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -706,6 +852,26 @@ function DetailSectionTitle({ title }: { title: string }) {
     <div className="flex items-center gap-3">
       <span className="h-6 w-1 rounded-full bg-[var(--color-action-primary)]" />
       <div className="text-base font-semibold text-[var(--color-text-primary)]">{title}</div>
+    </div>
+  );
+}
+
+function FormFieldRow({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid items-center gap-3 md:grid-cols-[140px_minmax(0,1fr)]">
+      <div className="text-sm font-medium text-[var(--color-text-secondary)]">
+        {label}
+        {required && <span className="ml-1 text-[var(--color-state-error)]">*</span>}
+      </div>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -729,10 +895,11 @@ function FieldTable({
 
   return (
     <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-default)]">
-      <div className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]">
+      <div className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(180px,1.4fr)_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]">
         <span>参数名称</span>
         <span>参数类型</span>
         <span>必填</span>
+        <span>默认值</span>
         <span>参数描述</span>
         <span>枚举值</span>
       </div>
@@ -740,7 +907,7 @@ function FieldTable({
         {rows.map((row) => (
           <div
             key={row.id}
-            className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 px-4 py-3 text-sm text-[var(--color-text-secondary)]"
+            className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(180px,1.4fr)_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 px-4 py-3 text-sm text-[var(--color-text-secondary)]"
           >
             <span
               className="truncate text-[var(--color-text-primary)]"
@@ -751,6 +918,7 @@ function FieldTable({
             </span>
             <span>{row.type}</span>
             <span>{row.required ? "是" : "否"}</span>
+            <span>{row.defaultValue || "-"}</span>
             <span>{row.description || "-"}</span>
             <span>{row.enumText || "-"}</span>
           </div>
@@ -906,16 +1074,20 @@ export default function PluginsPage() {
       enabled: plugin.status !== "disabled",
       runtimeType: plugin.runtime_type ?? "",
       mcpURL: plugin.mcp_url ?? "",
-      mcpProtocol: plugin.mcp_protocol ?? "sse",
+      mcpProtocol: normalizeMCPProtocolValue(plugin.mcp_protocol),
       tool: {
         toolId: tool?.tool_id,
         toolName: tool?.tool_name ?? "",
         description: tool?.description ?? "",
-        toolResponseMode: tool?.tool_response_mode ?? "",
+        toolResponseMode:
+          tool?.tool_response_mode === "streaming" ? "streaming" : "non_streaming",
         apiRequestType: tool?.api_request_type ?? "GET",
         requestURL: tool?.request_url ?? "",
         authConfigRef: tool?.auth_config_ref ?? "",
-        timeoutMS: tool?.timeout_ms ?? 30000,
+        timeoutMS:
+          typeof tool?.timeout_ms === "number" && tool.timeout_ms >= 1
+            ? tool.timeout_ms
+            : 30000,
         queryFields: parseFields(tool?.query_fields),
         headerFields: parseFields(tool?.header_fields),
         bodyFields: parseFields(tool?.body_fields),
@@ -1309,9 +1481,6 @@ export default function PluginsPage() {
                           <div className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
                             {item.name || "未命名插件"}
                           </div>
-                          <div className="mt-1 line-clamp-2 text-xs text-[var(--color-text-muted)]">
-                            {item.description || "暂无描述"}
-                          </div>
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -1333,17 +1502,12 @@ export default function PluginsPage() {
                           {item.status || "disabled"}
                         </span>
                       </div>
-                      <div className="mt-3 text-xs text-[var(--color-text-muted)]">
-                        工具 {item.tool_count ?? item.tools?.length ?? 0} 个
-                      </div>
-                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                        {item.runtime_type === "mcp"
-                          ? `最近同步 ${formatTime(item.last_sync_at || item.updated_at)}`
-                          : `更新时间 ${formatTime(item.updated_at)}`}
-                      </div>
-                      <div className="mt-4 text-xs font-semibold text-[var(--color-action-primary)]">
-                        点击查看并管理
-                      </div>
+                      <div
+                        className="mt-3 line-clamp-2 text-xs text-[var(--color-text-muted)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
+                        dangerouslySetInnerHTML={{
+                          __html: item.description?.trim() || "暂无描述",
+                        }}
+                      />
                     </button>
                   ))}
                 </div>
@@ -1437,9 +1601,12 @@ export default function PluginsPage() {
                     <span>·</span>
                     <span>{selectedPlugin.status || "disabled"}</span>
                   </div>
-                  <div className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                    {selectedPlugin.description || "暂无描述"}
-                  </div>
+                  <div
+                    className="mt-2 text-sm text-[var(--color-text-secondary)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
+                    dangerouslySetInnerHTML={{
+                      __html: selectedPlugin.description?.trim() || "暂无描述",
+                    }}
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1553,9 +1720,12 @@ export default function PluginsPage() {
                       )}
                       <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3 md:col-span-2">
                         <div className="text-xs text-[var(--color-text-muted)]">工具描述</div>
-                        <div className="mt-1 text-sm text-[var(--color-text-primary)]">
-                          {activeTool.description || "暂无描述"}
-                        </div>
+                        <div
+                          className="mt-1 text-sm text-[var(--color-text-primary)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
+                          dangerouslySetInnerHTML={{
+                            __html: activeTool.description?.trim() || "暂无描述",
+                          }}
+                        />
                       </div>
                     </div>
                   </section>
@@ -1592,11 +1762,11 @@ export default function PluginsPage() {
       </div>
 
       {isWizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-[24px] border border-[var(--color-border-default)] bg-white shadow-[var(--shadow-lg)]">
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-default)] px-6 py-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-2 md:p-6">
+          <div className="flex h-[94vh] w-full max-w-[1440px] flex-col overflow-hidden rounded-[28px] border border-[var(--color-border-default)] bg-white shadow-[var(--shadow-lg)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-default)] px-8 py-5">
               <div>
-                <div className="text-lg font-semibold text-[var(--color-text-primary)]">
+                <div className="text-xl font-semibold text-[var(--color-text-primary)]">
                   {draft.pluginId ? "编辑插件" : "新增插件"}
                 </div>
                 <div className="mt-1 text-xs text-[var(--color-text-muted)]">
@@ -1612,8 +1782,8 @@ export default function PluginsPage() {
               </button>
             </div>
 
-            <div className="grid gap-6 px-6 py-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-4">
+            <div className="flex-1 overflow-auto px-8 py-6">
+              <div className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-3 md:grid-cols-4">
                 {[
                   draft.pluginId ? "插件类型" : "选择类型",
                   "基础信息",
@@ -1625,13 +1795,19 @@ export default function PluginsPage() {
                   return (
                     <div
                       key={label}
-                      className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm ${
+                      className={`flex items-center justify-center gap-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm ${
                         active
-                          ? "bg-white font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]"
-                          : "text-[var(--color-text-muted)]"
+                          ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)] font-semibold text-white shadow-[var(--shadow-sm)]"
+                          : "border-transparent bg-white text-[var(--color-text-muted)]"
                       }`}
                     >
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--color-border-default)]">
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full border ${
+                          active
+                            ? "border-white/50 bg-white/10"
+                            : "border-[var(--color-border-default)]"
+                        }`}
+                      >
                         {step}
                       </span>
                       <span>{label}</span>
@@ -1640,7 +1816,7 @@ export default function PluginsPage() {
                 })}
               </div>
 
-              <div>
+              <div className="mt-6">
                 {wizardStep === 1 && (
                   <div>
                     <div className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -1664,7 +1840,7 @@ export default function PluginsPage() {
                           {draft.runtimeType === "mcp" &&
                             "维护连接地址与同步状态，当前主要管理定义与手动同步。"}
                           {draft.runtimeType === "code" &&
-                            "配置输入参数、语言和脚本内容，并强制使用 non_streaming。"}
+                            "配置输入参数、语言和脚本内容，并固定使用非流式。"}
                         </div>
                       </div>
                     ) : (
@@ -1702,7 +1878,7 @@ export default function PluginsPage() {
                                 {runtime === "mcp" &&
                                   "维护连接地址与同步状态，当前主要管理定义与手动同步。"}
                                 {runtime === "code" &&
-                                  "配置输入参数、语言和脚本内容，并强制使用 non_streaming。"}
+                                  "配置输入参数、语言和脚本内容，并固定使用非流式。"}
                               </div>
                             </button>
                           )
@@ -1717,28 +1893,40 @@ export default function PluginsPage() {
                     <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                       第二步：填写基础信息
                     </div>
-                    <div className="grid items-start gap-4 md:grid-cols-2">
+                    <FormFieldRow label="插件名称" required>
                       <UiInput
-                        placeholder="插件名称"
+                        placeholder="请输入插件名称"
                         value={draft.name}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, name: event.target.value }))
                         }
                       />
-                      <div className="space-y-3">
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                          <UiInput
-                            type="text"
-                            inputMode="url"
-                            autoComplete="off"
-                            spellCheck={false}
-                            placeholder="头像地址（可选）"
-                            value={draft.icon}
-                            onChange={(event) =>
-                              setDraft((current) => ({ ...current, icon: event.target.value }))
-                            }
-                            className="sm:flex-1"
-                          />
+                    </FormFieldRow>
+                    <FormFieldRow label="插件描述">
+                      <UiInput
+                        placeholder="请输入插件描述"
+                        value={draft.description}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, description: event.target.value }))
+                        }
+                      />
+                    </FormFieldRow>
+                    <FormFieldRow label="头像">
+                      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-3">
+                        <div className="flex flex-col gap-3 lg:flex-row">
+                          <div className="min-w-0 flex-1">
+                            <UiInput
+                              type="text"
+                              inputMode="url"
+                              autoComplete="off"
+                              spellCheck={false}
+                              placeholder="请输入头像 URL（可选）"
+                              value={draft.icon}
+                              onChange={(event) =>
+                                setDraft((current) => ({ ...current, icon: event.target.value }))
+                              }
+                            />
+                          </div>
                           <UiButton
                             variant="secondary"
                             onClick={openIconUpload}
@@ -1747,7 +1935,7 @@ export default function PluginsPage() {
                             上传头像
                           </UiButton>
                         </div>
-                        <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                        <div className="mt-3 flex items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-white px-3 py-2 text-xs text-[var(--color-text-muted)]">
                           <PluginAvatar
                             src={draft.icon}
                             name={draft.name}
@@ -1773,14 +1961,7 @@ export default function PluginsPage() {
                           }}
                         />
                       </div>
-                    </div>
-                    <UiInput
-                      placeholder="描述"
-                      value={draft.description}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, description: event.target.value }))
-                      }
-                    />
+                    </FormFieldRow>
                     <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
                       <input
                         type="checkbox"
@@ -1802,104 +1983,111 @@ export default function PluginsPage() {
 
                     {draft.runtimeType === "api" && (
                       <>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <UiInput
-                            placeholder="工具名称"
-                            value={draft.tool.toolName}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, toolName: event.target.value },
-                              }))
-                            }
-                          />
-                          <UiInput
-                            placeholder="工具描述"
-                            value={draft.tool.description}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, description: event.target.value },
-                              }))
-                            }
-                          />
-                          <UiSelect
-                            value={draft.tool.apiRequestType}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: {
-                                  ...current.tool,
-                                  apiRequestType: event.target.value as RequestType,
-                                  bodyFields:
-                                    event.target.value === "GET"
-                                      ? []
-                                      : current.tool.bodyFields,
-                                },
-                              }))
-                            }
-                          >
-                            <option value="GET">GET</option>
-                            <option value="POST">POST</option>
-                          </UiSelect>
-                          <UiSelect
-                            value={draft.tool.toolResponseMode}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: {
-                                  ...current.tool,
-                                  toolResponseMode: event.target.value as ResponseMode,
-                                },
-                              }))
-                            }
-                          >
-                            <option value="">选择响应模式</option>
-                            <option value="non_streaming">non_streaming</option>
-                            <option value="streaming">streaming</option>
-                          </UiSelect>
-                          <UiInput
-                            className="md:col-span-2"
-                            placeholder="RequestURL"
-                            value={draft.tool.requestURL}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, requestURL: event.target.value },
-                              }))
-                            }
-                          />
-                          <UiInput
-                            placeholder="鉴权配置引用（可选）"
-                            value={draft.tool.authConfigRef}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, authConfigRef: event.target.value },
-                              }))
-                            }
-                          />
-                          <UiInput
-                            placeholder="超时（毫秒）"
-                            type="number"
-                            value={String(draft.tool.timeoutMS)}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: {
-                                  ...current.tool,
-                                  timeoutMS: Number(event.target.value) || 30000,
-                                },
-                              }))
-                            }
-                          />
+                        <div className="space-y-4">
+                          <FormFieldRow label="工具名称" required>
+                            <UiInput
+                              placeholder="请输入工具名称"
+                              value={draft.tool.toolName}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: { ...current.tool, toolName: event.target.value },
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="工具描述">
+                            <UiInput
+                              placeholder="请输入工具描述"
+                              value={draft.tool.description}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: { ...current.tool, description: event.target.value },
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="请求方式" required>
+                            <UiSelect
+                              value={draft.tool.apiRequestType}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: {
+                                    ...current.tool,
+                                    apiRequestType: event.target.value as RequestType,
+                                    bodyFields:
+                                      event.target.value === "GET"
+                                        ? []
+                                        : current.tool.bodyFields,
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="GET">GET</option>
+                              <option value="POST">POST</option>
+                            </UiSelect>
+                          </FormFieldRow>
+                          <FormFieldRow label="响应模式" required>
+                            <UiSelect
+                              value={draft.tool.toolResponseMode}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: {
+                                    ...current.tool,
+                                    toolResponseMode: event.target.value as ResponseMode,
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="non_streaming">{responseModeLabel.non_streaming}</option>
+                              <option value="streaming">{responseModeLabel.streaming}</option>
+                            </UiSelect>
+                          </FormFieldRow>
+                          <FormFieldRow label="调用地址" required>
+                            <UiInput
+                              placeholder="请输入 RequestURL"
+                              value={draft.tool.requestURL}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: { ...current.tool, requestURL: event.target.value },
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="超时">
+                            <div className="flex items-center gap-2">
+                              <UiInput
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={String(draft.tool.timeoutMS)}
+                                onChange={(event) =>
+                                  setDraft((current) => {
+                                    const nextValue = Number(event.target.value);
+                                    return {
+                                      ...current,
+                                      tool: {
+                                        ...current.tool,
+                                        timeoutMS:
+                                          Number.isFinite(nextValue) && nextValue >= 1
+                                            ? nextValue
+                                            : 1,
+                                      },
+                                    };
+                                  })
+                                }
+                              />
+                              <span className="shrink-0 text-sm text-[var(--color-text-secondary)]">
+                                毫秒
+                              </span>
+                            </div>
+                          </FormFieldRow>
                         </div>
-                        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                          {draft.tool.toolResponseMode === "streaming"
-                            ? "当前将按 streaming 装配工具，上游 API 需要支持 SSE、分块传输或 NDJSON。"
-                            : "当前将按 non_streaming 装配工具，一次性返回完整结果。"}
-                        </div>
-                        <div className="grid gap-4 xl:grid-cols-2">
+                        <div className="space-y-4">
                           <FieldListEditor
                             label="Query 字段"
                             fields={draft.tool.queryFields}
@@ -1932,76 +2120,84 @@ export default function PluginsPage() {
                               }))
                             }
                           />
-                        ) : (
-                          <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] px-3 py-3 text-xs text-[var(--color-text-muted)]">
-                            GET 类型不支持 body，Body 配置区已隐藏。
-                          </div>
-                        )}
+                        ) : null}
                       </>
                     )}
 
                     {draft.runtimeType === "mcp" && (
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <UiInput
-                          className="md:col-span-2"
-                          placeholder="MCP URL"
-                          value={draft.mcpURL}
-                          onChange={(event) =>
-                            setDraft((current) => ({ ...current, mcpURL: event.target.value }))
-                          }
-                        />
-                        <UiInput
-                          placeholder="MCP Protocol"
-                          value={draft.mcpProtocol}
-                          onChange={(event) =>
-                            setDraft((current) => ({
-                              ...current,
-                              mcpProtocol: event.target.value,
-                            }))
-                          }
-                        />
-                        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-xs text-[var(--color-text-muted)]">
-                          当前阶段重点记录连接信息和同步状态，工具 schema 由后端后续同步写入。
-                        </div>
+                      <div className="space-y-4">
+                        <FormFieldRow label="MCP URL" required>
+                          <UiInput
+                            placeholder="请输入 MCP URL"
+                            value={draft.mcpURL}
+                            onChange={(event) =>
+                              setDraft((current) => ({ ...current, mcpURL: event.target.value }))
+                            }
+                          />
+                        </FormFieldRow>
+                        <FormFieldRow label="MCP 协议">
+                          <UiSelect
+                            value={draft.mcpProtocol}
+                            onChange={(event) =>
+                              setDraft((current) => ({
+                                ...current,
+                                mcpProtocol: normalizeMCPProtocolValue(event.target.value),
+                              }))
+                            }
+                          >
+                            <option value="sse">{mcpProtocolLabel.sse}</option>
+                            <option value="streamableHttp">
+                              {mcpProtocolLabel.streamableHttp}
+                            </option>
+                          </UiSelect>
+                        </FormFieldRow>
                       </div>
                     )}
 
                     {draft.runtimeType === "code" && (
                       <>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <UiInput
-                            placeholder="工具名称"
-                            value={draft.tool.toolName}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, toolName: event.target.value },
-                              }))
-                            }
-                          />
-                          <UiInput
-                            placeholder="工具描述"
-                            value={draft.tool.description}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, description: event.target.value },
-                              }))
-                            }
-                          />
-                          <UiInput
-                            placeholder="代码语言"
-                            value={draft.tool.codeLanguage}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, codeLanguage: event.target.value },
-                              }))
-                            }
-                          />
-                          <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
-                            ToolResponseMode 固定为 non_streaming
-                          </div>
+                        <div className="space-y-4">
+                          <FormFieldRow label="工具名称" required>
+                            <UiInput
+                              placeholder="请输入工具名称"
+                              value={draft.tool.toolName}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: { ...current.tool, toolName: event.target.value },
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="工具描述">
+                            <UiInput
+                              placeholder="请输入工具描述"
+                              value={draft.tool.description}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: { ...current.tool, description: event.target.value },
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="代码语言" required>
+                            <UiInput
+                              placeholder="请输入代码语言"
+                              value={draft.tool.codeLanguage}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  tool: { ...current.tool, codeLanguage: event.target.value },
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="响应模式">
+                            <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+                              固定为非流式
+                            </div>
+                          </FormFieldRow>
                         </div>
                         <FieldListEditor
                           label="输入参数"
@@ -2051,7 +2247,7 @@ export default function PluginsPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border-default)] px-6 py-4">
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border-default)] px-8 py-5">
               <UiButton
                 type="button"
                 variant="secondary"
