@@ -629,8 +629,16 @@ func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig)
 	resolved := make([]einoTool.BaseTool, 0, len(agentTools))
 	resolved = append(resolved, agentTools...)
 
-	if runtimeConfig 	== nil || strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
+	if runtimeConfig == nil || strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
 		return resolved, nil, nil
+	}
+
+	codeTools, err := Plugin.BuildRuntimeCodeTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(codeTools) > 0 {
+		resolved = append(resolved, codeTools...)
 	}
 
 	pluginTools, cleanup, err := Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)

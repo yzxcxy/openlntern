@@ -1,0 +1,241 @@
+package dao
+
+import (
+	"errors"
+	"strings"
+
+	"openIntern/internal/database"
+	"openIntern/internal/models"
+
+	"gorm.io/gorm"
+)
+
+var ErrPluginNotFound = errors.New("plugin not found")
+
+type PluginListFilter struct {
+	Source      string
+	RuntimeType string
+	Status      string
+	Keyword     string
+}
+
+type PluginDAO struct{}
+
+var Plugin = new(PluginDAO)
+
+func (d *PluginDAO) Create(plugin *models.Plugin, tools []models.Tool) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(plugin).Error; err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return nil
+		}
+		return tx.Create(&tools).Error
+	})
+}
+
+func (d *PluginDAO) Update(pluginID string, plugin *models.Plugin, tools []models.Tool) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Plugin{}).
+			Where("plugin_id = ?", pluginID).
+			Updates(map[string]any{
+				"name":         plugin.Name,
+				"description":  plugin.Description,
+				"icon":         plugin.Icon,
+				"source":       plugin.Source,
+				"runtime_type": plugin.RuntimeType,
+				"status":       plugin.Status,
+				"mcp_url":      plugin.MCPURL,
+				"mcp_protocol": plugin.MCPProtocol,
+				"last_sync_at": plugin.LastSyncAt,
+			}).Error; err != nil {
+			return err
+		}
+
+		var existingTools []models.Tool
+		if err := tx.Where("plugin_id = ?", pluginID).Find(&existingTools).Error; err != nil {
+			return err
+		}
+
+		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, tools)
+		if len(removedToolIDs) > 0 {
+			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
+				return err
+			}
+		}
+
+		for _, tool := range toolsToUpdate {
+			if err := tx.Model(&models.Tool{}).
+				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, pluginID).
+				Updates(buildToolUpdateMap(tool)).Error; err != nil {
+				return err
+			}
+		}
+
+		if len(toolsToCreate) == 0 {
+			return nil
+		}
+		return tx.Create(&toolsToCreate).Error
+	})
+}
+
+func (d *PluginDAO) GetByPluginID(pluginID string) (*models.Plugin, error) {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return nil, ErrPluginNotFound
+	}
+
+	var item models.Plugin
+	if err := database.DB.Where("plugin_id = ?", pluginID).First(&item).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPluginNotFound
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (d *PluginDAO) List(page, pageSize int, filter PluginListFilter) ([]models.Plugin, int64, error) {
+	db := applyPluginFilters(database.DB.Model(&models.Plugin{}), filter)
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var items []models.Plugin
+	offset := (page - 1) * pageSize
+	if err := db.Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
+}
+
+func (d *PluginDAO) Delete(pluginID string) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var toolIDs []string
+		if err := tx.Model(&models.Tool{}).Where("plugin_id = ?", pluginID).Pluck("tool_id", &toolIDs).Error; err != nil {
+			return err
+		}
+		if len(toolIDs) > 0 {
+			if err := tx.Where("tool_id IN ?", toolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.Tool{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("plugin_id = ?", pluginID).Delete(&models.Plugin{}).Error
+	})
+}
+
+func (d *PluginDAO) UpdateStatus(pluginID string, status string) error {
+	return database.DB.Model(&models.Plugin{}).Where("plugin_id = ?", pluginID).Update("status", status).Error
+}
+
+func (d *PluginDAO) ListEnabled() ([]models.Plugin, error) {
+	var plugins []models.Plugin
+	if err := database.DB.
+		Where("status = ?", "enabled").
+		Order("updated_at DESC").
+		Find(&plugins).Error; err != nil {
+		return nil, err
+	}
+	return plugins, nil
+}
+
+func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {
+	result := make(map[string][]models.Tool, len(pluginIDs))
+	if len(pluginIDs) == 0 {
+		return result, nil
+	}
+
+	var tools []models.Tool
+	if err := database.DB.
+		Where("plugin_id IN ?", pluginIDs).
+		Order("updated_at DESC").
+		Find(&tools).Error; err != nil {
+		return nil, err
+	}
+
+	for _, tool := range tools {
+		result[tool.PluginID] = append(result[tool.PluginID], tool)
+	}
+	return result, nil
+}
+
+func applyPluginFilters(db *gorm.DB, filter PluginListFilter) *gorm.DB {
+	if filter.Source != "" {
+		db = db.Where("source = ?", filter.Source)
+	}
+	if filter.RuntimeType != "" {
+		db = db.Where("runtime_type = ?", filter.RuntimeType)
+	}
+	if filter.Status != "" {
+		db = db.Where("status = ?", filter.Status)
+	}
+	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
+		pattern := "%" + keyword + "%"
+		db = db.Where("(name LIKE ? OR description LIKE ?)", pattern, pattern)
+	}
+	return db
+}
+
+func diffPluginTools(existing []models.Tool, incoming []models.Tool) ([]models.Tool, []models.Tool, []string) {
+	existingByID := make(map[string]models.Tool, len(existing))
+	for _, tool := range existing {
+		existingByID[tool.ToolID] = tool
+	}
+
+	toolsToUpdate := make([]models.Tool, 0, len(incoming))
+	toolsToCreate := make([]models.Tool, 0, len(incoming))
+	seenIncoming := make(map[string]struct{}, len(incoming))
+
+	for _, tool := range incoming {
+		if _, ok := existingByID[tool.ToolID]; ok {
+			toolsToUpdate = append(toolsToUpdate, tool)
+		} else {
+			toolsToCreate = append(toolsToCreate, tool)
+		}
+		seenIncoming[tool.ToolID] = struct{}{}
+	}
+
+	removedToolIDs := make([]string, 0, len(existing))
+	for _, tool := range existing {
+		if _, ok := seenIncoming[tool.ToolID]; ok {
+			continue
+		}
+		removedToolIDs = append(removedToolIDs, tool.ToolID)
+	}
+
+	return toolsToUpdate, toolsToCreate, removedToolIDs
+}
+
+func buildToolUpdateMap(tool models.Tool) map[string]any {
+	return map[string]any{
+		"plugin_id":          tool.PluginID,
+		"tool_name":          tool.ToolName,
+		"description":        tool.Description,
+		"input_schema_json":  tool.InputSchemaJSON,
+		"output_schema_json": tool.OutputSchemaJSON,
+		"tool_response_mode": tool.ToolResponseMode,
+		"enabled":            tool.Enabled,
+		"code":               tool.Code,
+		"code_language":      tool.CodeLanguage,
+		"api_request_type":   tool.APIRequestType,
+		"request_url":        tool.RequestURL,
+		"query_schema_json":  tool.QuerySchemaJSON,
+		"header_schema_json": tool.HeaderSchemaJSON,
+		"body_schema_json":   tool.BodySchemaJSON,
+		"query_fields_json":  tool.QueryFieldsJSON,
+		"header_fields_json": tool.HeaderFieldsJSON,
+		"body_fields_json":   tool.BodyFieldsJSON,
+		"auth_config_ref":    tool.AuthConfigRef,
+		"timeout_ms":         tool.TimeoutMS,
+	}
+}

@@ -83,6 +83,7 @@ func SetupRouter() *gin.Engine {
 	{
 		pluginGroup.GET("", controllers.ListPlugins)
 		pluginGroup.POST("", controllers.CreatePlugin)
+		pluginGroup.POST("/code/debug", controllers.DebugCodePlugin)
 		pluginGroup.GET("/defaults", controllers.GetPluginDefaults)
 		pluginGroup.POST("/icon", controllers.UploadPluginIcon)
 		pluginGroup.GET("/available-for-chat", controllers.ListAvailablePluginsForChat)

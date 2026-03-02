@@ -8,14 +8,13 @@ import (
 	"log"
 	"net/url"
 	"openIntern/internal/config"
-	"openIntern/internal/database"
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 const (
@@ -34,6 +33,9 @@ const (
 
 	apiMethodGET  = "GET"
 	apiMethodPOST = "POST"
+
+	codeLanguagePython     = "python"
+	codeLanguageJavaScript = "javascript"
 
 	toolResponseStreaming    = "streaming"
 	toolResponseNonStreaming = "non_streaming"
@@ -163,15 +165,7 @@ func (s *PluginService) Create(input UpsertPluginInput) (*PluginView, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(plugin).Error; err != nil {
-			return err
-		}
-		if len(tools) == 0 {
-			return nil
-		}
-		return tx.Create(&tools).Error
-	}); err != nil {
+	if err := dao.Plugin.Create(plugin, tools); err != nil {
 		return nil, err
 	}
 	if plugin.RuntimeType == pluginRuntimeMCP {
@@ -191,47 +185,7 @@ func (s *PluginService) Update(pluginID string, input UpsertPluginInput) (*Plugi
 	if err != nil {
 		return nil, err
 	}
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.Plugin{}).
-			Where("plugin_id = ?", pluginID).
-			Updates(map[string]any{
-				"name":         plugin.Name,
-				"description":  plugin.Description,
-				"icon":         plugin.Icon,
-				"source":       plugin.Source,
-				"runtime_type": plugin.RuntimeType,
-				"status":       plugin.Status,
-				"mcp_url":      plugin.MCPURL,
-				"mcp_protocol": plugin.MCPProtocol,
-				"last_sync_at": plugin.LastSyncAt,
-			}).Error; err != nil {
-			return err
-		}
-		var existingTools []models.Tool
-		if err := tx.Where("plugin_id = ?", pluginID).Find(&existingTools).Error; err != nil {
-			return err
-		}
-		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, tools)
-		if len(removedToolIDs) > 0 {
-			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
-				return err
-			}
-			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
-				return err
-			}
-		}
-		for _, tool := range toolsToUpdate {
-			if err := tx.Model(&models.Tool{}).
-				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, pluginID).
-				Updates(buildToolUpdateMap(tool)).Error; err != nil {
-				return err
-			}
-		}
-		if len(toolsToCreate) == 0 {
-			return nil
-		}
-		return tx.Create(&toolsToCreate).Error
-	}); err != nil {
+	if err := dao.Plugin.Update(pluginID, plugin, tools); err != nil {
 		return nil, err
 	}
 	if plugin.RuntimeType == pluginRuntimeMCP {
@@ -264,27 +218,13 @@ func (s *PluginService) List(page, pageSize int, filter PluginListFilter) ([]Plu
 	if pageSize <= 0 {
 		pageSize = 10
 	}
-	db := database.DB.Model(&models.Plugin{})
-	if source := normalizeOptionalFilter(filter.Source); source != "" {
-		db = db.Where("source = ?", source)
-	}
-	if runtimeType := normalizeOptionalFilter(filter.RuntimeType); runtimeType != "" {
-		db = db.Where("runtime_type = ?", runtimeType)
-	}
-	if status := normalizeOptionalFilter(filter.Status); status != "" {
-		db = db.Where("status = ?", status)
-	}
-	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
-		pattern := "%" + keyword + "%"
-		db = db.Where("(name LIKE ? OR description LIKE ?)", pattern, pattern)
-	}
-	var total int64
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	var items []models.Plugin
-	offset := (page - 1) * pageSize
-	if err := db.Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	items, total, err := dao.Plugin.List(page, pageSize, dao.PluginListFilter{
+		Source:      normalizeOptionalFilter(filter.Source),
+		RuntimeType: normalizeOptionalFilter(filter.RuntimeType),
+		Status:      normalizeOptionalFilter(filter.Status),
+		Keyword:     strings.TrimSpace(filter.Keyword),
+	})
+	if err != nil {
 		return nil, 0, err
 	}
 	pluginIDs := make([]string, 0, len(items))
@@ -310,24 +250,7 @@ func (s *PluginService) Delete(pluginID string) error {
 	if plugin.Source == pluginSourceBuiltin {
 		return errors.New("builtin plugin is read-only")
 	}
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		var toolIDs []string
-		if err := tx.Model(&models.Tool{}).Where("plugin_id = ?", pluginID).Pluck("tool_id", &toolIDs).Error; err != nil {
-			return err
-		}
-		if len(toolIDs) > 0 {
-			if err := tx.Where("tool_id IN ?", toolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
-				return err
-			}
-		}
-		if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.Tool{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.Plugin{}).Error; err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+	if err := dao.Plugin.Delete(pluginID); err != nil {
 		return err
 	}
 	s.clearMCPPluginSync(pluginID)
@@ -346,7 +269,7 @@ func (s *PluginService) SetEnabled(pluginID string, enabled bool) (*PluginView, 
 	if enabled {
 		status = pluginStatusEnabled
 	}
-	if err := database.DB.Model(&models.Plugin{}).Where("plugin_id = ?", pluginID).Update("status", status).Error; err != nil {
+	if err := dao.Plugin.UpdateStatus(pluginID, status); err != nil {
 		return nil, err
 	}
 	if plugin.RuntimeType == pluginRuntimeMCP {
@@ -376,11 +299,8 @@ func (s *PluginService) Sync(pluginID string) (*PluginView, error) {
 }
 
 func (s *PluginService) ListAvailableForChat() ([]ChatPluginView, error) {
-	var plugins []models.Plugin
-	if err := database.DB.
-		Where("status = ?", pluginStatusEnabled).
-		Order("updated_at DESC").
-		Find(&plugins).Error; err != nil {
+	plugins, err := dao.Plugin.ListEnabled()
+	if err != nil {
 		return nil, err
 	}
 	pluginIDs := make([]string, 0, len(plugins))
@@ -420,18 +340,7 @@ func (s *PluginService) ListAvailableForChat() ([]ChatPluginView, error) {
 }
 
 func (s *PluginService) getPluginRecord(pluginID string) (*models.Plugin, error) {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
-		return nil, errors.New("plugin not found")
-	}
-	var item models.Plugin
-	if err := database.DB.Where("plugin_id = ?", pluginID).First(&item).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("plugin not found")
-		}
-		return nil, err
-	}
-	return &item, nil
+	return dao.Plugin.GetByPluginID(pluginID)
 }
 
 func (s *PluginService) prepareDefinition(pluginID string, input UpsertPluginInput, existing *models.Plugin) (*models.Plugin, []models.Tool, error) {
@@ -657,9 +566,9 @@ func (s *PluginService) buildTool(pluginID string, runtimeType string, input Plu
 		if code == "" {
 			return models.Tool{}, errors.New("code is required for code tools")
 		}
-		codeLanguage := strings.TrimSpace(input.CodeLanguage)
+		codeLanguage := normalizeCodeLanguage(input.CodeLanguage)
 		if codeLanguage == "" {
-			return models.Tool{}, errors.New("code_language is required for code tools")
+			return models.Tool{}, errors.New("code_language must be python or javascript")
 		}
 		bodyFields, bodyFieldsJSON, bodySchemaJSON, err := normalizeFields(input.BodyFields)
 		if err != nil {
@@ -687,21 +596,7 @@ func (s *PluginService) buildTool(pluginID string, runtimeType string, input Plu
 }
 
 func (s *PluginService) loadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {
-	result := make(map[string][]models.Tool, len(pluginIDs))
-	if len(pluginIDs) == 0 {
-		return result, nil
-	}
-	var tools []models.Tool
-	if err := database.DB.
-		Where("plugin_id IN ?", pluginIDs).
-		Order("updated_at DESC").
-		Find(&tools).Error; err != nil {
-		return nil, err
-	}
-	for _, tool := range tools {
-		result[tool.PluginID] = append(result[tool.PluginID], tool)
-	}
-	return result, nil
+	return dao.Plugin.LoadToolMap(pluginIDs)
 }
 
 func normalizePluginIcon(value string) string {
@@ -1067,6 +962,17 @@ func normalizeAPIRequestType(value string) string {
 		return apiMethodGET
 	case apiMethodPOST:
 		return apiMethodPOST
+	default:
+		return ""
+	}
+}
+
+func normalizeCodeLanguage(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case codeLanguagePython:
+		return codeLanguagePython
+	case codeLanguageJavaScript:
+		return codeLanguageJavaScript
 	default:
 		return ""
 	}

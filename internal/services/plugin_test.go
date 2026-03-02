@@ -28,3 +28,31 @@ func TestDiffPluginTools(t *testing.T) {
 		t.Fatalf("unexpected removed tool ids: %#v", removed)
 	}
 }
+
+func TestBuildToolCodeLanguageValidation(t *testing.T) {
+	svc := &PluginService{}
+
+	tool, err := svc.buildTool("plugin-1", pluginRuntimeCode, PluginToolInput{
+		ToolName:     "run_python",
+		Code:         "print('ok')",
+		CodeLanguage: " PYTHON ",
+	})
+	if err != nil {
+		t.Fatalf("buildTool returned error: %v", err)
+	}
+	if tool.CodeLanguage != codeLanguagePython {
+		t.Fatalf("unexpected code language: %s", tool.CodeLanguage)
+	}
+	if tool.ToolResponseMode != toolResponseNonStreaming {
+		t.Fatalf("unexpected tool response mode: %s", tool.ToolResponseMode)
+	}
+
+	_, err = svc.buildTool("plugin-1", pluginRuntimeCode, PluginToolInput{
+		ToolName:     "run_ruby",
+		Code:         "puts 'ok'",
+		CodeLanguage: "ruby",
+	})
+	if err == nil {
+		t.Fatal("expected invalid code language error")
+	}
+}

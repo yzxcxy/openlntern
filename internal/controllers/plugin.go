@@ -108,6 +108,21 @@ func UpdatePlugin(c *gin.Context) {
 	response.JSONSuccess(c, http.StatusOK, item)
 }
 
+func DebugCodePlugin(c *gin.Context) {
+	var input services.CodeDebugInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.BadRequest(c)
+		return
+	}
+
+	item, err := services.Plugin.DebugCodeTool(c.Request.Context(), input)
+	if err != nil {
+		writePluginError(c, err)
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, item)
+}
+
 func EnablePlugin(c *gin.Context) {
 	item, err := services.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), true)
 	if err != nil {
