@@ -205,6 +205,9 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 		}
 	}
 	sandboxBaseURL = strings.TrimSpace(toolsCfg.Sandbox.Url)
+	if sandboxBaseURL == "" {
+		return nil, fmt.Errorf("tools.sandbox.url is required")
+	}
 	a2uiTools, err := tools.GetA2UITools(ctx)
 	if err != nil {
 		return nil, err

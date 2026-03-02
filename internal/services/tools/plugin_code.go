@@ -18,7 +18,14 @@ import (
 	einoJSONSchema "github.com/eino-contrib/jsonschema"
 )
 
-const sandboxCodeRunPath = "/v1/code/run"
+const sandboxCodeRunPath = "/v1/code/execute"
+
+type SandboxCodeRunInput struct {
+	CodeLanguage string
+	Code         string
+	Input        any
+	TimeoutMS    int
+}
 
 type codePluginTool struct {
 	def       models.Tool
@@ -70,10 +77,6 @@ func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 	_ = opts
 
 	baseURL, _ := ctx.Value(ContextKeySandboxBaseURL).(string)
-	baseURL = strings.TrimSpace(baseURL)
-	if baseURL == "" {
-		return "", errors.New("sandbox base url not configured")
-	}
 
 	input, err := decodeCodePluginInput(argumentsInJSON)
 	if err != nil {
@@ -83,11 +86,33 @@ func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 		return "", err
 	}
 
+	return RunCodeInSandbox(ctx, t.client, baseURL, SandboxCodeRunInput{
+		CodeLanguage: t.def.CodeLanguage,
+		Code:         t.def.Code,
+		Input:        input,
+		TimeoutMS:    t.def.TimeoutMS,
+	})
+}
+
+func RunCodeInSandbox(ctx context.Context, client *http.Client, baseURL string, input SandboxCodeRunInput) (string, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", errors.New("sandbox base url not configured")
+	}
+
+	timeout := time.Duration(input.TimeoutMS) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	}
+
 	payload := map[string]any{
-		"language":   t.def.CodeLanguage,
-		"code":       t.def.Code,
-		"input":      input,
-		"timeout_ms": t.def.TimeoutMS,
+		"language":   input.CodeLanguage,
+		"code":       input.Code,
+		"input":      input.Input,
+		"timeout_ms": input.TimeoutMS,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -100,7 +125,7 @@ func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := t.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
