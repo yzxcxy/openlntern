@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -322,12 +323,44 @@ func openMCPClient(ctx context.Context, baseURL string, protocol string) (*clien
 		return nil, fmt.Errorf("mcp_url is required for mcp plugins")
 	}
 
+	normalizedProtocol := normalizeMCPProtocol(protocol)
+	if normalizedProtocol == "" {
+		return nil, fmt.Errorf("mcp_protocol must be sse or streamableHttp")
+	}
+
+	protocols := []string{normalizedProtocol}
+	switch normalizedProtocol {
+	case mcpProtocolSSE:
+		protocols = append(protocols, mcpProtocolStreamableHTTP)
+	case mcpProtocolStreamableHTTP:
+		protocols = append(protocols, mcpProtocolSSE)
+	}
+
+	var errs []error
+	for _, candidate := range protocols {
+		cli, err := openMCPClientWithProtocol(ctx, baseURL, candidate)
+		if err == nil {
+			if candidate != normalizedProtocol {
+				log.Printf("mcp protocol fallback success base_url=%s configured=%s actual=%s", baseURL, normalizedProtocol, candidate)
+			}
+			return cli, nil
+		}
+		errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
+		if !shouldTryAlternateMCPProtocol(normalizedProtocol, candidate, err) {
+			break
+		}
+	}
+
+	return nil, errors.Join(errs...)
+}
+
+func openMCPClientWithProtocol(ctx context.Context, baseURL string, protocol string) (*client.Client, error) {
 	var (
 		cli *client.Client
 		err error
 	)
 
-	switch normalizeMCPProtocol(protocol) {
+	switch protocol {
 	case mcpProtocolSSE:
 		cli, err = client.NewSSEMCPClient(baseURL)
 	case mcpProtocolStreamableHTTP:
@@ -356,6 +389,25 @@ func openMCPClient(ctx context.Context, baseURL string, protocol string) (*clien
 	}
 
 	return cli, nil
+}
+
+func shouldTryAlternateMCPProtocol(configured string, attempted string, err error) bool {
+	if err == nil || configured != attempted {
+		return false
+	}
+
+	message := strings.ToLower(err.Error())
+	switch attempted {
+	case mcpProtocolSSE:
+		return strings.Contains(message, "timeout waiting for endpoint") ||
+			strings.Contains(message, "endpoint not received")
+	case mcpProtocolStreamableHTTP:
+		return strings.Contains(message, "method not allowed") ||
+			strings.Contains(message, "unexpected status code: 404") ||
+			strings.Contains(message, "unexpected status code: 405")
+	default:
+		return false
+	}
 }
 
 func buildSyncedMCPToolRecords(pluginID string, remoteTools []mcp.Tool, existingTools []models.Tool) ([]models.Tool, error) {
@@ -440,19 +492,15 @@ func hasMCPOutputSchema(tool mcp.Tool) bool {
 		tool.OutputSchema.AdditionalProperties != nil
 }
 
-func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, pluginIDs []string, toolIDs []string) ([]einoTool.BaseTool, func(), error) {
-	pluginIDs = normalizeUniqueStringList(pluginIDs)
+func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, func(), error) {
 	toolIDs = normalizeUniqueStringList(toolIDs)
-	if len(pluginIDs) == 0 && len(toolIDs) == 0 {
+	if len(toolIDs) == 0 {
 		return nil, nil, nil
 	}
 
 	db := database.DB.Model(&models.Tool{}).
 		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
 		Where("plugin.runtime_type = ? AND plugin.status = ? AND tool.enabled = ?", pluginRuntimeMCP, pluginStatusEnabled, true)
-	if len(pluginIDs) > 0 {
-		db = db.Where("tool.plugin_id IN ?", pluginIDs)
-	}
 	if len(toolIDs) > 0 {
 		db = db.Where("tool.tool_id IN ?", toolIDs)
 	}

@@ -139,6 +139,7 @@ type ChatPluginView struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Icon        string         `json:"icon"`
+	Source      string         `json:"source"`
 	RuntimeType string         `json:"runtime_type"`
 	Tools       []ChatToolView `json:"tools"`
 }
@@ -410,6 +411,7 @@ func (s *PluginService) ListAvailableForChat() ([]ChatPluginView, error) {
 			Name:        plugin.Name,
 			Description: plugin.Description,
 			Icon:        normalizePluginIcon(plugin.Icon),
+			Source:      plugin.Source,
 			RuntimeType: plugin.RuntimeType,
 			Tools:       lightTools,
 		})

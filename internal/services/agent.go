@@ -29,6 +29,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// RunAgent 运行一个 Agent
 func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) error {
 	if input == nil {
 		return nil
@@ -204,10 +205,6 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 		}
 	}
 	sandboxBaseURL = strings.TrimSpace(toolsCfg.Sandbox.Url)
-	sandboxTools, err := tools.GetSandboxTools(ctx, sandboxBaseURL)
-	if err != nil {
-		return nil, err
-	}
 	a2uiTools, err := tools.GetA2UITools(ctx)
 	if err != nil {
 		return nil, err
@@ -231,7 +228,7 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	if err != nil {
 		return nil, err
 	}
-	allTools := append(sandboxTools, a2uiTools...)
+	allTools := append([]einoTool.BaseTool{}, a2uiTools...)
 	allTools = append(allTools, cosTools...)
 	allTools = append(allTools, skillTools...)
 	agentTools = allTools
@@ -324,9 +321,8 @@ type AgentRuntimeConfig struct {
 		ModelID    string
 	}
 	Plugins struct {
-		Mode              string
-		SelectedPluginIDs []string
-		SelectedToolIDs   []string
+		Mode            string
+		SelectedToolIDs []string
 	}
 	Features map[string]any
 }
@@ -409,13 +405,6 @@ func (h agentConfigForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext
 		}
 		if mode, ok := pluginsMap["mode"]; ok {
 			ctx.runtimeConfig.Plugins.Mode = strings.TrimSpace(fmt.Sprintf("%v", mode))
-		}
-		if selectedPluginIDsRaw, ok := pluginsMap["selectedPluginIds"]; ok {
-			selectedPluginIDs, err := normalizeForwardedPropsStringList(selectedPluginIDsRaw)
-			if err != nil {
-				return fmt.Errorf("normalize %s.plugins.selectedPluginIds: %w", forwardedPropKeyAgentConfig, err)
-			}
-			ctx.runtimeConfig.Plugins.SelectedPluginIDs = selectedPluginIDs
 		}
 		if selectedToolIDsRaw, ok := pluginsMap["selectedToolIds"]; ok {
 			selectedToolIDs, err := normalizeForwardedPropsStringList(selectedToolIDsRaw)
@@ -640,11 +629,11 @@ func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig)
 	resolved := make([]einoTool.BaseTool, 0, len(agentTools))
 	resolved = append(resolved, agentTools...)
 
-	if runtimeConfig == nil || strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
+	if runtimeConfig 	== nil || strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
 		return resolved, nil, nil
 	}
 
-	pluginTools, cleanup, err := Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedPluginIDs, runtimeConfig.Plugins.SelectedToolIDs)
+	pluginTools, cleanup, err := Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
