@@ -183,6 +183,26 @@ const mcpProtocolLabel: Record<MCPProtocol, string> = {
   streamableHttp: "可流式传输的 HTTP（streamableHttp）",
 };
 
+const getSourceBadgeClassName = (source?: string) => {
+  if (source === "builtin") {
+    return "border-[rgba(217,119,6,0.18)] bg-[rgba(245,158,11,0.12)] text-[rgb(180,83,9)]";
+  }
+  return "border-[rgba(14,116,144,0.18)] bg-[rgba(6,182,212,0.12)] text-[rgb(14,116,144)]";
+};
+
+const getRuntimeBadgeClassName = (runtimeType?: RuntimeType) => {
+  switch (runtimeType) {
+    case "api":
+      return "border-[rgba(37,99,235,0.18)] bg-[rgba(59,130,246,0.12)] text-[rgb(29,78,216)]";
+    case "mcp":
+      return "border-[rgba(13,148,136,0.18)] bg-[rgba(20,184,166,0.12)] text-[rgb(15,118,110)]";
+    case "code":
+      return "border-[rgba(234,88,12,0.18)] bg-[rgba(249,115,22,0.12)] text-[rgb(194,65,12)]";
+    default:
+      return "border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)]";
+  }
+};
+
 const normalizeMCPProtocolValue = (value: unknown): MCPProtocol =>
   value === "streamableHttp" ? "streamableHttp" : "sse";
 
@@ -1463,53 +1483,65 @@ export default function PluginsPage() {
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {items.map((item) => (
-                    <button
-                      key={item.plugin_id || item.name}
-                      type="button"
-                      onClick={() => void openDetail(item.plugin_id)}
-                      className="workspace-item-surface workspace-item-hover-lift flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4 text-left shadow-[var(--shadow-sm)]"
-                    >
-                      <div className="flex items-start gap-3">
-                        <PluginAvatar
-                          src={item.icon}
-                          name={item.name}
-                          fallbackSrc={defaultPluginIconURL}
-                          className="h-11 w-11 shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
-                            {item.name || "未命名插件"}
+                  {items.map((item) => {
+                    const toolCount = item.tool_count ?? item.tools?.length ?? 0;
+                    return (
+                      <button
+                        key={item.plugin_id || item.name}
+                        type="button"
+                        onClick={() => void openDetail(item.plugin_id)}
+                        className="workspace-item-surface workspace-item-hover-lift flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4 text-left shadow-[var(--shadow-sm)]"
+                      >
+                        <div className="flex items-start gap-3">
+                          <PluginAvatar
+                            src={item.icon}
+                            name={item.name}
+                            fallbackSrc={defaultPluginIconURL}
+                            className="h-11 w-11 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
+                              {item.name || "未命名插件"}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-[var(--color-bg-page)] px-2 py-1 text-[var(--color-text-secondary)]">
-                          {item.source === "builtin" ? "内建" : "自定义"}
-                        </span>
-                        <span className="rounded-full bg-[var(--color-bg-page)] px-2 py-1 text-[var(--color-text-secondary)]">
-                          {item.runtime_type
-                            ? runtimeLabel[item.runtime_type as Exclude<RuntimeType, "">]
-                            : "-"}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-1 ${
-                            item.status === "enabled"
-                              ? "bg-[rgba(22,163,74,0.12)] text-[var(--color-state-success)]"
-                              : "bg-[rgba(148,163,184,0.14)] text-[var(--color-text-muted)]"
-                          }`}
-                        >
-                          {item.status || "disabled"}
-                        </span>
-                      </div>
-                      <div
-                        className="mt-3 line-clamp-2 text-xs text-[var(--color-text-muted)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
-                        dangerouslySetInnerHTML={{
-                          __html: item.description?.trim() || "暂无描述",
-                        }}
-                      />
-                    </button>
-                  ))}
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <span
+                            className={`rounded-full border px-2 py-1 ${getSourceBadgeClassName(item.source)}`}
+                          >
+                            {item.source === "builtin" ? "内建" : "自定义"}
+                          </span>
+                          <span
+                            className={`rounded-full border px-2 py-1 ${getRuntimeBadgeClassName(
+                              item.runtime_type
+                            )}`}
+                          >
+                            {item.runtime_type
+                              ? runtimeLabel[item.runtime_type as Exclude<RuntimeType, "">]
+                              : "-"}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-1 ${
+                              item.status === "enabled"
+                                ? "bg-[rgba(22,163,74,0.12)] text-[var(--color-state-success)]"
+                                : "bg-[rgba(148,163,184,0.14)] text-[var(--color-text-muted)]"
+                            }`}
+                          >
+                            {item.status || "disabled"}
+                          </span>
+                          <span className="rounded-full bg-[rgba(37,99,255,0.08)] px-2 py-1 text-[var(--color-action-primary)]">
+                            {toolCount} 个工具
+                          </span>
+                        </div>
+                        <div
+                          className="mt-3 line-clamp-2 text-xs text-[var(--color-text-muted)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
+                          dangerouslySetInnerHTML={{
+                            __html: item.description?.trim() || "暂无描述",
+                          }}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1555,121 +1587,148 @@ export default function PluginsPage() {
           </>
         ) : (
           <div className="mt-4 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex min-w-0 items-start gap-4">
-                <button
-                  type="button"
-                  onClick={closeDetail}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)]"
-                  aria-label="返回插件列表"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                </button>
-                <PluginAvatar
-                  src={selectedPlugin.icon}
-                  name={selectedPlugin.name}
-                  fallbackSrc={defaultPluginIconURL}
-                  className="h-14 w-14 shrink-0"
-                />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <div className="truncate text-lg font-semibold text-[var(--color-text-primary)]">
-                      {selectedPlugin.name || "未命名插件"}
-                    </div>
-                    <div className="text-xs text-[var(--color-text-muted)]">
-                      更新时间：{formatTime(selectedPlugin.updated_at)}
+            {(() => {
+              const detailToolCount =
+                selectedPlugin.tool_count ?? selectedPlugin.tools?.length ?? 0;
+              return (
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <button
+                      type="button"
+                      onClick={closeDetail}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)]"
+                      aria-label="返回插件列表"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M15 18l-6-6 6-6" />
+                      </svg>
+                    </button>
+                    <PluginAvatar
+                      src={selectedPlugin.icon}
+                      name={selectedPlugin.name}
+                      fallbackSrc={defaultPluginIconURL}
+                      className="h-14 w-14 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <div className="truncate text-lg font-semibold text-[var(--color-text-primary)]">
+                          {selectedPlugin.name || "未命名插件"}
+                        </div>
+                        <div className="text-xs text-[var(--color-text-muted)]">
+                          更新时间：{formatTime(selectedPlugin.updated_at)}
+                        </div>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                          className={`rounded-full border px-2 py-1 ${getSourceBadgeClassName(
+                            selectedPlugin.source
+                          )}`}
+                        >
+                          {selectedPlugin.source === "builtin" ? "内建" : "自定义"}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2 py-1 ${getRuntimeBadgeClassName(
+                            selectedPlugin.runtime_type
+                          )}`}
+                        >
+                          {selectedPlugin.runtime_type
+                            ? runtimeLabel[selectedPlugin.runtime_type as Exclude<RuntimeType, "">]
+                            : "-"}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2 py-1 ${
+                            selectedPlugin.status === "enabled"
+                              ? "border-[rgba(22,163,74,0.2)] bg-[rgba(22,163,74,0.12)] text-[var(--color-state-success)]"
+                              : "border-[rgba(148,163,184,0.2)] bg-[rgba(148,163,184,0.14)] text-[var(--color-text-muted)]"
+                          }`}
+                        >
+                          {selectedPlugin.status || "disabled"}
+                        </span>
+                        <span className="rounded-full border border-[rgba(37,99,255,0.16)] bg-[rgba(37,99,255,0.08)] px-2 py-1 text-[var(--color-action-primary)]">
+                          {detailToolCount} 个工具
+                        </span>
+                      </div>
+                      <div
+                        className="mt-2 text-sm text-[var(--color-text-secondary)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
+                        dangerouslySetInnerHTML={{
+                          __html: selectedPlugin.description?.trim() || "暂无描述",
+                        }}
+                      />
                     </div>
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-muted)]">
-                    <span>{selectedPlugin.source === "builtin" ? "内建" : "自定义"}</span>
-                    <span>·</span>
-                    <span>
-                      {selectedPlugin.runtime_type
-                        ? runtimeLabel[selectedPlugin.runtime_type as Exclude<RuntimeType, "">]
-                        : "-"}
-                    </span>
-                    <span>·</span>
-                    <span>{selectedPlugin.status || "disabled"}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <UiButton
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void openEdit(selectedPlugin.plugin_id)}
+                    >
+                      编辑
+                    </UiButton>
+                    <UiButton
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        void changeStatus(selectedPlugin, selectedPlugin.status !== "enabled")
+                      }
+                    >
+                      {selectedPlugin.status === "enabled" ? "停用" : "启用"}
+                    </UiButton>
+                    {selectedPlugin.runtime_type === "mcp" && (
+                      <UiButton
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void syncPlugin(selectedPlugin)}
+                      >
+                        手动同步
+                      </UiButton>
+                    )}
+                    <UiButton
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void removePlugin(selectedPlugin)}
+                    >
+                      删除
+                    </UiButton>
                   </div>
-                  <div
-                    className="mt-2 text-sm text-[var(--color-text-secondary)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
-                    dangerouslySetInnerHTML={{
-                      __html: selectedPlugin.description?.trim() || "暂无描述",
-                    }}
-                  />
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <UiButton
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void openEdit(selectedPlugin.plugin_id)}
-                >
-                  编辑
-                </UiButton>
-                <UiButton
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    void changeStatus(selectedPlugin, selectedPlugin.status !== "enabled")
-                  }
-                >
-                  {selectedPlugin.status === "enabled" ? "停用" : "启用"}
-                </UiButton>
-                {selectedPlugin.runtime_type === "mcp" && (
-                  <UiButton
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void syncPlugin(selectedPlugin)}
-                  >
-                    手动同步
-                  </UiButton>
-                )}
-                <UiButton
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void removePlugin(selectedPlugin)}
-                >
-                  删除
-                </UiButton>
-              </div>
-            </div>
+              );
+            })()}
 
             {selectedPlugin.tools && selectedPlugin.tools.length > 0 && activeTool ? (
               <div className="mt-5 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white">
-                <div className="flex flex-wrap gap-2 border-b border-[var(--color-border-default)] px-5 py-4">
-                  {selectedPlugin.tools.map((tool, index) => {
-                    const key = getToolKey(tool, index);
-                    const active = key === selectedToolKey;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setSelectedToolKey(key)}
-                        className={`rounded-[var(--radius-md)] border px-4 py-2 text-sm transition ${
-                          active
-                            ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.08)] font-semibold text-[var(--color-action-primary)]"
-                            : "border-[var(--color-border-default)] text-[var(--color-text-secondary)]"
-                        }`}
-                      >
-                        {tool.tool_name || `工具 ${index + 1}`}
-                      </button>
-                    );
-                  })}
+                <div className="border-b border-[var(--color-border-default)] px-5 py-4">
+                  <div className="flex min-w-full gap-2 overflow-x-auto pb-1">
+                    {selectedPlugin.tools.map((tool, index) => {
+                      const key = getToolKey(tool, index);
+                      const active = key === selectedToolKey;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setSelectedToolKey(key)}
+                          className={`shrink-0 whitespace-nowrap rounded-[var(--radius-md)] border px-4 py-2 text-sm transition ${
+                            active
+                              ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.08)] font-semibold text-[var(--color-action-primary)]"
+                              : "border-[var(--color-border-default)] text-[var(--color-text-secondary)]"
+                          }`}
+                        >
+                          {tool.tool_name || `工具 ${index + 1}`}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="space-y-6 px-5 py-5">

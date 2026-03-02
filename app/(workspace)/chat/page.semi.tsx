@@ -33,6 +33,21 @@ import type {
   Message as AguiMessage,
 } from "@ag-ui/client";
 import type { MessageContent } from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
+import { ChatModeConfigureArea } from "./ChatModeConfigureArea";
+import { PluginSelectionModal } from "./PluginSelectionModal";
+import {
+  KNOWN_PLUGIN_RUNTIME_TYPES,
+  MAX_SELECTED_TOOLS,
+  PLUGIN_PAGE_SIZE,
+  PLUGIN_PAGE_SIZE_OPTIONS,
+  collectToolIdsFromPlugins,
+  getChatPluginKey,
+  getPluginSourceFilterValue,
+  normalizePluginRuntimeType,
+  sanitizeDescriptionText,
+  uniqueStringList,
+  type ChatPluginOption,
+} from "./chat-plugin-config";
 import { theme } from "../../theme";
 import { UiSelect } from "../../components/ui/UiSelect";
 import {
@@ -539,6 +554,20 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [availableModels, setAvailableModels] = useState<ModelCatalogOption[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
+  const [pluginMode, setPluginMode] = useState<"select" | "search">("select");
+  const [availablePlugins, setAvailablePlugins] = useState<ChatPluginOption[]>([]);
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
+  const [defaultToolIds, setDefaultToolIds] = useState<string[]>([]);
+  const [pluginPanelOpen, setPluginPanelOpen] = useState(false);
+  const [pluginSearchKeyword, setPluginSearchKeyword] = useState("");
+  const [pluginSourceFilter, setPluginSourceFilter] = useState("all");
+  const [pluginTypeFilter, setPluginTypeFilter] = useState("all");
+  const [pluginPage, setPluginPage] = useState(1);
+  const [pluginPageSize, setPluginPageSize] = useState(PLUGIN_PAGE_SIZE);
+  const [expandedPluginKeys, setExpandedPluginKeys] = useState<string[]>([]);
+  const [pluginLoading, setPluginLoading] = useState(false);
+  const [pluginError, setPluginError] = useState("");
+  const pluginSelectionInitializedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -603,10 +632,239 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     }
   }, [availableModels, selectedModelId, selectedProviderId]);
 
+  useEffect(() => {
+    let active = true;
+    const loadAvailablePlugins = async () => {
+      if (!token) return;
+      setPluginLoading(true);
+      setPluginError("");
+      try {
+        const response = await fetch("/api/backend/v1/plugins/available-for-chat", {
+          headers: buildAuthHeaders(token, userId),
+        });
+        updateTokenFromResponse(response);
+        const data = (await response
+          .json()
+          .catch(() => null)) as BackendResult<ChatPluginOption[]> | null;
+        if (!response.ok || !data || data.code !== 0) {
+          if (!active) return;
+          setAvailablePlugins([]);
+          setDefaultToolIds([]);
+          if (!pluginSelectionInitializedRef.current) {
+            setSelectedToolIds([]);
+            pluginSelectionInitializedRef.current = true;
+          }
+          setPluginError(data?.message || "插件列表加载失败");
+          return;
+        }
+        const nextItems = (Array.isArray(data.data) ? data.data : []).map((item) => ({
+          ...item,
+          source: getPluginSourceFilterValue(item.source),
+          runtime_type: normalizePluginRuntimeType(item.runtime_type),
+          tools: Array.isArray(item.tools) ? item.tools : [],
+        }));
+        const nextDefaultToolIds = collectToolIdsFromPlugins(nextItems).slice(
+          0,
+          MAX_SELECTED_TOOLS
+        );
+        if (!active) return;
+        setAvailablePlugins(nextItems);
+        setDefaultToolIds(nextDefaultToolIds);
+        const nextPluginKeySet = new Set(
+          nextItems.map((plugin, index) => getChatPluginKey(plugin, index))
+        );
+        setExpandedPluginKeys((current) => {
+          if (current.length === 0) {
+            return current;
+          }
+          return current.filter((pluginKey) => nextPluginKeySet.has(pluginKey));
+        });
+        setSelectedToolIds((current) => {
+          if (!pluginSelectionInitializedRef.current) {
+            pluginSelectionInitializedRef.current = true;
+            return nextDefaultToolIds;
+          }
+          if (current.length === 0) {
+            return current;
+          }
+          const nextAvailable = new Set(nextDefaultToolIds);
+          return current.filter((toolId) => nextAvailable.has(toolId));
+        });
+      } catch (error) {
+        if (!active) return;
+        setAvailablePlugins([]);
+        setDefaultToolIds([]);
+        setExpandedPluginKeys([]);
+        if (!pluginSelectionInitializedRef.current) {
+          setSelectedToolIds([]);
+          pluginSelectionInitializedRef.current = true;
+        }
+        if (error instanceof Error && error.message) {
+          setPluginError(error.message);
+        } else {
+          setPluginError("插件列表加载失败");
+        }
+      } finally {
+        if (active) {
+          setPluginLoading(false);
+        }
+      }
+    };
+    void loadAvailablePlugins();
+    return () => {
+      active = false;
+    };
+  }, [token, userId]);
+
   const selectedModelOption = useMemo(
     () => availableModels.find((item) => item.model_id === selectedModelId) ?? null,
     [availableModels, selectedModelId]
   );
+  const selectedToolIdSet = useMemo(
+    () => new Set(selectedToolIds),
+    [selectedToolIds]
+  );
+  const selectedPluginIds = useMemo(
+    () =>
+      uniqueStringList(
+        availablePlugins.map((plugin) => {
+          const hasSelectedTool = (plugin.tools ?? []).some(
+            (tool) =>
+              typeof tool.tool_id === "string" && selectedToolIdSet.has(tool.tool_id)
+          );
+          return hasSelectedTool && typeof plugin.plugin_id === "string"
+            ? plugin.plugin_id
+            : "";
+        })
+      ),
+    [availablePlugins, selectedToolIdSet]
+  );
+  const availableToolCount = useMemo(
+    () => collectToolIdsFromPlugins(availablePlugins).length,
+    [availablePlugins]
+  );
+  const availableRuntimeTypes = useMemo(
+    () =>
+      uniqueStringList(
+        [
+          ...KNOWN_PLUGIN_RUNTIME_TYPES,
+          ...availablePlugins.map((plugin) =>
+            normalizePluginRuntimeType(plugin.runtime_type)
+          ),
+        ]
+      ),
+    [availablePlugins]
+  );
+  const filteredPlugins = useMemo(() => {
+    const keyword = pluginSearchKeyword.trim().toLowerCase();
+    const matchesFilter = (plugin: ChatPluginOption) => {
+      const sourceMatched =
+        pluginSourceFilter === "all" ||
+        getPluginSourceFilterValue(plugin.source) === pluginSourceFilter;
+      const typeMatched =
+        pluginTypeFilter === "all" ||
+        normalizePluginRuntimeType(plugin.runtime_type) === pluginTypeFilter;
+      return sourceMatched && typeMatched;
+    };
+    if (!keyword) {
+      return availablePlugins.filter(matchesFilter);
+    }
+    return availablePlugins
+      .filter(matchesFilter)
+      .map((plugin) => {
+        const pluginName = (plugin.name || "").toLowerCase();
+        const pluginDescription = sanitizeDescriptionText(plugin.description).toLowerCase();
+        const pluginMatched =
+          pluginName.includes(keyword) || pluginDescription.includes(keyword);
+        const matchedTools = (plugin.tools ?? []).filter((tool) => {
+          const toolName = (tool.tool_name || "").toLowerCase();
+          const toolDescription = sanitizeDescriptionText(tool.description).toLowerCase();
+          const toolId = (tool.tool_id || "").toLowerCase();
+          return (
+            pluginMatched ||
+            toolName.includes(keyword) ||
+            toolDescription.includes(keyword) ||
+            toolId.includes(keyword)
+          );
+        });
+        if (pluginMatched) {
+          return plugin;
+        }
+        if (matchedTools.length === 0) {
+          return null;
+        }
+        return {
+          ...plugin,
+          tools: matchedTools,
+        };
+      })
+      .filter(Boolean) as ChatPluginOption[];
+  }, [availablePlugins, pluginSearchKeyword, pluginSourceFilter, pluginTypeFilter]);
+  const paginatedPlugins = useMemo(
+    () =>
+      filteredPlugins.slice(
+        (pluginPage - 1) * pluginPageSize,
+        pluginPage * pluginPageSize
+      ),
+    [filteredPlugins, pluginPage, pluginPageSize]
+  );
+  const pluginTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredPlugins.length / pluginPageSize)),
+    [filteredPlugins.length, pluginPageSize]
+  );
+  const selectedToolItems = useMemo(() => {
+    const toolMap = new Map<
+      string,
+      {
+        pluginName: string;
+        pluginIcon: string;
+        toolName: string;
+        toolDescription: string;
+      }
+    >();
+    availablePlugins.forEach((plugin) => {
+      const pluginName = plugin.name || "未命名插件";
+      const pluginIcon = plugin.icon || "";
+      (plugin.tools ?? []).forEach((tool) => {
+        if (!tool.tool_id) {
+          return;
+        }
+        toolMap.set(tool.tool_id, {
+          pluginName,
+          pluginIcon,
+          toolName: tool.tool_name || tool.tool_id,
+          toolDescription:
+            typeof tool.description === "string" ? tool.description.trim() : "",
+        });
+      });
+    });
+    return selectedToolIds
+      .map((toolId) => {
+        const item = toolMap.get(toolId);
+        if (!item) {
+          return null;
+        }
+        return {
+          toolId,
+          ...item,
+        };
+      })
+      .filter(Boolean) as Array<{
+      toolId: string;
+      pluginName: string;
+      pluginIcon: string;
+      toolName: string;
+      toolDescription: string;
+    }>;
+  }, [availablePlugins, selectedToolIds]);
+  useEffect(() => {
+    setPluginPage(1);
+  }, [pluginSearchKeyword, pluginSourceFilter, pluginTypeFilter, pluginPageSize]);
+  useEffect(() => {
+    if (pluginPage > pluginTotalPages) {
+      setPluginPage(pluginTotalPages);
+    }
+  }, [pluginPage, pluginTotalPages]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // 根据 query 参数或生成新 thread_id
@@ -1163,28 +1421,142 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     [renderActivityMessage]
   );
 
+  const toggleToolSelection = useCallback((toolId: string, checked: boolean) => {
+    setSelectedToolIds((current) => {
+      if (!toolId) {
+        return current;
+      }
+      if (checked) {
+        if (current.includes(toolId)) {
+          return current;
+        }
+        if (current.length >= MAX_SELECTED_TOOLS) {
+          setPluginError(`最多只能选择 ${MAX_SELECTED_TOOLS} 个工具`);
+          return current;
+        }
+        setPluginError("");
+        return uniqueStringList([...current, toolId]);
+      }
+      setPluginError("");
+      return current.filter((item) => item !== toolId);
+    });
+  }, []);
+
+  const togglePluginSelection = useCallback(
+    (plugin: ChatPluginOption, checked: boolean) => {
+      const pluginToolIds = uniqueStringList(
+        (plugin.tools ?? []).map((tool) =>
+          typeof tool.tool_id === "string" ? tool.tool_id : ""
+        )
+      );
+      setSelectedToolIds((current) => {
+        if (pluginToolIds.length === 0) {
+          return current;
+        }
+        if (checked) {
+          const pendingToolIds = pluginToolIds.filter(
+            (toolId) => !current.includes(toolId)
+          );
+          if (pendingToolIds.length === 0) {
+            return current;
+          }
+          const remaining = MAX_SELECTED_TOOLS - current.length;
+          if (remaining <= 0) {
+            setPluginError(`最多只能选择 ${MAX_SELECTED_TOOLS} 个工具`);
+            return current;
+          }
+          const appended = pendingToolIds.slice(0, remaining);
+          if (appended.length < pendingToolIds.length) {
+            setPluginError(`最多只能选择 ${MAX_SELECTED_TOOLS} 个工具，已按上限截断`);
+          } else {
+            setPluginError("");
+          }
+          return uniqueStringList([...current, ...appended]);
+        }
+        const blockedToolSet = new Set(pluginToolIds);
+        setPluginError("");
+        return current.filter((toolId) => !blockedToolSet.has(toolId));
+      });
+    },
+    []
+  );
+
+  const resetPluginSelection = useCallback(() => {
+    setSelectedToolIds(defaultToolIds.slice(0, MAX_SELECTED_TOOLS));
+    setPluginError("");
+  }, [defaultToolIds]);
+
+  const closePluginPanel = useCallback(() => {
+    setPluginPanelOpen(false);
+    setExpandedPluginKeys([]);
+  }, []);
+
+  const openPluginPanel = useCallback(() => {
+    setExpandedPluginKeys([]);
+    setPluginPanelOpen(true);
+  }, []);
+
+  const togglePluginExpanded = useCallback((pluginKey: string) => {
+    setExpandedPluginKeys((current) =>
+      current.includes(pluginKey)
+        ? current.filter((item) => item !== pluginKey)
+        : [...current, pluginKey]
+    );
+  }, []);
+
+  const handleConversationModeChange = useCallback(
+    (nextMode: "chat" | "agent") => {
+      setConversationMode(nextMode);
+      if (nextMode !== "chat") {
+        closePluginPanel();
+      }
+    },
+    [closePluginPanel]
+  );
+
+  const handlePluginModeChange = useCallback(
+    (nextMode: "select" | "search") => {
+      setPluginMode(nextMode);
+      if (nextMode !== "select") {
+        closePluginPanel();
+      }
+    },
+    [closePluginPanel]
+  );
+
+  const handlePluginPageChange = useCallback(
+    (nextPage: number) => {
+      setPluginPage(Math.max(1, Math.min(pluginTotalPages, nextPage)));
+    },
+    [pluginTotalPages]
+  );
+
+  const handlePluginPageSizeChange = useCallback((nextSize: number) => {
+    if (!PLUGIN_PAGE_SIZE_OPTIONS.includes(nextSize)) {
+      return;
+    }
+    setPluginPageSize(nextSize);
+  }, []);
+
   const renderConfigureArea = useCallback(
     () => (
-      <div
-        className="flex items-center gap-2"
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <UiSelect
-          value={conversationMode}
-          onChange={(event) =>
-            setConversationMode(event.target.value === "agent" ? "agent" : "chat")
-          }
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
-          className="ui-select-control--compact ui-select-control--glass rounded-full border-transparent px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
-        >
-          <option value="chat">Chat</option>
-          <option value="agent">Agent</option>
-        </UiSelect>
-      </div>
+      <ChatModeConfigureArea
+        conversationMode={conversationMode}
+        pluginMode={pluginMode}
+        selectedToolCount={selectedToolIds.length}
+        onConversationModeChange={handleConversationModeChange}
+        onPluginModeChange={handlePluginModeChange}
+        onOpenPluginPanel={openPluginPanel}
+      />
     ),
-    [conversationMode]
+    [
+      conversationMode,
+      handleConversationModeChange,
+      handlePluginModeChange,
+      openPluginPanel,
+      pluginMode,
+      selectedToolIds.length,
+    ]
   );
 
   const renderActionArea = useCallback(
@@ -1240,7 +1612,12 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         {props.menuItem}
       </div>
     ),
-    [availableModels, conversationMode, selectedModelId, selectedModelOption]
+    [
+      availableModels,
+      conversationMode,
+      selectedModelId,
+      selectedModelOption,
+    ]
   );
 
   // 发送：先回显 user 消息，再触发 run
@@ -1299,6 +1676,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 providerId: selectedProviderId || selectedModelOption.provider_id,
                 modelId: selectedModelOption.model_id,
               },
+              plugins: {
+                mode: pluginMode,
+                selectedToolIds: pluginMode === "select" ? selectedToolIds : [],
+              },
               features: {},
             },
           },
@@ -1311,7 +1692,14 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           }
         });
     },
-    [agent, conversationMode, selectedModelOption, selectedProviderId]
+    [
+      agent,
+      conversationMode,
+      pluginMode,
+      selectedModelOption,
+      selectedProviderId,
+      selectedToolIds,
+    ]
   );
 
   const handleStopGenerate = useCallback(() => {
@@ -1319,105 +1707,138 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   }, [agent]);
 
   return (
-    <div className="chat-page workspace-gradient-surface workspace-gradient-surface--chat flex h-full w-full flex-col p-3 md:p-4">
-      <div className="motion-safe-fade-in flex h-full min-h-0 flex-col gap-3">
-
-        <div className="motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] shadow-[var(--shadow-sm)] backdrop-blur-sm">
-          <div className="flex-1 overflow-hidden px-1 py-1">
-            {showHistorySkeleton ? (
-              <div className="flex h-full flex-col gap-4 px-4 py-5">
-                <div className="flex justify-start">
-                  <div className="w-full max-w-[68%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(226,232,240,0.8)] bg-[rgba(248,250,252,0.82)] p-4">
-                    <div className="h-3 w-20 animate-pulse rounded-full bg-[rgba(148,163,184,0.16)]" />
-                    <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(148,163,184,0.12)]" />
-                    <div className="h-3 w-4/5 animate-pulse rounded-full bg-[rgba(148,163,184,0.1)]" />
+    <>
+      <div className="chat-page workspace-gradient-surface workspace-gradient-surface--chat flex h-full w-full flex-col p-3 md:p-4">
+        <div className="motion-safe-fade-in flex h-full min-h-0 flex-col gap-3">
+          <div className="motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] shadow-[var(--shadow-sm)] backdrop-blur-sm">
+            <div className="flex-1 overflow-hidden px-1 py-1">
+              {showHistorySkeleton ? (
+                <div className="flex h-full flex-col gap-4 px-4 py-5">
+                  <div className="flex justify-start">
+                    <div className="w-full max-w-[68%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(226,232,240,0.8)] bg-[rgba(248,250,252,0.82)] p-4">
+                      <div className="h-3 w-20 animate-pulse rounded-full bg-[rgba(148,163,184,0.16)]" />
+                      <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(148,163,184,0.12)]" />
+                      <div className="h-3 w-4/5 animate-pulse rounded-full bg-[rgba(148,163,184,0.1)]" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <div className="w-full max-w-[52%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(37,99,255,0.12)] bg-[rgba(37,99,255,0.06)] p-4">
+                      <div className="h-3 w-16 animate-pulse rounded-full bg-[rgba(37,99,255,0.12)]" />
+                      <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(37,99,255,0.08)]" />
+                    </div>
+                  </div>
+                  <div className="flex justify-start">
+                    <div className="w-full max-w-[74%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(226,232,240,0.8)] bg-[rgba(248,250,252,0.82)] p-4">
+                      <div className="h-3 w-24 animate-pulse rounded-full bg-[rgba(148,163,184,0.14)]" />
+                      <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(148,163,184,0.1)]" />
+                      <div className="h-3 w-3/4 animate-pulse rounded-full bg-[rgba(148,163,184,0.08)]" />
+                    </div>
                   </div>
                 </div>
-                <div className="flex justify-end">
-                  <div className="w-full max-w-[52%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(37,99,255,0.12)] bg-[rgba(37,99,255,0.06)] p-4">
-                    <div className="h-3 w-16 animate-pulse rounded-full bg-[rgba(37,99,255,0.12)]" />
-                    <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(37,99,255,0.08)]" />
+              ) : showEmptyState ? (
+                <div className="motion-safe-fade-in flex h-full items-center justify-center px-6 py-8">
+                  <div className="max-w-md rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.94))] p-6 text-center shadow-[var(--shadow-sm)]">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-6 w-6"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M8 10h8" />
+                        <path d="M8 14h5" />
+                        <path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 2-2z" />
+                      </svg>
+                    </div>
+                    <div className="mt-4 text-sm font-semibold text-[var(--color-text-primary)]">
+                      开始新的对话
+                    </div>
+                    <div className="mt-2 text-sm text-[var(--color-text-muted)]">
+                      输入你的问题，系统会实时展示回复、工具调用和可视化内容。
+                    </div>
                   </div>
                 </div>
-                <div className="flex justify-start">
-                  <div className="w-full max-w-[74%] space-y-2 rounded-[var(--radius-xl)] border border-[rgba(226,232,240,0.8)] bg-[rgba(248,250,252,0.82)] p-4">
-                    <div className="h-3 w-24 animate-pulse rounded-full bg-[rgba(148,163,184,0.14)]" />
-                    <div className="h-3 w-full animate-pulse rounded-full bg-[rgba(148,163,184,0.1)]" />
-                    <div className="h-3 w-3/4 animate-pulse rounded-full bg-[rgba(148,163,184,0.08)]" />
-                  </div>
+              ) : (
+                <AIChatDialogue
+                  align="leftRight"
+                  mode="bubble"
+                  chats={chats}
+                  renderDialogueContentItem={renderDialogueContentItem}
+                  roleConfig={roleConfig}
+                  className="h-full"
+                />
+              )}
+            </div>
+            <div className="border-t border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.96))] px-4 py-3">
+              {agent.isRunning && (
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
+                  AI 正在生成回复
                 </div>
-              </div>
-            ) : showEmptyState ? (
-              <div className="motion-safe-fade-in flex h-full items-center justify-center px-6 py-8">
-                <div className="max-w-md rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.94))] p-6 text-center shadow-[var(--shadow-sm)]">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]">
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M8 10h8" />
-                      <path d="M8 14h5" />
-                      <path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 2-2z" />
-                    </svg>
-                  </div>
-                  <div className="mt-4 text-sm font-semibold text-[var(--color-text-primary)]">
-                    开始新的对话
-                  </div>
-                  <div className="mt-2 text-sm text-[var(--color-text-muted)]">
-                    输入你的问题，系统会实时展示回复、工具调用和可视化内容。
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <AIChatDialogue
-                align="leftRight"
-                mode="bubble"
-                chats={chats}
-                renderDialogueContentItem={renderDialogueContentItem}
-                roleConfig={roleConfig}
-                className="h-full"
+              )}
+              <AIChatInput
+                keepSkillAfterSend={false}
+                onMessageSend={handleMessageSend}
+                onStopGenerate={handleStopGenerate}
+                generating={agent.isRunning}
+                canSend={!agent.isRunning}
+                showUploadButton={false}
+                showUploadFile={false}
+                showReference={false}
+                round
+                immediatelyRender={false}
+                renderConfigureArea={renderConfigureArea}
+                renderActionArea={renderActionArea}
               />
-            )}
-          </div>
-          <div className="border-t border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.96))] px-4 py-3">
-            {agent.isRunning && (
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
-                AI 正在生成回复
-              </div>
-            )}
-            <AIChatInput
-              keepSkillAfterSend={false}
-              onMessageSend={handleMessageSend}
-              onStopGenerate={handleStopGenerate}
-              generating={agent.isRunning}
-              canSend={!agent.isRunning}
-              showUploadButton={false}
-              showUploadFile={false}
-              showReference={false}
-              round
-              immediatelyRender={false}
-              renderConfigureArea={renderConfigureArea}
-              renderActionArea={renderActionArea}
-            />
-            {inputError && (
-              <div
-                role="alert"
-                aria-live="polite"
-                className="motion-safe-slide-up mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
-              >
-                {inputError}
-              </div>
-            )}
+              {inputError && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="motion-safe-slide-up mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
+                >
+                  {inputError}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      <PluginSelectionModal
+        open={conversationMode === "chat" && pluginMode === "select" && pluginPanelOpen}
+        maxSelectedTools={MAX_SELECTED_TOOLS}
+        selectedToolIds={selectedToolIds}
+        selectedPluginIds={selectedPluginIds}
+        selectedToolIdSet={selectedToolIdSet}
+        pluginLoading={pluginLoading}
+        pluginSearchKeyword={pluginSearchKeyword}
+        pluginSourceFilter={pluginSourceFilter}
+        pluginTypeFilter={pluginTypeFilter}
+        pluginPage={pluginPage}
+        pluginPageSize={pluginPageSize}
+        pluginPageSizeOptions={PLUGIN_PAGE_SIZE_OPTIONS}
+        pluginTotalPages={pluginTotalPages}
+        availableToolCount={availableToolCount}
+        availableRuntimeTypes={availableRuntimeTypes}
+        filteredPlugins={filteredPlugins}
+        paginatedPlugins={paginatedPlugins}
+        expandedPluginKeys={expandedPluginKeys}
+        selectedToolItems={selectedToolItems}
+        pluginError={pluginError}
+        onClose={closePluginPanel}
+        onReset={resetPluginSelection}
+        onPluginSearchKeywordChange={setPluginSearchKeyword}
+        onPluginSourceFilterChange={setPluginSourceFilter}
+        onPluginTypeFilterChange={setPluginTypeFilter}
+        onPluginPageChange={handlePluginPageChange}
+        onPluginPageSizeChange={handlePluginPageSizeChange}
+        onTogglePluginExpanded={togglePluginExpanded}
+        onTogglePluginSelection={togglePluginSelection}
+        onToggleToolSelection={toggleToolSelection}
+      />
+    </>
   );
 }
 
