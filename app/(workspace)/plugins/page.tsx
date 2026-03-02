@@ -12,7 +12,9 @@ import {
 import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
+import { UiMonacoEditor } from "../../components/ui/UiMonacoEditor";
 import { UiSelect } from "../../components/ui/UiSelect";
+import { UiTextarea } from "../../components/ui/UiTextarea";
 import {
   buildAuthHeaders,
   readValidToken,
@@ -87,6 +89,7 @@ type ToolDraft = {
   queryFields: PluginField[];
   headerFields: PluginField[];
   bodyFields: PluginField[];
+  outputFields: PluginField[];
   codeLanguage: string;
   code: string;
 };
@@ -141,6 +144,18 @@ const createField = (type: FieldType = "string"): PluginField => ({
   item: type === "array" ? createField("string") : null,
 });
 
+const sanitizeOutputField = (field: PluginField): PluginField => ({
+  ...field,
+  required: false,
+  defaultValue: "",
+  enumText: "",
+  children: field.children.map((child) => sanitizeOutputField(child)),
+  item: field.item ? sanitizeOutputField(field.item) : null,
+});
+
+const sanitizeOutputFields = (fields: PluginField[]): PluginField[] =>
+  fields.map((field) => sanitizeOutputField(field));
+
 const createToolDraft = (): ToolDraft => ({
   toolName: "",
   description: "",
@@ -152,6 +167,7 @@ const createToolDraft = (): ToolDraft => ({
   queryFields: [],
   headerFields: [],
   bodyFields: [],
+  outputFields: [],
   codeLanguage: "javascript",
   code: "",
 });
@@ -349,7 +365,7 @@ const parseSchemaField = (
   const item =
     type === "array"
       ? parseSchemaField("", value.items, false, true) ?? createField("string")
-      : null;
+        : null;
 
   return {
     id: createId(),
@@ -475,6 +491,208 @@ const toFieldPayload = (
     field.type === "array" && field.item ? toFieldPayload(field.item, true) : undefined,
 });
 
+const getCodeTemplate = (language: string) => {
+  if (language === "python") {
+    return [
+      "# 请将入口函数命名为 main，入参为 params: dict，返回 dict",
+      "def main(params: dict) -> dict:",
+      "    return {",
+      "        \"result\": params.get(\"input\"),",
+      "    }",
+    ].join("\n");
+  }
+
+  return [
+    "// 请将入口函数命名为 main，入参为 params，返回普通对象",
+    "function main(params) {",
+    "  return {",
+    "    result: params?.input ?? null,",
+    "  };",
+    "}",
+  ].join("\n");
+};
+
+const getDefaultCodeBodyFields = (): PluginField[] => [
+  {
+    ...createField("string"),
+    name: "input",
+    description: "传入 main(params) 的默认示例参数",
+  },
+];
+
+const getEffectiveCodeBodyFields = (tool: ToolDraft): PluginField[] => {
+  if (tool.bodyFields.length > 0) {
+    return tool.bodyFields;
+  }
+
+  const codeLanguage = tool.codeLanguage.trim() === "python" ? "python" : "javascript";
+  const defaultTemplate = getCodeTemplate(codeLanguage).trim();
+  if (tool.code.trim() === defaultTemplate) {
+    return getDefaultCodeBodyFields();
+  }
+
+  return [];
+};
+
+const applyCodeToolDefaults = (tool: ToolDraft): ToolDraft => ({
+  ...tool,
+  toolResponseMode: "non_streaming",
+  code: tool.code.trim() ? tool.code : getCodeTemplate(tool.codeLanguage),
+  bodyFields: getEffectiveCodeBodyFields(tool),
+});
+
+const buildFieldSchemaObject = (field: PluginField): Record<string, unknown> => {
+  const schema: Record<string, unknown> = {
+    type: field.type,
+  };
+
+  if (field.description.trim()) {
+    schema.description = field.description.trim();
+  }
+
+  if (field.defaultValue.trim()) {
+    if (field.type === "string") {
+      schema.default = field.defaultValue.trim();
+    } else if (field.type === "number" || field.type === "integer") {
+      schema.default = Number(field.defaultValue);
+    } else if (field.type === "boolean") {
+      schema.default = /^(true|1)$/i.test(field.defaultValue.trim());
+    } else {
+      try {
+        schema.default = JSON.parse(field.defaultValue);
+      } catch {
+        schema.default = field.defaultValue.trim();
+      }
+    }
+  }
+
+  if (field.type === "string") {
+    const enumValues = field.enumText
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (enumValues.length > 0) {
+      schema.enum = enumValues;
+    }
+  }
+
+  if (field.type === "object") {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    field.children.forEach((child) => {
+      properties[child.name.trim()] = buildFieldSchemaObject(child);
+      if (child.required) {
+        required.push(child.name.trim());
+      }
+    });
+    schema.properties = properties;
+    schema.additionalProperties = false;
+    if (required.length > 0) {
+      schema.required = required;
+    }
+  }
+
+  if (field.type === "array" && field.item) {
+    schema.items = buildFieldSchemaObject(field.item);
+  }
+
+  return schema;
+};
+
+const buildObjectSchemaJSON = (fields: PluginField[]) => {
+  if (fields.length === 0) return "";
+
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  fields.forEach((field) => {
+    const fieldName = field.name.trim();
+    if (!fieldName) return;
+    properties[fieldName] = buildFieldSchemaObject(field);
+    if (field.required) {
+      required.push(fieldName);
+    }
+  });
+
+  return JSON.stringify(
+    {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties,
+      additionalProperties: false,
+      ...(required.length > 0 ? { required } : {}),
+    },
+    null,
+    2
+  );
+};
+
+const validateRuntimeValue = (value: unknown, field: PluginField, path: string): string => {
+  if (value === undefined || value === null) {
+    return `${path}不能为空`;
+  }
+
+  switch (field.type) {
+    case "string": {
+      if (typeof value !== "string") return `${path}必须为 string`;
+      const enumValues = field.enumText
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (enumValues.length > 0 && !enumValues.includes(value)) {
+        return `${path}必须命中枚举值`;
+      }
+      return "";
+    }
+    case "number":
+      return typeof value === "number" && Number.isFinite(value) ? "" : `${path}必须为 number`;
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value) ? "" : `${path}必须为 integer`;
+    case "boolean":
+      return typeof value === "boolean" ? "" : `${path}必须为 boolean`;
+    case "object":
+      if (!isRecord(value)) return `${path}必须为 object`;
+      return validateRuntimePayload(value, field.children, path);
+    case "array":
+      if (!Array.isArray(value)) return `${path}必须为 array`;
+      if (!field.item) return `${path}缺少数组元素定义`;
+      for (let index = 0; index < value.length; index += 1) {
+        const itemError = validateRuntimeValue(value[index], field.item, `${path}[${index}]`);
+        if (itemError) return itemError;
+      }
+      return "";
+    default:
+      return "";
+  }
+};
+
+const validateRuntimePayload = (
+  payload: Record<string, unknown>,
+  fields: PluginField[],
+  scopeLabel = "输入参数"
+) => {
+  const fieldMap = new Map(fields.map((field) => [field.name.trim(), field]));
+
+  for (const field of fields) {
+    const fieldName = field.name.trim();
+    if (!fieldName) continue;
+    if (field.required && !(fieldName in payload)) {
+      return `${scopeLabel}.${fieldName}为必填项`;
+    }
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    const field = fieldMap.get(key);
+    if (!field) {
+      return `${scopeLabel}.${key}未在输入参数中声明`;
+    }
+    const valueError = validateRuntimeValue(value, field, `${scopeLabel}.${key}`);
+    if (valueError) return valueError;
+  }
+
+  return "";
+};
+
 const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
   const payload: Record<string, unknown> = {
     name: draft.name.trim(),
@@ -517,10 +735,13 @@ const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
   }
 
   if (draft.runtimeType === "code") {
+    const codeBodyFields = getEffectiveCodeBodyFields(draft.tool);
+    const outputFields = sanitizeOutputFields(draft.tool.outputFields);
     toolPayload.tool_response_mode = "non_streaming";
     toolPayload.code_language = draft.tool.codeLanguage.trim();
     toolPayload.code = draft.tool.code;
-    toolPayload.body_fields = draft.tool.bodyFields.map((field) => toFieldPayload(field));
+    toolPayload.body_fields = codeBodyFields.map((field) => toFieldPayload(field));
+    toolPayload.output_schema_json = buildObjectSchemaJSON(outputFields);
   }
 
   payload.tools = [toolPayload];
@@ -645,10 +866,14 @@ const validateDraft = (draft: PluginDraft) => {
   }
   if (draft.runtimeType === "code") {
     if (!draft.tool.toolName.trim()) return "请输入工具名称";
-    if (!draft.tool.codeLanguage.trim()) return "请输入代码语言";
+    if (!["python", "javascript"].includes(draft.tool.codeLanguage.trim())) {
+      return "代码语言仅支持 python 或 javascript";
+    }
     if (!draft.tool.code.trim()) return "请输入代码内容";
     const inputError = validateFieldList(draft.tool.bodyFields, "输入参数");
     if (inputError) return inputError;
+    const outputError = validateFieldList(sanitizeOutputFields(draft.tool.outputFields), "输出参数");
+    if (outputError) return outputError;
   }
   return "";
 };
@@ -657,40 +882,52 @@ function FieldListEditor({
   label,
   fields,
   onChange,
+  mode = "input",
 }: {
   label: string;
   fields: PluginField[];
   onChange: (next: PluginField[]) => void;
+  mode?: "input" | "output";
 }) {
+  const isOutput = mode === "output";
+  const displayFields = isOutput ? sanitizeOutputFields(fields) : fields;
+  const gridClassName = isOutput
+    ? "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_44px] gap-2"
+    : "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_72px_minmax(132px,1.15fr)_minmax(132px,1.15fr)_44px] gap-2";
+  const minWidthClassName = isOutput ? "min-w-[520px]" : "min-w-[900px]";
+  const commitChange = (next: PluginField[]) => onChange(isOutput ? sanitizeOutputFields(next) : next);
+
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-default)] px-4 py-3">
+    <div className="overflow-hidden rounded-[14px] border border-[var(--color-border-default)] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-default)] px-3 py-2.5">
         <div className="text-sm font-semibold text-[var(--color-text-primary)]">{label}</div>
         <UiButton
           type="button"
-          variant="secondary"
+          variant="ghost"
           size="sm"
-          onClick={() => onChange([...fields, createField()])}
+          onClick={() => commitChange([...displayFields, createField()])}
         >
-          新增字段
+          + 添加
         </UiButton>
       </div>
       <div className="overflow-x-auto">
-        <div className="min-w-[1320px]">
-          <div className="grid grid-cols-[minmax(220px,2fr)_minmax(220px,2fr)_140px_minmax(180px,1.4fr)_minmax(220px,1.8fr)_96px_160px] gap-3 border-b border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]">
+        <div className={minWidthClassName}>
+          <div
+            className={`${gridClassName} border-b border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-2 text-xs font-semibold text-[var(--color-text-muted)]`}
+          >
             <span>参数名称</span>
             <span>参数描述</span>
             <span>参数类型</span>
-            <span>默认值</span>
-            <span>枚举值</span>
-            <span>必填</span>
-            <span>操作</span>
+            {!isOutput && <span>必填</span>}
+            {!isOutput && <span>默认值</span>}
+            {!isOutput && <span>枚举值</span>}
+            <span />
           </div>
-          {fields.length === 0 ? (
-            <div className="px-4 py-5 text-sm text-[var(--color-text-muted)]">暂无字段</div>
+          {displayFields.length === 0 ? (
+            <div className="px-3 py-4 text-sm text-[var(--color-text-muted)]">暂无字段</div>
           ) : (
             <div className="divide-y divide-[var(--color-border-default)]">
-              <FieldRowsEditor fields={fields} depth={0} onChange={onChange} />
+              <FieldRowsEditor fields={displayFields} depth={0} onChange={commitChange} mode={mode} />
             </div>
           )}
         </div>
@@ -703,10 +940,12 @@ function FieldRowsEditor({
   fields,
   depth,
   onChange,
+  mode,
 }: {
   fields: PluginField[];
   depth: number;
   onChange: (next: PluginField[]) => void;
+  mode: "input" | "output";
 }) {
   return (
     <>
@@ -719,6 +958,7 @@ function FieldRowsEditor({
             onChange(fields.map((item, itemIndex) => (itemIndex === index ? nextField : item)))
           }
           onRemove={() => onChange(fields.filter((_, itemIndex) => itemIndex !== index))}
+          mode={mode}
         />
       ))}
     </>
@@ -731,23 +971,29 @@ function FieldEditor({
   onChange,
   onRemove,
   isArrayItem = false,
+  mode,
 }: {
   field: PluginField;
   depth: number;
   onChange: (next: PluginField) => void;
   onRemove?: () => void;
   isArrayItem?: boolean;
+  mode: "input" | "output";
 }) {
-  const showEnumEditor = field.type === "string";
+  const isOutput = mode === "output";
+  const showEnumEditor = !isOutput && field.type === "string";
   const showObjectChildren = field.type === "object";
   const showArrayItem = field.type === "array" && field.item;
+  const gridClassName = isOutput
+    ? "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_44px] gap-2"
+    : "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_72px_minmax(132px,1.15fr)_minmax(132px,1.15fr)_44px] gap-2";
 
   return (
     <>
-      <div className="grid grid-cols-[minmax(220px,2fr)_minmax(220px,2fr)_140px_minmax(180px,1.4fr)_minmax(220px,1.8fr)_96px_160px] gap-3 px-4 py-3">
+      <div className={`${gridClassName} px-3 py-2`}>
         <div style={{ paddingLeft: `${depth * 24}px` }}>
           {isArrayItem ? (
-            <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 text-sm text-[var(--color-text-secondary)]">
+            <div className="flex h-9 items-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 text-sm text-[var(--color-text-secondary)]">
               数组元素
             </div>
           ) : (
@@ -780,38 +1026,43 @@ function FieldEditor({
           <option value="number">number</option>
           <option value="integer">integer</option>
           <option value="boolean">boolean</option>
-          <option value="object">object</option>
-          <option value="array">array</option>
-        </UiSelect>
-        <UiInput
-          placeholder={
-            field.type === "object" || field.type === "array"
-              ? "JSON 默认值（可选）"
-              : "默认值（可选）"
-          }
-          value={field.defaultValue}
-          onChange={(event) => onChange({ ...field, defaultValue: event.target.value })}
-        />
-        {showEnumEditor ? (
-          <UiInput
-            placeholder="逗号分隔，可选"
-            value={field.enumText}
-            onChange={(event) => onChange({ ...field, enumText: event.target.value })}
-          />
-        ) : (
-          <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[rgba(148,163,184,0.05)] px-3 text-xs text-[var(--color-text-muted)]">
-            仅 string 可配置
-          </div>
+              <option value="object">object</option>
+              <option value="array">array</option>
+            </UiSelect>
+        {!isOutput && (
+          <label className="flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 text-sm text-[var(--color-text-secondary)]">
+            <input
+              type="checkbox"
+              checked={field.required}
+              onChange={(event) => onChange({ ...field, required: event.target.checked })}
+            />
+            必填
+          </label>
         )}
-        <label className="flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 text-sm text-[var(--color-text-secondary)]">
-          <input
-            type="checkbox"
-            checked={field.required}
-            onChange={(event) => onChange({ ...field, required: event.target.checked })}
+        {!isOutput && (
+          <UiInput
+            placeholder={
+              field.type === "object" || field.type === "array"
+                ? "JSON 默认值（可选）"
+                : "默认值（可选）"
+            }
+            value={field.defaultValue}
+            onChange={(event) => onChange({ ...field, defaultValue: event.target.value })}
           />
-          必填
-        </label>
-        <div className="flex items-center justify-end gap-2">
+        )}
+        {!isOutput &&
+          (showEnumEditor ? (
+            <UiInput
+              placeholder="逗号分隔，可选"
+              value={field.enumText}
+              onChange={(event) => onChange({ ...field, enumText: event.target.value })}
+            />
+          ) : (
+            <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[rgba(148,163,184,0.05)] px-3 text-xs text-[var(--color-text-muted)]">
+              仅 string
+            </div>
+          ))}
+        <div className="flex items-center justify-end gap-1">
           {showObjectChildren && (
             <UiButton
               type="button"
@@ -824,12 +1075,12 @@ function FieldEditor({
                 })
               }
             >
-              添加子项
+              子项
             </UiButton>
           )}
           {onRemove ? (
             <UiButton type="button" variant="ghost" size="sm" onClick={onRemove}>
-              删除
+              删
             </UiButton>
           ) : (
             <div className="h-8" />
@@ -837,7 +1088,7 @@ function FieldEditor({
         </div>
       </div>
       {showObjectChildren && field.children.length === 0 && (
-        <div className="px-4 pb-3">
+        <div className="px-3 pb-2">
           <div
             className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-2 text-xs text-[var(--color-text-muted)]"
             style={{ marginLeft: `${(depth + 1) * 24}px` }}
@@ -851,6 +1102,7 @@ function FieldEditor({
           fields={field.children}
           depth={depth + 1}
           onChange={(nextChildren) => onChange({ ...field, children: nextChildren })}
+          mode={mode}
         />
       )}
       {showArrayItem && (
@@ -860,6 +1112,7 @@ function FieldEditor({
             depth={depth + 1}
             isArrayItem
             onChange={(nextItem) => onChange({ ...field, item: nextItem })}
+            mode={mode}
           />
         </div>
       )}
@@ -899,11 +1152,16 @@ function FormFieldRow({
 function FieldTable({
   fields,
   emptyText = "暂无参数",
+  showConstraints = true,
 }: {
   fields: PluginField[];
   emptyText?: string;
+  showConstraints?: boolean;
 }) {
   const rows = flattenFields(fields);
+  const gridClassName = showConstraints
+    ? "grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(180px,1.4fr)_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3"
+    : "grid grid-cols-[minmax(180px,2fr)_120px_minmax(220px,2fr)] gap-3";
 
   if (rows.length === 0) {
     return (
@@ -915,20 +1173,19 @@ function FieldTable({
 
   return (
     <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-default)]">
-      <div className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(180px,1.4fr)_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]">
+      <div
+        className={`${gridClassName} bg-[var(--color-bg-page)] px-4 py-3 text-xs font-semibold text-[var(--color-text-muted)]`}
+      >
         <span>参数名称</span>
         <span>参数类型</span>
-        <span>必填</span>
-        <span>默认值</span>
+        {showConstraints && <span>必填</span>}
+        {showConstraints && <span>默认值</span>}
         <span>参数描述</span>
-        <span>枚举值</span>
+        {showConstraints && <span>枚举值</span>}
       </div>
       <div className="divide-y divide-[var(--color-border-default)] bg-white">
         {rows.map((row) => (
-          <div
-            key={row.id}
-            className="grid grid-cols-[minmax(180px,2fr)_120px_100px_minmax(180px,1.4fr)_minmax(220px,2fr)_minmax(140px,1.2fr)] gap-3 px-4 py-3 text-sm text-[var(--color-text-secondary)]"
-          >
+          <div key={row.id} className={`${gridClassName} px-4 py-3 text-sm text-[var(--color-text-secondary)]`}>
             <span
               className="truncate text-[var(--color-text-primary)]"
               style={{ paddingLeft: `${row.depth * 16}px` }}
@@ -937,12 +1194,240 @@ function FieldTable({
               {row.name}
             </span>
             <span>{row.type}</span>
-            <span>{row.required ? "是" : "否"}</span>
-            <span>{row.defaultValue || "-"}</span>
+            {showConstraints && <span>{row.required ? "是" : "否"}</span>}
+            {showConstraints && <span>{row.defaultValue || "-"}</span>}
             <span>{row.description || "-"}</span>
-            <span>{row.enumText || "-"}</span>
+            {showConstraints && <span>{row.enumText || "-"}</span>}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function CodeToolEditor({
+  tool,
+  onChange,
+  onDebugRun,
+}: {
+  tool: ToolDraft;
+  onChange: (next: ToolDraft) => void;
+  onDebugRun: (tool: ToolDraft, input: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [testInput, setTestInput] = useState('{\n  "input": "A"\n}');
+  const [testOutput, setTestOutput] = useState("");
+  const [testError, setTestError] = useState("");
+  const [debugging, setDebugging] = useState(false);
+  const previousLanguageRef = useRef(tool.codeLanguage);
+
+  useEffect(() => {
+    const previousLanguage = previousLanguageRef.current;
+    if (tool.codeLanguage === previousLanguage) return;
+
+    previousLanguageRef.current = tool.codeLanguage;
+    const previousTemplate = getCodeTemplate(previousLanguage);
+    if (!tool.code.trim() || tool.code.trim() === previousTemplate.trim()) {
+      onChange({
+        ...tool,
+        code: getCodeTemplate(tool.codeLanguage),
+      });
+    }
+  }, [onChange, tool]);
+
+  useEffect(() => {
+    if (tool.bodyFields.length > 0) return;
+    if (getEffectiveCodeBodyFields(tool).length === 0) return;
+
+    onChange({
+      ...tool,
+      bodyFields: getDefaultCodeBodyFields(),
+    });
+  }, [onChange, tool]);
+
+  const lineCount = Math.max(6, tool.code.split("\n").length);
+
+  const runLocalCheck = async () => {
+    setTestError("");
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(testInput);
+    } catch {
+      setTestError("测试输入必须是合法的 JSON");
+      setTestOutput("");
+      return;
+    }
+
+    if (!isRecord(payload)) {
+      setTestError("测试输入必须是 JSON 对象");
+      setTestOutput("");
+      return;
+    }
+
+    setDebugging(true);
+    try {
+      const result = await onDebugRun(tool, payload);
+      setTestOutput(JSON.stringify(result, null, 2));
+    } catch (error) {
+      setTestOutput("");
+      setTestError(error instanceof Error ? error.message : "调试执行失败");
+    } finally {
+      setDebugging(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,0.82fr)_minmax(280px,0.78fr)]">
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-1">
+          <div>
+            <div className="text-sm font-semibold text-white">
+              {tool.codeLanguage === "python" ? "Python" : "JavaScript"}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <UiSelect
+              value={tool.codeLanguage}
+              onChange={(event) =>
+                onChange({
+                  ...tool,
+                  codeLanguage: event.target.value.trim() === "python" ? "python" : "javascript",
+                })
+              }
+            >
+              <option value="javascript">javascript</option>
+              <option value="python">python</option>
+            </UiSelect>
+            <UiButton
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                onChange({
+                  ...tool,
+                  code: getCodeTemplate(tool.codeLanguage),
+                })
+              }
+            >
+              重置模板
+            </UiButton>
+          </div>
+        </div>
+
+        <div className="grid min-h-[240px] grid-cols-[32px_minmax(0,1fr)] overflow-hidden rounded-[14px] bg-[rgb(15,23,42)]">
+          <div className="border-r border-[rgba(148,163,184,0.1)] bg-[rgba(2,6,23,0.55)] px-1 py-2 text-right text-[10px] leading-4 text-[rgba(148,163,184,0.6)]">
+            {Array.from({ length: lineCount }).map((_, index) => (
+              <div key={index + 1}>{index + 1}</div>
+            ))}
+          </div>
+          <UiMonacoEditor
+            value={tool.code}
+            language={tool.codeLanguage === "python" ? "python" : "javascript"}
+            minHeight={240}
+            fontSize={11}
+            placeholder="在这里输入代码"
+            className="w-full"
+            onChange={(event) =>
+              onChange({
+                ...tool,
+                code: event,
+              })
+            }
+          />
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-[12px] bg-[rgba(2,6,23,0.78)] px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-white">输入测试</div>
+              <UiButton type="button" size="sm" onClick={() => void runLocalCheck()} loading={debugging}>
+                {debugging ? "执行中..." : "运行调试"}
+              </UiButton>
+            </div>
+            <UiTextarea
+              className="min-h-[76px] w-full resize-y rounded-[10px] border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.72)] font-mono text-[10px] leading-4 text-[rgb(226,232,240)]"
+              spellCheck={false}
+              value={testInput}
+              onChange={(event) => setTestInput(event.target.value)}
+            />
+            {testError ? (
+              <div className="mt-1.5 rounded-[10px] border border-[rgba(248,113,113,0.26)] bg-[rgba(127,29,29,0.32)] px-2 py-1.5 text-[10px] text-[rgb(254,202,202)]">
+                {testError}
+              </div>
+            ) : (
+              <div className="mt-1.5 text-[10px] text-[rgba(148,163,184,0.82)]">
+                前端仅校验 JSON 格式，随后直接调用后端调试接口执行沙箱代码。
+              </div>
+            )}
+          </div>
+          <div className="rounded-[12px] bg-[rgba(2,6,23,0.78)] px-3 py-2">
+            <div className="mb-1.5 text-xs font-semibold text-white">输出结果</div>
+            <pre className="min-h-[76px] overflow-auto rounded-[10px] border border-[rgba(148,163,184,0.16)] bg-[rgba(15,23,42,0.72)] px-2 py-2 font-mono text-[10px] leading-4 text-[rgb(226,232,240)]">
+              {testOutput || "// 调试执行后，这里会展示后端返回结果"}
+            </pre>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="rounded-[18px] border border-[var(--color-border-default)] bg-white p-3.5 shadow-[var(--shadow-sm)]">
+          <DetailSectionTitle title="基础信息" />
+          <div className="mt-4 space-y-4">
+            <FormFieldRow label="工具名称" required>
+              <UiInput
+                placeholder="请输入工具名称"
+                value={tool.toolName}
+                onChange={(event) =>
+                  onChange({
+                    ...tool,
+                    toolName: event.target.value,
+                  })
+                }
+              />
+            </FormFieldRow>
+            <FormFieldRow label="工具描述">
+                <UiInput
+                placeholder="请输入工具描述"
+                value={tool.description}
+                onChange={(event) =>
+                  onChange({
+                    ...tool,
+                    description: event.target.value,
+                  })
+                }
+              />
+            </FormFieldRow>
+            <FormFieldRow label="响应模式">
+              <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+                固定为 non_streaming
+              </div>
+            </FormFieldRow>
+          </div>
+        </div>
+
+        <FieldListEditor
+          label="输入参数"
+          fields={tool.bodyFields}
+          onChange={(nextFields) =>
+            onChange({
+              ...tool,
+              bodyFields: nextFields,
+            })
+          }
+          mode="input"
+        />
+
+        <FieldListEditor
+          label="输出参数"
+          fields={sanitizeOutputFields(tool.outputFields)}
+          onChange={(nextFields) =>
+            onChange({
+              ...tool,
+              outputFields: sanitizeOutputFields(nextFields),
+            })
+          }
+          mode="output"
+        />
       </div>
     </div>
   );
@@ -1111,8 +1596,12 @@ export default function PluginsPage() {
         queryFields: parseFields(tool?.query_fields),
         headerFields: parseFields(tool?.header_fields),
         bodyFields: parseFields(tool?.body_fields),
-        codeLanguage: tool?.code_language ?? "javascript",
-        code: tool?.code ?? "",
+        outputFields: getOutputFields(tool ?? {}),
+        codeLanguage: tool?.code_language === "python" ? "python" : "javascript",
+        code:
+          tool?.code && tool.code.trim()
+            ? tool.code
+            : getCodeTemplate(tool?.code_language === "python" ? "python" : "javascript"),
       },
     });
   };
@@ -1206,6 +1695,39 @@ export default function PluginsPage() {
       setUploadingIcon(false);
     }
   };
+
+  const debugCodeTool = useCallback(
+    async (tool: ToolDraft, input: Record<string, unknown>) => {
+      const token = getToken();
+      if (!token) {
+        throw new Error("登录已失效，请重新登录后再试");
+      }
+
+      const res = await fetch(`${API_BASE}/v1/plugins/code/debug`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...buildAuthHeaders(token),
+        },
+        body: JSON.stringify({
+          code: tool.code,
+          code_language: tool.codeLanguage.trim(),
+          input,
+          timeout_ms:
+            Number.isFinite(tool.timeoutMS) && tool.timeoutMS >= 1
+              ? tool.timeoutMS
+              : 30000,
+        }),
+      });
+      updateTokenFromResponse(res);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || "调试执行失败");
+      }
+      return data.data ?? null;
+    },
+    [getToken]
+  );
 
   const goNext = async () => {
     if (wizardStep === 1 && !draft.runtimeType) {
@@ -1471,6 +1993,7 @@ export default function PluginsPage() {
                       onClick={() => {
                         const next = createPluginDraft();
                         next.runtimeType = "code";
+                        next.tool = applyCodeToolDefaults(next.tool);
                         setDraft(next);
                         setWizardStep(2);
                         setFormError("");
@@ -1809,7 +2332,11 @@ export default function PluginsPage() {
 
                   <section className="space-y-4">
                     <DetailSectionTitle title="出参数" />
-                    <FieldTable fields={activeToolOutputFields} emptyText="暂无结构化出参数配置" />
+                    <FieldTable
+                      fields={activeToolOutputFields}
+                      emptyText="暂无结构化出参数配置"
+                      showConstraints={false}
+                    />
                   </section>
                 </div>
               </div>
@@ -1913,13 +2440,10 @@ export default function PluginsPage() {
                                 setDraft((current) => ({
                                   ...current,
                                   runtimeType: runtime,
-                                  tool: {
-                                    ...current.tool,
-                                    toolResponseMode:
-                                      runtime === "code"
-                                        ? "non_streaming"
-                                        : current.tool.toolResponseMode,
-                                  },
+                                  tool:
+                                    runtime === "code"
+                                      ? applyCodeToolDefaults(current.tool)
+                                      : current.tool,
                                 }))
                               }
                               className={`rounded-[var(--radius-lg)] border p-4 text-left ${
@@ -2214,72 +2738,16 @@ export default function PluginsPage() {
                     )}
 
                     {draft.runtimeType === "code" && (
-                      <>
-                        <div className="space-y-4">
-                          <FormFieldRow label="工具名称" required>
-                            <UiInput
-                              placeholder="请输入工具名称"
-                              value={draft.tool.toolName}
-                              onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: { ...current.tool, toolName: event.target.value },
-                                }))
-                              }
-                            />
-                          </FormFieldRow>
-                          <FormFieldRow label="工具描述">
-                            <UiInput
-                              placeholder="请输入工具描述"
-                              value={draft.tool.description}
-                              onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: { ...current.tool, description: event.target.value },
-                                }))
-                              }
-                            />
-                          </FormFieldRow>
-                          <FormFieldRow label="代码语言" required>
-                            <UiInput
-                              placeholder="请输入代码语言"
-                              value={draft.tool.codeLanguage}
-                              onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: { ...current.tool, codeLanguage: event.target.value },
-                                }))
-                              }
-                            />
-                          </FormFieldRow>
-                          <FormFieldRow label="响应模式">
-                            <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
-                              固定为非流式
-                            </div>
-                          </FormFieldRow>
-                        </div>
-                        <FieldListEditor
-                          label="输入参数"
-                          fields={draft.tool.bodyFields}
-                          onChange={(nextFields) =>
-                            setDraft((current) => ({
-                              ...current,
-                              tool: { ...current.tool, bodyFields: nextFields },
-                            }))
-                          }
-                        />
-                        <textarea
-                          className="min-h-[220px] w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-3 text-sm outline-none"
-                          placeholder="输入代码内容"
-                          value={draft.tool.code}
-                          onChange={(event) =>
-                            setDraft((current) => ({
-                              ...current,
-                              tool: { ...current.tool, code: event.target.value },
-                            }))
-                          }
-                        />
-                      </>
+                      <CodeToolEditor
+                        tool={draft.tool}
+                        onDebugRun={debugCodeTool}
+                        onChange={(nextTool) =>
+                          setDraft((current) => ({
+                            ...current,
+                            tool: nextTool,
+                          }))
+                        }
+                      />
                     )}
                   </div>
                 )}
