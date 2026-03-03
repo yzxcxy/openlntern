@@ -19,6 +19,7 @@ import (
 	"github.com/cloudwego/eino-ext/callbacks/apmplus"
 	"github.com/cloudwego/eino-ext/components/model/ark"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
+	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
 	einoSkill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/callbacks"
@@ -703,8 +704,8 @@ func buildChatModel(ctx context.Context, provider *models.ModelProvider, modelIt
 			BaseURL: strings.TrimSpace(provider.BaseURL),
 			Model:   strings.TrimSpace(modelItem.ModelKey),
 		})
-	case "deepseek", "openai_compatible":
-		return deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+	case "openai":
+		return openai.NewChatModel(ctx, &openai.ChatModelConfig{
 			APIKey:  apiKey,
 			BaseURL: strings.TrimSpace(provider.BaseURL),
 			Model:   strings.TrimSpace(modelItem.ModelKey),

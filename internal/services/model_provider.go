@@ -54,10 +54,14 @@ var ModelProvider = new(ModelProviderService)
 
 func (s *ModelProviderService) Create(input CreateModelProviderInput) (*models.ModelProvider, error) {
 	name := strings.TrimSpace(input.Name)
-	apiType := strings.TrimSpace(input.APIType)
+	apiType := strings.ToLower(strings.TrimSpace(input.APIType))
 	if name == "" || apiType == "" {
 		return nil, errors.New("name and api_type are required")
 	}
+	if apiType != "openai" && apiType != "ark" {
+		return nil, errors.New("api_type must be one of: openai, ark")
+	}
+	var err error
 	ciphertext, err := encryptModelSecret(strings.TrimSpace(input.APIKey))
 	if err != nil {
 		return nil, err
@@ -100,9 +104,12 @@ func (s *ModelProviderService) Update(providerID string, input UpdateModelProvid
 		updates["name"] = name
 	}
 	if input.APIType != nil {
-		apiType := strings.TrimSpace(*input.APIType)
+		apiType := strings.ToLower(strings.TrimSpace(*input.APIType))
 		if apiType == "" {
 			return errors.New("api_type cannot be empty")
+		}
+		if apiType != "openai" && apiType != "ark" {
+			return errors.New("api_type must be one of: openai, ark")
 		}
 		updates["api_type"] = apiType
 	}
