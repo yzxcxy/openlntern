@@ -901,9 +901,9 @@ function FieldListEditor({
   const isOutput = mode === "output";
   const displayFields = isOutput ? sanitizeOutputFields(fields) : fields;
   const gridClassName = isOutput
-    ? "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_44px] gap-2"
-    : "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_72px_minmax(132px,1.15fr)_minmax(132px,1.15fr)_44px] gap-2";
-  const minWidthClassName = isOutput ? "min-w-[520px]" : "min-w-[900px]";
+    ? "grid grid-cols-[minmax(112px,1fr)_minmax(136px,1.2fr)_96px_40px] gap-2"
+    : "grid grid-cols-[minmax(112px,1fr)_minmax(136px,1.2fr)_96px_52px_minmax(112px,1fr)_minmax(112px,1fr)_40px] gap-2";
+  const minWidthClassName = isOutput ? "min-w-[440px]" : "min-w-[760px]";
   const commitChange = (next: PluginField[]) => onChange(isOutput ? sanitizeOutputFields(next) : next);
 
   return (
@@ -994,8 +994,8 @@ function FieldEditor({
   const showObjectChildren = field.type === "object";
   const showArrayItem = field.type === "array" && field.item;
   const gridClassName = isOutput
-    ? "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_44px] gap-2"
-    : "grid grid-cols-[minmax(132px,1.15fr)_minmax(160px,1.35fr)_108px_72px_minmax(132px,1.15fr)_minmax(132px,1.15fr)_44px] gap-2";
+    ? "grid grid-cols-[minmax(112px,1fr)_minmax(136px,1.2fr)_96px_40px] gap-2"
+    : "grid grid-cols-[minmax(112px,1fr)_minmax(136px,1.2fr)_96px_52px_minmax(112px,1fr)_minmax(112px,1fr)_40px] gap-2";
 
   return (
     <>
@@ -1039,13 +1039,12 @@ function FieldEditor({
               <option value="array">array</option>
             </UiSelect>
         {!isOutput && (
-          <label className="flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 text-sm text-[var(--color-text-secondary)]">
+          <label className="flex h-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-2 text-sm text-[var(--color-text-secondary)]">
             <input
               type="checkbox"
               checked={field.required}
               onChange={(event) => onChange({ ...field, required: event.target.checked })}
             />
-            必填
           </label>
         )}
         {!isOutput && (
@@ -1406,11 +1405,6 @@ function CodeToolEditor({
                 }
               />
             </FormFieldRow>
-            <FormFieldRow label="响应模式">
-              <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
-                固定为 non_streaming
-              </div>
-            </FormFieldRow>
           </div>
         </div>
 
@@ -1616,6 +1610,9 @@ export default function PluginsPage() {
   };
 
   const openCreate = () => {
+    if (sourceFilter === "builtin") {
+      return;
+    }
     setDraft(createPluginDraft());
     setWizardStep(1);
     setFormError("");
@@ -1881,6 +1878,8 @@ export default function PluginsPage() {
     }
   };
 
+  const isBuiltinFilterActive = sourceFilter === "builtin";
+
   return (
     <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-6">
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
@@ -1927,9 +1926,11 @@ export default function PluginsPage() {
                 >
                   搜索
                 </UiButton>
-                <UiButton type="button" className="w-full xl:w-auto" onClick={openCreate}>
-                  新增插件
-                </UiButton>
+                {!isBuiltinFilterActive && (
+                  <UiButton type="button" className="w-full xl:w-auto" onClick={openCreate}>
+                    新增插件
+                  </UiButton>
+                )}
               </div>
             </div>
 
@@ -1961,57 +1962,61 @@ export default function PluginsPage() {
               ) : items.length === 0 ? (
                 <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] p-6 text-center">
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                    还没有自定义插件
+                    {isBuiltinFilterActive ? "暂无内建插件" : "还没有自定义插件"}
                   </div>
                   <div className="mt-2 text-xs text-[var(--color-text-muted)]">
-                    从 API、MCP 或 Code 向导开始创建。
+                    {isBuiltinFilterActive
+                      ? "当前筛选条件下没有可用的内建插件。"
+                      : "从 API、MCP 或 Code 向导开始创建。"}
                   </div>
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    <UiButton
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        const next = createPluginDraft();
-                        next.runtimeType = "api";
-                        next.tool.toolResponseMode = "non_streaming";
-                        setDraft(next);
-                        setWizardStep(2);
-                        setFormError("");
-                        setIsWizardOpen(true);
-                      }}
-                    >
-                      新建 API 插件
-                    </UiButton>
-                    <UiButton
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        const next = createPluginDraft();
-                        next.runtimeType = "mcp";
-                        setDraft(next);
-                        setWizardStep(2);
-                        setFormError("");
-                        setIsWizardOpen(true);
-                      }}
-                    >
-                      新建 MCP 插件
-                    </UiButton>
-                    <UiButton
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        const next = createPluginDraft();
-                        next.runtimeType = "code";
-                        next.tool = applyCodeToolDefaults(next.tool);
-                        setDraft(next);
-                        setWizardStep(2);
-                        setFormError("");
-                        setIsWizardOpen(true);
-                      }}
-                    >
-                      新建 Code 插件
-                    </UiButton>
-                  </div>
+                  {!isBuiltinFilterActive && (
+                    <div className="mt-4 flex flex-wrap justify-center gap-2">
+                      <UiButton
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          const next = createPluginDraft();
+                          next.runtimeType = "api";
+                          next.tool.toolResponseMode = "non_streaming";
+                          setDraft(next);
+                          setWizardStep(2);
+                          setFormError("");
+                          setIsWizardOpen(true);
+                        }}
+                      >
+                        新建 API 插件
+                      </UiButton>
+                      <UiButton
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          const next = createPluginDraft();
+                          next.runtimeType = "mcp";
+                          setDraft(next);
+                          setWizardStep(2);
+                          setFormError("");
+                          setIsWizardOpen(true);
+                        }}
+                      >
+                        新建 MCP 插件
+                      </UiButton>
+                      <UiButton
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          const next = createPluginDraft();
+                          next.runtimeType = "code";
+                          next.tool = applyCodeToolDefaults(next.tool);
+                          setDraft(next);
+                          setWizardStep(2);
+                          setFormError("");
+                          setIsWizardOpen(true);
+                        }}
+                      >
+                        新建 Code 插件
+                      </UiButton>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -2435,7 +2440,7 @@ export default function PluginsPage() {
                           {draft.runtimeType === "mcp" &&
                             "维护连接地址与同步状态，当前主要管理定义与手动同步。"}
                           {draft.runtimeType === "code" &&
-                            "配置输入参数、语言和脚本内容，并固定使用非流式。"}
+                            "配置输入参数、语言和脚本内容。"}
                         </div>
                       </div>
                     ) : (
