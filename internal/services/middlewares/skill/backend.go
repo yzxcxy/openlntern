@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"strings"
 
+	"openIntern/internal/dao"
+
 	einoSkill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/goccy/go-yaml"
 )
 
-type OpenVikingClient interface {
-	SkillsRoot() string
-	List(ctx context.Context, uri string, recursive bool) ([]map[string]any, error)
-	ReadAbstract(ctx context.Context, uri string) (string, error)
-	ReadContent(ctx context.Context, uri string) (string, error)
+type SkillRepository interface {
+	ListSkillNames(ctx context.Context) ([]string, error)
+	ListFilesInDirectory(ctx context.Context, skillName string, relPath string) ([]dao.SkillFileEntry, error)
+	ReadSummary(ctx context.Context, skillName string) (string, error)
+	ReadFile(ctx context.Context, skillPath string) (string, error)
+	BuildURI(skillPath string) (string, error)
 }
 
 type SkillFrontmatterRecord struct {
@@ -27,63 +30,35 @@ type SkillFrontmatterStore interface {
 	GetByName(name string) (*SkillFrontmatterRecord, error)
 }
 
-type OpenVikingBackend struct {
-	client     OpenVikingClient
-	store      SkillFrontmatterStore
-	skillsRoot string
+type RemoteBackend struct {
+	repo  SkillRepository
+	store SkillFrontmatterStore
 }
 
-func NewOpenVikingBackend(client OpenVikingClient, store SkillFrontmatterStore) (*OpenVikingBackend, error) {
-	if client == nil {
-		return nil, errors.New("openviking client is required")
+func NewRemoteBackend(repo SkillRepository, store SkillFrontmatterStore) (*RemoteBackend, error) {
+	if repo == nil {
+		return nil, errors.New("skill repository is required")
 	}
 	if store == nil {
 		return nil, errors.New("skill frontmatter store is required")
 	}
-	root := strings.TrimSpace(client.SkillsRoot())
-	if root == "" {
-		return nil, errors.New("openviking skills_root not configured")
+	if _, err := repo.BuildURI(""); err != nil {
+		return nil, err
 	}
-	return &OpenVikingBackend{
-		client:     client,
-		store:      store,
-		skillsRoot: strings.TrimRight(root, "/"),
+	return &RemoteBackend{
+		repo:  repo,
+		store: store,
 	}, nil
 }
 
-func (b *OpenVikingBackend) List(ctx context.Context) ([]einoSkill.FrontMatter, error) {
-	entries, err := b.client.List(ctx, b.skillsRoot, false)
+func (b *RemoteBackend) List(ctx context.Context) ([]einoSkill.FrontMatter, error) {
+	names, err := b.repo.ListSkillNames(ctx)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(entries))
-	seen := make(map[string]bool, len(entries))
-	for _, entry := range entries {
-		if !entryIsDir(entry) {
-			continue
-		}
-		entryPath := entryString(entry, "path", "uri")
-		entryName := entryString(entry, "name")
-		skillPath := relativePath(b.skillsRoot, entryPath)
-		if skillPath == "" {
-			skillPath = entryName
-		}
-		if skillPath == "" {
-			continue
-		}
-		if strings.Contains(skillPath, "/") {
-			skillPath = strings.Split(skillPath, "/")[0]
-		}
-		if skillPath == "" || seen[skillPath] {
-			continue
-		}
-		seen[skillPath] = true
-		names = append(names, skillPath)
-	}
 	result := make([]einoSkill.FrontMatter, 0, len(names))
 	for _, name := range names {
-		skillURI := buildSkillURI(b.skillsRoot, name, "")
-		abstract, err := b.client.ReadAbstract(ctx, skillURI)
+		abstract, err := b.repo.ReadSummary(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +70,7 @@ func (b *OpenVikingBackend) List(ctx context.Context) ([]einoSkill.FrontMatter, 
 	return result, nil
 }
 
-func (b *OpenVikingBackend) Get(ctx context.Context, name string) (einoSkill.Skill, error) {
+func (b *RemoteBackend) Get(ctx context.Context, name string) (einoSkill.Skill, error) {
 	if strings.TrimSpace(name) == "" {
 		return einoSkill.Skill{}, errors.New("skill name is required")
 	}
@@ -113,12 +88,14 @@ func (b *OpenVikingBackend) Get(ctx context.Context, name string) (einoSkill.Ski
 	if parsed.Name == "" {
 		return einoSkill.Skill{}, errors.New("frontmatter missing name")
 	}
-	contentURI := buildSkillURI(b.skillsRoot, record.SkillName, "SKILL.md")
-	content, err := b.client.ReadContent(ctx, contentURI)
+	content, err := b.repo.ReadFile(ctx, record.SkillName+"/SKILL.md")
 	if err != nil {
 		return einoSkill.Skill{}, err
 	}
-	baseDir := buildSkillURI(b.skillsRoot, record.SkillName, "")
+	baseDir, err := b.repo.BuildURI(record.SkillName)
+	if err != nil {
+		return einoSkill.Skill{}, err
+	}
 	return einoSkill.Skill{
 		FrontMatter: einoSkill.FrontMatter{
 			Name:        record.SkillName,
@@ -162,64 +139,4 @@ func stringFromAny(value any) string {
 	}
 }
 
-func entryString(entry map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := entry[key]; ok {
-			if str := stringFromAny(value); str != "" {
-				return str
-			}
-		}
-	}
-	return ""
-}
-
-func entryBool(entry map[string]any, keys ...string) bool {
-	for _, key := range keys {
-		value, ok := entry[key]
-		if !ok {
-			continue
-		}
-		if v, ok := value.(bool); ok {
-			return v
-		}
-		if str := stringFromAny(value); str != "" {
-			return str == "true" || str == "1"
-		}
-	}
-	return false
-}
-
-func entryIsDir(entry map[string]any) bool {
-	if entryBool(entry, "is_dir") {
-		return true
-	}
-	if entryBool(entry, "dir") {
-		return true
-	}
-	if entryString(entry, "type") == "dir" {
-		return true
-	}
-	return false
-}
-
-func relativePath(rootURI string, fullPath string) string {
-	trimmedRoot := strings.TrimRight(rootURI, "/")
-	trimmedFull := strings.TrimSpace(fullPath)
-	if trimmedRoot == "" || trimmedFull == "" {
-		return ""
-	}
-	if strings.HasPrefix(trimmedFull, trimmedRoot) {
-		rel := strings.TrimPrefix(trimmedFull, trimmedRoot)
-		rel = strings.TrimPrefix(rel, "/")
-		return rel
-	}
-	return ""
-}
-
-func buildSkillURI(root string, skill string, suffix string) string {
-	base := strings.TrimRight(root, "/") + "/" + strings.TrimLeft(skill, "/")
-	if suffix == "" {
-		return base
-	}
-	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(suffix, "/")
-}
+var _ SkillRepository = (*dao.SkillStoreDAO)(nil)

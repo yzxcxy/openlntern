@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"openIntern/internal/dao"
 	"openIntern/internal/response"
 	"openIntern/internal/services"
 
@@ -32,58 +33,38 @@ type kbMovePayload struct {
 }
 
 func ListKnowledgeBases(c *gin.Context) {
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
-	root := services.KnowledgeBaseRootURI()
-	entries, err := services.OpenVikingList(c.Request.Context(), root, false)
+	items, err := dao.KnowledgeBase.List(c.Request.Context())
 	if err != nil {
-		if isOpenVikingNotFound(err) {
+		if isStoreNotFound(err) {
 			response.JSONSuccess(c, http.StatusOK, []kbItem{})
 			return
 		}
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	items := make([]kbItem, 0, len(entries))
-	for _, entry := range entries {
-		if !services.OpenVikingEntryIsDir(entry) {
-			continue
-		}
-		entryPath := services.OpenVikingEntryString(entry, "path", "uri")
-		entryName := services.OpenVikingEntryString(entry, "name")
-		rel := services.OpenVikingRelativePath(root, entryPath)
-		if rel == "" {
-			rel = entryName
-		}
-		rel = strings.Trim(rel, "/")
-		if rel == "" {
-			continue
-		}
-		items = append(items, kbItem{
-			Name: rel,
-			URI:  strings.TrimRight(root, "/") + "/" + rel + "/",
+	result := make([]kbItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, kbItem{
+			Name: item.Name,
+			URI:  item.URI,
 		})
 	}
-	response.JSONSuccess(c, http.StatusOK, items)
+	response.JSONSuccess(c, http.StatusOK, result)
 }
 
 func GetKnowledgeBaseTree(c *gin.Context) {
 	name := strings.TrimSpace(c.Param("name"))
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
-	kbName, err := services.CleanKBName(name)
+	entries, err := dao.KnowledgeBase.Tree(c.Request.Context(), name)
 	if err != nil {
-		response.BadRequest(c)
-		return
-	}
-	kbURI := services.KnowledgeBaseURI(kbName)
-	entries, err := services.OpenVikingTree(c.Request.Context(), kbURI)
-	if err != nil {
-		if isOpenVikingNotFound(err) {
+		if isStoreNotFound(err) {
 			response.JSONSuccess(c, http.StatusOK, []map[string]any{})
 			return
 		}
@@ -94,11 +75,11 @@ func GetKnowledgeBaseTree(c *gin.Context) {
 }
 
 func ImportKnowledgeBase(c *gin.Context) {
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
-	kbName, err := services.CleanKBName(c.PostForm("kb_name"))
+	kbName, err := dao.KnowledgeBase.CleanName(c.PostForm("kb_name"))
 	if err != nil {
 		response.BadRequest(c)
 		return
@@ -139,7 +120,7 @@ func ImportKnowledgeBase(c *gin.Context) {
 		return
 	}
 	if len(files) == 0 {
-		if err := services.OpenVikingAddResourceWithOptions(c.Request.Context(), rootDir, services.KnowledgeBaseRootURI(), true, 0); err != nil {
+		if err := dao.KnowledgeBase.Ingest(c.Request.Context(), rootDir, dao.KnowledgeBase.RootURI(), true, 0); err != nil {
 			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 			return
 		}
@@ -154,14 +135,14 @@ func ImportKnowledgeBase(c *gin.Context) {
 			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 			return
 		}
-		baseURI := strings.TrimRight(services.KnowledgeBaseURI(kbName), "/")
+		baseURI := strings.TrimRight(dao.KnowledgeBase.URI(kbName), "/")
 		dir := path.Dir(strings.TrimLeft(rel, "/"))
 		targetURI := baseURI + "/"
 		if dir != "." && dir != "" {
 			targetURI = baseURI + "/" + dir + "/"
 		}
 		log.Printf("ImportKnowledgeBase upload kb=%s rel=%s cos_key=%s target_uri=%s", kbName, rel, cosKey, targetURI)
-		if err := services.OpenVikingAddResourceWithOptions(c.Request.Context(), cosURL, targetURI, true, 0); err != nil {
+		if err := dao.KnowledgeBase.Ingest(c.Request.Context(), cosURL, targetURI, true, 0); err != nil {
 			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 			return
 		}
@@ -170,11 +151,11 @@ func ImportKnowledgeBase(c *gin.Context) {
 }
 
 func UploadKnowledgeBaseFile(c *gin.Context) {
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
-	kbName, err := services.CleanKBName(c.PostForm("kb_name"))
+	kbName, err := dao.KnowledgeBase.CleanName(c.PostForm("kb_name"))
 	if err != nil {
 		response.BadRequest(c)
 		return
@@ -190,7 +171,7 @@ func UploadKnowledgeBaseFile(c *gin.Context) {
 		return
 	}
 	log.Printf("UploadKnowledgeBaseFile start kb=%s target_dir=%s file=%s", kbName, targetDir, fileHeader.Filename)
-	rel := services.NormalizeUploadPath(targetDir, fileHeader.Filename)
+	rel := dao.KnowledgeBase.NormalizeUploadPath(targetDir, fileHeader.Filename)
 	if rel == "" {
 		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "invalid target path")
 		return
@@ -201,7 +182,7 @@ func UploadKnowledgeBaseFile(c *gin.Context) {
 		return
 	}
 	cosKey := path.Join("kbs", kbName, rel)
-	baseURI := strings.TrimRight(services.KnowledgeBaseURI(kbName), "/")
+	baseURI := strings.TrimRight(dao.KnowledgeBase.URI(kbName), "/")
 	targetURI := baseURI + "/"
 	if targetDir != "" {
 		dir := strings.TrimLeft(targetDir, "/")
@@ -217,7 +198,7 @@ func UploadKnowledgeBaseFile(c *gin.Context) {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	if err := services.OpenVikingAddResourceWithOptions(c.Request.Context(), cosURL, targetURI, true, 0); err != nil {
+	if err := dao.KnowledgeBase.Ingest(c.Request.Context(), cosURL, targetURI, true, 0); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
@@ -230,15 +211,15 @@ func MoveKnowledgeBaseEntry(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
 	if strings.TrimSpace(payload.FromURI) == "" || strings.TrimSpace(payload.ToURI) == "" {
 		response.BadRequest(c)
 		return
 	}
-	if err := services.OpenVikingMove(c.Request.Context(), payload.FromURI, payload.ToURI); err != nil {
+	if err := dao.KnowledgeBase.MoveEntry(c.Request.Context(), payload.FromURI, payload.ToURI); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
@@ -251,8 +232,8 @@ func DragKnowledgeBaseEntry(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
 	fromURI := strings.TrimSpace(payload.FromURI)
@@ -264,7 +245,7 @@ func DragKnowledgeBaseEntry(c *gin.Context) {
 	if !strings.HasSuffix(toURI, "/") {
 		toURI += "/"
 	}
-	if err := services.OpenVikingMove(c.Request.Context(), fromURI, toURI); err != nil {
+	if err := dao.KnowledgeBase.MoveEntry(c.Request.Context(), fromURI, toURI); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
@@ -273,17 +254,17 @@ func DragKnowledgeBaseEntry(c *gin.Context) {
 
 func DeleteKnowledgeBase(c *gin.Context) {
 	name := strings.TrimSpace(c.Param("name"))
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
-	kbName, err := services.CleanKBName(name)
+	kbName, err := dao.KnowledgeBase.CleanName(name)
 	if err != nil {
 		response.BadRequest(c)
 		return
 	}
-	if err := services.OpenVikingDeleteResource(c.Request.Context(), services.KnowledgeBaseURI(kbName), true); err != nil {
-		if isOpenVikingNotFound(err) {
+	if err := dao.KnowledgeBase.Delete(c.Request.Context(), name); err != nil {
+		if isStoreNotFound(err) {
 			response.NotFound(c, "kb not found")
 			return
 		}
@@ -300,12 +281,12 @@ func DeleteKnowledgeBaseEntry(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.KnowledgeBase.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "knowledge base storage not configured")
 		return
 	}
-	if err := services.OpenVikingDeleteResource(c.Request.Context(), rawURI, strings.EqualFold(recursive, "true")); err != nil {
-		if isOpenVikingNotFound(err) {
+	if err := dao.KnowledgeBase.DeleteEntry(c.Request.Context(), rawURI, strings.EqualFold(recursive, "true")); err != nil {
+		if isStoreNotFound(err) {
 			response.NotFound(c, "entry not found")
 			return
 		}
@@ -398,7 +379,7 @@ func extractZipToDir(fileHeader *multipart.FileHeader, rootDir string) error {
 		if !shouldIncludePath(cleaned) {
 			continue
 		}
-		targetPath, err := services.ResolveUploadPath(rootDir, cleaned)
+		targetPath, err := dao.KnowledgeBase.ResolveLocalPath(rootDir, cleaned)
 		if err != nil {
 			return errInvalidZipPath
 		}

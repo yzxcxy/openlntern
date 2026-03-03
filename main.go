@@ -30,7 +30,7 @@ func main() {
 	if err := rag.InitRAG(cfg.Milvus); err != nil {
 		log.Fatalf("failed to init rag service: %v", err)
 	}
-	services.InitOpenViking(cfg.Tools.OpenViking)
+	database.InitContextStore(cfg.Tools.OpenViking)
 	shutdown, err := services.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)

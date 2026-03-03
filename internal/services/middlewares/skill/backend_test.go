@@ -6,29 +6,12 @@ import (
 	"testing"
 
 	"openIntern/internal/config"
+	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
 	"openIntern/internal/services"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 )
-
-type realOpenVikingClient struct{}
-
-func (realOpenVikingClient) SkillsRoot() string {
-	return services.OpenViking.SkillsRoot()
-}
-
-func (realOpenVikingClient) List(ctx context.Context, uri string, recursive bool) ([]map[string]any, error) {
-	return services.OpenVikingList(ctx, uri, recursive)
-}
-
-func (realOpenVikingClient) ReadAbstract(ctx context.Context, uri string) (string, error) {
-	return services.OpenVikingReadAbstract(ctx, uri)
-}
-
-func (realOpenVikingClient) ReadContent(ctx context.Context, uri string) (string, error) {
-	return services.OpenVikingReadContent(ctx, uri)
-}
 
 type realFrontmatterStore struct{}
 
@@ -67,37 +50,21 @@ func initOpenViking(t *testing.T) {
 	if err := database.Init(cfg.MySQL.DSN); err != nil {
 		t.Fatalf("init database failed: %v", err)
 	}
-	services.InitOpenViking(cfg.Tools.OpenViking)
-	if !services.OpenViking.Configured() {
+	database.InitContextStore(cfg.Tools.OpenViking)
+	if !dao.SkillStore.Configured() {
 		t.Fatalf("openviking not configured")
 	}
 }
 
 func pickFirstSkillName(t *testing.T, ctx context.Context) string {
 	t.Helper()
-	root := services.OpenViking.SkillsRoot()
-	entries, err := services.OpenVikingList(ctx, root, false)
+	names, err := dao.SkillStore.ListSkillNames(ctx)
 	if err != nil {
 		t.Fatalf("list openviking skills failed: %v", err)
 	}
-	for _, entry := range entries {
-		if !services.OpenVikingEntryIsDir(entry) {
-			continue
-		}
-		entryPath := services.OpenVikingEntryString(entry, "path", "uri")
-		entryName := services.OpenVikingEntryString(entry, "name")
-		skillPath := services.OpenVikingRelativePath(root, entryPath)
-		if skillPath == "" {
-			skillPath = entryName
-		}
-		if skillPath == "" {
-			continue
-		}
-		if strings.Contains(skillPath, "/") {
-			skillPath = strings.Split(skillPath, "/")[0]
-		}
-		if skillPath != "" {
-			return skillPath
+	for _, name := range names {
+		if strings.TrimSpace(name) != "" {
+			return name
 		}
 	}
 	t.Fatalf("no skill found in openviking")
@@ -112,12 +79,11 @@ func buildSkillURI(root string, skill string, suffix string) string {
 	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(suffix, "/")
 }
 
-func TestOpenVikingBackend_List(t *testing.T) {
+func TestRemoteBackend_List(t *testing.T) {
 	initOpenViking(t)
-	client := realOpenVikingClient{}
 	store := realFrontmatterStore{}
 
-	backend, err := skillmiddleware.NewOpenVikingBackend(client, store)
+	backend, err := skillmiddleware.NewRemoteBackend(dao.SkillStore, store)
 	if err != nil {
 		t.Fatalf("new backend failed: %v", err)
 	}
@@ -132,7 +98,7 @@ func TestOpenVikingBackend_List(t *testing.T) {
 	t.Logf("res: %v", frontmatters)
 }
 
-func TestOpenVikingBackend_Get(t *testing.T) {
+func TestRemoteBackend_Get(t *testing.T) {
 	initOpenViking(t)
 	ctx := context.Background()
 	skillName := pickFirstSkillName(t, ctx)
@@ -147,10 +113,9 @@ func TestOpenVikingBackend_Get(t *testing.T) {
 		_ = services.SkillFrontmatter.DeleteByName(skillName)
 	})
 
-	client := realOpenVikingClient{}
 	store := realFrontmatterStore{}
 
-	backend, err := skillmiddleware.NewOpenVikingBackend(client, store)
+	backend, err := skillmiddleware.NewRemoteBackend(dao.SkillStore, store)
 	if err != nil {
 		t.Fatalf("new backend failed: %v", err)
 	}
@@ -168,7 +133,7 @@ func TestOpenVikingBackend_Get(t *testing.T) {
 	if skill.Content == "" {
 		t.Fatalf("unexpected content: %s", skill.Content)
 	}
-	root := services.OpenViking.SkillsRoot()
+	root := dao.SkillStore.RootURI()
 	if skill.BaseDirectory != buildSkillURI(root, skillName, "") {
 		t.Fatalf("unexpected base directory: %s", skill.BaseDirectory)
 	}

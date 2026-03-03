@@ -10,11 +10,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"openIntern/internal/response"
 	"openIntern/internal/services"
@@ -47,18 +47,18 @@ func ListSkillFiles(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.SkillStore.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
-	skillURI, err := buildSkillURI(relPath)
+	skillURI, err := dao.SkillStore.BuildURI(relPath)
 	if err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	entries, err := services.OpenVikingList(c.Request.Context(), skillURI, true)
+	entries, err := dao.SkillStore.ListFiles(c.Request.Context(), relPath, true)
 	if err != nil {
-		if isOpenVikingNotFound(err) {
+		if isStoreNotFound(err) {
 			response.JSONSuccess(c, http.StatusOK, []skillFileItem{})
 			return
 		}
@@ -67,23 +67,21 @@ func ListSkillFiles(c *gin.Context) {
 	}
 	items := make([]skillFileItem, 0, len(entries))
 	for _, entry := range entries {
-		if services.OpenVikingEntryIsDir(entry) {
+		if entry.IsDir {
 			continue
 		}
-		entryPath := services.OpenVikingEntryString(entry, "path", "uri")
-		entryName := services.OpenVikingEntryString(entry, "name")
-		rel := services.OpenVikingRelativePath(skillURI, entryPath)
+		rel := strings.TrimPrefix(strings.TrimSpace(entry.Path), strings.TrimRight(skillURI, "/")+"/")
 		if rel == "" {
-			rel = entryName
+			rel = entry.Name
 		}
 		if rel == "" {
 			continue
 		}
 		items = append(items, skillFileItem{
 			ID:   "/" + path.Join(relPath, rel),
-			Type: services.OpenVikingEntryString(entry, "type", "kind"),
-			Size: services.OpenVikingEntryInt64(entry, "size"),
-			Date: services.OpenVikingEntryTime(entry, "mtime", "modified_at", "date"),
+			Type: entry.Type,
+			Size: entry.Size,
+			Date: entry.ModifiedAt,
 		})
 	}
 	response.JSONSuccess(c, http.StatusOK, items)
@@ -105,8 +103,8 @@ func ReadSkillFile(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.SkillStore.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
 	relPath := strings.TrimPrefix(cleaned, "/")
@@ -114,14 +112,9 @@ func ReadSkillFile(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	targetURI, err := buildSkillURI(relPath)
+	content, err := dao.SkillStore.ReadFile(c.Request.Context(), relPath)
 	if err != nil {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		return
-	}
-	content, err := services.OpenVikingReadContent(c.Request.Context(), targetURI)
-	if err != nil {
-		if isOpenVikingNotFound(err) {
+		if isStoreNotFound(err) {
 			response.NotFound(c, "file not found")
 			return
 		}
@@ -139,8 +132,8 @@ func ImportSkill(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.SkillStore.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
 	fileHeader, err := c.FormFile("file")
@@ -220,7 +213,7 @@ func ImportSkill(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	if err := services.OpenVikingAddSkill(c.Request.Context(), rootDir); err != nil {
+	if err := dao.SkillStore.Import(c.Request.Context(), rootDir); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
@@ -239,20 +232,12 @@ func DeleteSkill(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.SkillStore.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
-	targetURI, err := buildSkillURI(name)
-	if err != nil {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		return
-	}
-	if !strings.HasSuffix(targetURI, "/") {
-		targetURI += "/"
-	}
-	if err := services.OpenVikingDeleteSkill(c.Request.Context(), targetURI); err != nil {
-		if isOpenVikingNotFound(err) {
+	if err := dao.SkillStore.Delete(c.Request.Context(), name); err != nil {
+		if isStoreNotFound(err) {
 			response.NotFound(c, "skill not found")
 			return
 		}
@@ -322,8 +307,8 @@ func ReadSkillContent(c *gin.Context) {
 		return
 	}
 
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.SkillStore.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
 	rawPath := c.Query("path")
@@ -341,15 +326,9 @@ func ReadSkillContent(c *gin.Context) {
 	if rel == "" {
 		rel = "SKILL.md"
 	}
-	skillURI, err := buildSkillURI(name)
+	content, err := dao.SkillStore.ReadFile(c.Request.Context(), path.Join(name, rel))
 	if err != nil {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		return
-	}
-	targetURI := strings.TrimRight(skillURI, "/") + "/" + rel
-	content, err := services.OpenVikingReadContent(c.Request.Context(), targetURI)
-	if err != nil {
-		if isOpenVikingNotFound(err) {
+		if isStoreNotFound(err) {
 			response.NotFound(c, "file not found")
 			return
 		}
@@ -372,11 +351,11 @@ func ListSkills(c *gin.Context) {
 		return
 	}
 
-	if !services.OpenViking.Configured() {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "openviking not configured")
+	if !dao.SkillStore.Configured() {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
-	skills, total, err := listOpenVikingSkills(c, keyword, page, pageSize)
+	skills, total, err := dao.SkillStore.ListSkillCatalog(c.Request.Context(), keyword, page, pageSize)
 	if err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
@@ -388,64 +367,6 @@ func ListSkills(c *gin.Context) {
 		"page":  page,
 		"size":  pageSize,
 	})
-}
-
-func listOpenVikingSkills(c *gin.Context, keyword string, page int, pageSize int) ([]models.Skill, int64, error) {
-	root := services.OpenViking.SkillsRoot()
-	entries, err := services.OpenVikingList(c.Request.Context(), root, false)
-	if err != nil {
-		return nil, 0, err
-	}
-	skills := make([]models.Skill, 0, len(entries))
-	for _, entry := range entries {
-		if !services.OpenVikingEntryIsDir(entry) {
-			continue
-		}
-		entryPath := services.OpenVikingEntryString(entry, "path", "uri")
-		entryName := services.OpenVikingEntryString(entry, "name")
-		skillPath := services.OpenVikingRelativePath(root, entryPath)
-		if skillPath == "" {
-			skillPath = entryName
-		}
-		if skillPath == "" {
-			continue
-		}
-		if strings.Contains(skillPath, "/") {
-			skillPath = strings.Split(skillPath, "/")[0]
-		}
-		skills = append(skills, models.Skill{
-			Name: skillPath,
-		})
-	}
-	keyword = strings.TrimSpace(keyword)
-	if keyword != "" {
-		filtered := make([]models.Skill, 0, len(skills))
-		for _, skill := range skills {
-			if matchSkillKeyword(skill, keyword) {
-				filtered = append(filtered, skill)
-			}
-		}
-		skills = filtered
-	}
-	sort.Slice(skills, func(i, j int) bool {
-		return skills[i].Name < skills[j].Name
-	})
-	total := int64(len(skills))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
-	}
-	start := (page - 1) * pageSize
-	if start >= len(skills) {
-		return []models.Skill{}, total, nil
-	}
-	end := start + pageSize
-	if end > len(skills) {
-		end = len(skills)
-	}
-	return skills[start:end], total, nil
 }
 
 func applySkillFrontmatter(skills []models.Skill) {
@@ -491,29 +412,6 @@ func applySkillFrontmatter(skills []models.Skill) {
 		}
 		skills[i].Frontmatter = item.Raw
 	}
-}
-
-func buildSkillURI(skillPath string) (string, error) {
-	root := strings.TrimRight(strings.TrimSpace(services.OpenViking.SkillsRoot()), "/")
-	if root == "" {
-		return "", errors.New("openviking skills_root not configured")
-	}
-	skillPath = strings.Trim(skillPath, "/")
-	if skillPath == "" {
-		return root, nil
-	}
-	parts := strings.Split(skillPath, "/")
-	cleaned := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		cleaned = append(cleaned, part)
-	}
-	if len(cleaned) == 0 {
-		return root, nil
-	}
-	return root + "/" + strings.Join(cleaned, "/"), nil
 }
 
 type skillFrontmatterPayload struct {
@@ -700,7 +598,7 @@ func unzipSkill(zipPath string, dest string) error {
 	return nil
 }
 
-func isOpenVikingNotFound(err error) bool {
+func isStoreNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -708,8 +606,6 @@ func isOpenVikingNotFound(err error) bool {
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "404")
 }
 
-var errInvalidPath = errors.New("invalid path")
-var errOutOfScope = errors.New("out of scope")
 var errSkillFound = errors.New("skill found")
 
 func getAuthUser(c *gin.Context) (string, string, bool) {
@@ -733,23 +629,6 @@ func getAuthUser(c *gin.Context) (string, string, bool) {
 	return claims.UserID, claims.Role, true
 }
 
-func skillBaseDir() (string, error) {
-	wd, err := os.Getwd()
-	if err == nil {
-		candidates := []string{
-			filepath.Join(wd, "internal", "skills"),
-			filepath.Join(wd, "openIntern_backend", "internal", "skills"),
-		}
-		for _, candidate := range candidates {
-			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-				return filepath.Abs(candidate)
-			}
-		}
-	}
-	base := filepath.Join("internal", "skills")
-	return filepath.Abs(base)
-}
-
 func cleanSkillPath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {
@@ -760,41 +639,6 @@ func cleanSkillPath(p string) (string, error) {
 	}
 	cleaned := path.Clean("/" + p)
 	return cleaned, nil
-}
-
-func resolveSkillContentPath(skillDir string, rawPath string) (string, error) {
-	if strings.TrimSpace(rawPath) == "" {
-		return filepath.Join(skillDir, "SKILL.md"), nil
-	}
-	decoded, err := url.PathUnescape(rawPath)
-	if err != nil {
-		return "", errInvalidPath
-	}
-	cleaned, err := cleanSkillPath(decoded)
-	if err != nil {
-		return "", errInvalidPath
-	}
-	rel := strings.TrimPrefix(cleaned, "/")
-	if rel == "" {
-		return "", errInvalidPath
-	}
-	target := filepath.Join(skillDir, rel)
-	skillDirAbs, err := filepath.Abs(skillDir)
-	if err != nil {
-		return "", err
-	}
-	targetAbs, err := filepath.Abs(target)
-	if err != nil {
-		return "", err
-	}
-	relTo, err := filepath.Rel(skillDirAbs, targetAbs)
-	if err != nil {
-		return "", errOutOfScope
-	}
-	if relTo == "." || strings.HasPrefix(relTo, "..") {
-		return "", errOutOfScope
-	}
-	return targetAbs, nil
 }
 
 func parseSkillName(name string) (string, error) {
@@ -810,127 +654,4 @@ func parseSkillName(name string) (string, error) {
 		return "", errors.New("invalid name")
 	}
 	return decoded, nil
-}
-
-func resolveSkillPath(cleaned string) (string, string, error) {
-	relPath := strings.TrimPrefix(cleaned, "/")
-	baseDir, err := skillBaseDir()
-	if err != nil {
-		return "", "", err
-	}
-	absPath := filepath.Join(baseDir, filepath.FromSlash(relPath))
-	baseAbs, err := filepath.Abs(baseDir)
-	if err != nil {
-		return "", "", err
-	}
-	targetAbs, err := filepath.Abs(absPath)
-	if err != nil {
-		return "", "", err
-	}
-	relTo, err := filepath.Rel(baseAbs, targetAbs)
-	if err != nil {
-		return "", "", err
-	}
-	if strings.HasPrefix(relTo, "..") {
-		return "", "", errors.New("out of scope")
-	}
-	return targetAbs, relPath, nil
-}
-
-func listSkillMetas(baseDir string, keyword string, page int, pageSize int) ([]models.Skill, int64, error) {
-	skills, err := collectSkills(baseDir)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	keyword = strings.TrimSpace(keyword)
-	if keyword != "" {
-		filtered := make([]models.Skill, 0, len(skills))
-		for _, skill := range skills {
-			if matchSkillKeyword(skill, keyword) {
-				filtered = append(filtered, skill)
-			}
-		}
-		skills = filtered
-	}
-
-	sort.Slice(skills, func(i, j int) bool {
-		return skills[i].Name < skills[j].Name
-	})
-
-	total := int64(len(skills))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
-	}
-	start := (page - 1) * pageSize
-	if start >= len(skills) {
-		return []models.Skill{}, total, nil
-	}
-	end := start + pageSize
-	if end > len(skills) {
-		end = len(skills)
-	}
-	return skills[start:end], total, nil
-}
-
-func collectSkills(baseDir string) ([]models.Skill, error) {
-	entries, err := os.ReadDir(baseDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []models.Skill{}, nil
-		}
-		return nil, err
-	}
-
-	skills := make([]models.Skill, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		dirName := entry.Name()
-		skillPath := path.Join(dirName)
-		skillFile := filepath.Join(baseDir, dirName, "SKILL.md")
-		info, err := os.Stat(skillFile)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, err
-		}
-		if info.IsDir() {
-			continue
-		}
-		skill, err := readSkillFromFile(skillFile, skillPath)
-		if err != nil {
-			return nil, err
-		}
-		skills = append(skills, skill)
-	}
-	return skills, nil
-}
-
-func readSkillFromFile(_ string, skillPath string) (models.Skill, error) {
-	return models.Skill{
-		Name:        skillPath,
-		Description: "",
-		Icon:        "",
-	}, nil
-}
-
-func matchSkillKeyword(skill models.Skill, keyword string) bool {
-	keyword = strings.ToLower(keyword)
-	fields := []string{
-		skill.Name,
-		skill.Description,
-		skill.Frontmatter,
-	}
-	for _, field := range fields {
-		if strings.Contains(strings.ToLower(field), keyword) {
-			return true
-		}
-	}
-	return false
 }

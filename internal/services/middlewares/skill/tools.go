@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
-	"strconv"
 	"strings"
-	"time"
 
 	einoTool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -30,14 +28,14 @@ type skillFileItem struct {
 	Mtime string `json:"mtime"`
 }
 
-func GetSkillFileTools(client OpenVikingClient) ([]einoTool.BaseTool, error) {
-	if client == nil {
-		return nil, errors.New("openviking client is required")
+func GetSkillFileTools(repo SkillRepository) ([]einoTool.BaseTool, error) {
+	if repo == nil {
+		return nil, errors.New("skill repository is required")
 	}
 	listTool, err := utils.InferTool[listSkillFilesInput, string](
 		"list_skill_files",
 		"列出技能目录内的文件与子目录，返回相对路径、类型、大小与修改时间。",
-		listSkillFilesImpl(client),
+		listSkillFilesImpl(repo),
 	)
 	if err != nil {
 		return nil, err
@@ -45,7 +43,7 @@ func GetSkillFileTools(client OpenVikingClient) ([]einoTool.BaseTool, error) {
 	readTool, err := utils.InferTool[readSkillFileInput, string](
 		"read_skill_file",
 		"专门用于读取技能目录内的指定文件，返回纯文本内容。",
-		readSkillFileImpl(client),
+		readSkillFileImpl(repo),
 	)
 	if err != nil {
 		return nil, err
@@ -53,7 +51,7 @@ func GetSkillFileTools(client OpenVikingClient) ([]einoTool.BaseTool, error) {
 	return []einoTool.BaseTool{listTool, readTool}, nil
 }
 
-func listSkillFilesImpl(client OpenVikingClient) func(context.Context, listSkillFilesInput) (string, error) {
+func listSkillFilesImpl(repo SkillRepository) func(context.Context, listSkillFilesInput) (string, error) {
 	return func(ctx context.Context, input listSkillFilesInput) (string, error) {
 		skillName, err := validateSkillName(input.Skill)
 		if err != nil {
@@ -63,37 +61,17 @@ func listSkillFilesImpl(client OpenVikingClient) func(context.Context, listSkill
 		if err != nil {
 			return "", err
 		}
-		rootURI := buildSkillURI(strings.TrimRight(client.SkillsRoot(), "/"), skillName, "")
-		listURI := rootURI
-		if relPath != "" {
-			listURI = buildSkillURI(rootURI, relPath, "")
-		}
-		entries, err := client.List(ctx, listURI, false)
+		entries, err := repo.ListFilesInDirectory(ctx, skillName, relPath)
 		if err != nil {
 			return "", err
 		}
 		result := make([]skillFileItem, 0, len(entries))
 		for _, entry := range entries {
-			entryPath := entryString(entry, "path", "uri")
-			entryName := entryString(entry, "name")
-			rel := relativePath(rootURI, entryPath)
-			if rel == "" {
-				rel = entryName
-			}
-			itemType := "file"
-			if entryIsDir(entry) {
-				itemType = "dir"
-			}
-			entryMtime := entryTime(entry)
-			mtime := ""
-			if !entryMtime.IsZero() {
-				mtime = entryMtime.Format(time.RFC3339)
-			}
 			result = append(result, skillFileItem{
-				Path:  rel,
-				Type:  itemType,
-				Size:  entryInt64(entry, "size"),
-				Mtime: mtime,
+				Path:  entry.Path,
+				Type:  entry.Type,
+				Size:  entry.Size,
+				Mtime: entry.ModifiedAt,
 			})
 		}
 		payload, err := json.Marshal(result)
@@ -104,7 +82,7 @@ func listSkillFilesImpl(client OpenVikingClient) func(context.Context, listSkill
 	}
 }
 
-func readSkillFileImpl(client OpenVikingClient) func(context.Context, readSkillFileInput) (string, error) {
+func readSkillFileImpl(repo SkillRepository) func(context.Context, readSkillFileInput) (string, error) {
 	return func(ctx context.Context, input readSkillFileInput) (string, error) {
 		skillName, err := validateSkillName(input.Skill)
 		if err != nil {
@@ -114,9 +92,7 @@ func readSkillFileImpl(client OpenVikingClient) func(context.Context, readSkillF
 		if err != nil {
 			return "", err
 		}
-		rootURI := buildSkillURI(strings.TrimRight(client.SkillsRoot(), "/"), skillName, "")
-		targetURI := buildSkillURI(rootURI, relPath, "")
-		return client.ReadContent(ctx, targetURI)
+		return repo.ReadFile(ctx, skillName+"/"+relPath)
 	}
 }
 
@@ -159,52 +135,4 @@ func normalizeRelativePath(input string, allowEmpty bool) (string, error) {
 		return "", errors.New("invalid path")
 	}
 	return cleaned, nil
-}
-
-func entryTime(entry map[string]any) time.Time {
-	for _, key := range []string{"mtime", "modified", "updated_at"} {
-		if value, ok := entry[key]; ok {
-			switch v := value.(type) {
-			case time.Time:
-				return v
-			case string:
-				parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(v))
-				if err == nil {
-					return parsed
-				}
-			case float64:
-				return time.Unix(int64(v), 0)
-			case int64:
-				return time.Unix(v, 0)
-			case int:
-				return time.Unix(int64(v), 0)
-			}
-		}
-	}
-	return time.Time{}
-}
-
-func entryInt64(entry map[string]any, key string) int64 {
-	value, ok := entry[key]
-	if !ok {
-		return 0
-	}
-	switch v := value.(type) {
-	case int64:
-		return v
-	case int:
-		return int64(v)
-	case float64:
-		return int64(v)
-	case string:
-		trimmed := strings.TrimSpace(v)
-		if trimmed == "" {
-			return 0
-		}
-		parsed, err := strconv.ParseInt(trimmed, 10, 64)
-		if err == nil {
-			return parsed
-		}
-	}
-	return 0
 }

@@ -8,6 +8,7 @@ import (
 	"log"
 	"openIntern/internal/agui"
 	"openIntern/internal/config"
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	"openIntern/internal/services/tools"
@@ -126,24 +127,6 @@ var agentTools []einoTool.BaseTool
 var agentMiddlewares []adk.AgentMiddleware
 var bootstrapChatConfig config.LLMConfig
 
-type openVikingSkillClient struct{}
-
-func (openVikingSkillClient) SkillsRoot() string {
-	return OpenViking.SkillsRoot()
-}
-
-func (openVikingSkillClient) List(ctx context.Context, uri string, recursive bool) ([]map[string]any, error) {
-	return OpenVikingList(ctx, uri, recursive)
-}
-
-func (openVikingSkillClient) ReadAbstract(ctx context.Context, uri string) (string, error) {
-	return OpenVikingReadAbstract(ctx, uri)
-}
-
-func (openVikingSkillClient) ReadContent(ctx context.Context, uri string) (string, error) {
-	return OpenVikingReadContent(ctx, uri)
-}
-
 type skillFrontmatterStore struct{}
 
 func (skillFrontmatterStore) ListByNames(names []string) ([]skillmiddleware.SkillFrontmatterRecord, error) {
@@ -217,7 +200,7 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	if err != nil {
 		return nil, err
 	}
-	skillBackend, err := skillmiddleware.NewOpenVikingBackend(openVikingSkillClient{}, skillFrontmatterStore{})
+	skillBackend, err := skillmiddleware.NewRemoteBackend(dao.SkillStore, skillFrontmatterStore{})
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +211,7 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	if err != nil {
 		return nil, err
 	}
-	skillTools, err := skillmiddleware.GetSkillFileTools(openVikingSkillClient{})
+	skillTools, err := skillmiddleware.GetSkillFileTools(dao.SkillStore)
 	if err != nil {
 		return nil, err
 	}
