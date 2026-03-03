@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"openIntern/internal/config"
+	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/gorm"
 )
 
 const (
@@ -182,16 +182,9 @@ func (s *PluginService) runMCPSyncScheduler() {
 }
 
 func (s *PluginService) scheduleDueMCPSyncs(ctx context.Context) error {
-	if database.DB == nil {
-		return nil
-	}
-
-	var plugins []models.Plugin
 	cutoff := time.Now().Add(-mcpSyncRefreshWindow)
-	if err := database.DB.
-		Where("runtime_type = ? AND status = ?", pluginRuntimeMCP, pluginStatusEnabled).
-		Where("last_sync_at IS NULL OR last_sync_at <= ?", cutoff).
-		Find(&plugins).Error; err != nil {
+	plugins, err := dao.Plugin.ListByRuntimeStatusNeedingSync(pluginRuntimeMCP, pluginStatusEnabled, cutoff)
+	if err != nil {
 		return err
 	}
 
@@ -262,8 +255,8 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 		return err
 	}
 
-	var existingTools []models.Tool
-	if err := database.DB.Where("plugin_id = ?", plugin.PluginID).Find(&existingTools).Error; err != nil {
+	existingTools, err := dao.Plugin.ListToolsByPluginID(plugin.PluginID)
+	if err != nil {
 		return err
 	}
 
@@ -272,33 +265,7 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 		return err
 	}
 
-	return database.DB.Transaction(func(tx *gorm.DB) error {
-		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, syncedTools)
-		if len(removedToolIDs) > 0 {
-			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
-				return err
-			}
-			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
-				return err
-			}
-		}
-		for _, tool := range toolsToUpdate {
-			if err := tx.Model(&models.Tool{}).
-				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, plugin.PluginID).
-				Updates(buildToolUpdateMap(tool)).Error; err != nil {
-				return err
-			}
-		}
-		if len(toolsToCreate) > 0 {
-			if err := tx.Create(&toolsToCreate).Error; err != nil {
-				return err
-			}
-		}
-		now := time.Now()
-		return tx.Model(&models.Plugin{}).
-			Where("plugin_id = ?", plugin.PluginID).
-			Update("last_sync_at", &now).Error
-	})
+	return dao.Plugin.ReplaceToolsAndUpdateSyncTime(plugin.PluginID, syncedTools, time.Now())
 }
 
 func fetchMCPToolDefinitions(ctx context.Context, baseURL string, protocol string) ([]mcp.Tool, error) {
@@ -498,15 +465,8 @@ func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, toolIDs []stri
 		return nil, nil, nil
 	}
 
-	db := database.DB.Model(&models.Tool{}).
-		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
-		Where("plugin.runtime_type = ? AND plugin.status = ? AND tool.enabled = ?", pluginRuntimeMCP, pluginStatusEnabled, true)
-	if len(toolIDs) > 0 {
-		db = db.Where("tool.tool_id IN ?", toolIDs)
-	}
-
-	var toolRows []models.Tool
-	if err := db.Order("tool.tool_name ASC").Find(&toolRows).Error; err != nil {
+	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeMCP, pluginStatusEnabled, toolIDs)
+	if err != nil {
 		return nil, nil, err
 	}
 	if len(toolRows) == 0 {
@@ -526,10 +486,8 @@ func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, toolIDs []stri
 	}
 	sort.Strings(pluginIDList)
 
-	var plugins []models.Plugin
-	if err := database.DB.
-		Where("plugin_id IN ? AND runtime_type = ? AND status = ?", pluginIDList, pluginRuntimeMCP, pluginStatusEnabled).
-		Find(&plugins).Error; err != nil {
+	plugins, err := dao.Plugin.ListByIDsAndRuntimeStatus(pluginIDList, pluginRuntimeMCP, pluginStatusEnabled)
+	if err != nil {
 		return nil, nil, err
 	}
 

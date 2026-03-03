@@ -2,12 +2,10 @@ package services
 
 import (
 	"errors"
-	"openIntern/internal/database"
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"sort"
 	"strings"
-
-	"gorm.io/gorm"
 )
 
 const SystemDefaultChatModelConfigKey = "system_default_chat_model"
@@ -100,19 +98,14 @@ func (s *ModelCatalogService) Create(input CreateModelCatalogInput) (*models.Mod
 		Enabled:          enabled,
 		Sort:             sortValue,
 	}
-	if err := database.DB.Create(item).Error; err != nil {
+	if err := dao.ModelCatalog.Create(item); err != nil {
 		return nil, err
 	}
 	return item, nil
 }
 
 func (s *ModelCatalogService) GetByModelID(modelID string) (*models.ModelCatalog, error) {
-	var item models.ModelCatalog
-	err := database.DB.Where("model_id = ?", modelID).First(&item).Error
-	if err != nil {
-		return nil, err
-	}
-	return &item, nil
+	return dao.ModelCatalog.GetByModelID(modelID)
 }
 
 func (s *ModelCatalogService) Update(modelID string, input UpdateModelCatalogInput) error {
@@ -156,11 +149,11 @@ func (s *ModelCatalogService) Update(modelID string, input UpdateModelCatalogInp
 	if len(updates) == 0 {
 		return nil
 	}
-	result := database.DB.Model(&models.ModelCatalog{}).Where("model_id = ?", modelID).Updates(updates)
-	if result.Error != nil {
-		return result.Error
+	rowsAffected, err := dao.ModelCatalog.UpdateByModelID(modelID, updates)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return errors.New("model not found")
 	}
 	return nil
@@ -171,38 +164,22 @@ func (s *ModelCatalogService) Delete(modelID string) error {
 	if err == nil && cfg != nil && cfg.ModelID == modelID {
 		return errors.New("cannot delete system default model")
 	}
-	result := database.DB.Where("model_id = ?", modelID).Delete(&models.ModelCatalog{})
-	if result.Error != nil {
-		return result.Error
+	rowsAffected, err := dao.ModelCatalog.DeleteByModelID(modelID)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return errors.New("model not found")
 	}
 	return nil
 }
 
 func (s *ModelCatalogService) List(page, pageSize int, keyword, providerID string) ([]ModelCatalogView, int64, error) {
-	var items []models.ModelCatalog
-	var total int64
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
-	offset := (page - 1) * pageSize
-	db := database.DB.Model(&models.ModelCatalog{})
-	if keyword = strings.TrimSpace(keyword); keyword != "" {
-		pattern := "%" + keyword + "%"
-		db = db.Where("(name LIKE ? OR model_key LIKE ?)", pattern, pattern)
-	}
-	if providerID = strings.TrimSpace(providerID); providerID != "" {
-		db = db.Where("provider_id = ?", providerID)
-	}
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	if err := db.Order("sort ASC").Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	items, total, err := dao.ModelCatalog.List(page, pageSize, dao.ModelCatalogListFilter{
+		Keyword:    keyword,
+		ProviderID: providerID,
+	})
+	if err != nil {
 		return nil, 0, err
 	}
 	defaultID, _ := DefaultModel.GetModelID()
@@ -232,8 +209,8 @@ func (s *ModelCatalogService) GetView(modelID string) (*ModelCatalogView, error)
 }
 
 func (s *ModelCatalogService) ListCatalogOptions() ([]ModelCatalogOption, error) {
-	var items []models.ModelCatalog
-	if err := database.DB.Where("enabled = ?", true).Order("sort ASC").Order("updated_at DESC").Find(&items).Error; err != nil {
+	items, err := dao.ModelCatalog.ListEnabled()
+	if err != nil {
 		return nil, err
 	}
 	defaultID, _ := DefaultModel.GetModelID()
@@ -307,15 +284,7 @@ func (s *ModelCatalogService) ResolveRuntimeSelection(modelID, providerID string
 }
 
 func (s *DefaultModelConfigService) Get() (*models.DefaultModelConfig, error) {
-	var item models.DefaultModelConfig
-	err := database.DB.Where("config_key = ?", SystemDefaultChatModelConfigKey).First(&item).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &item, nil
+	return dao.DefaultModelConfig.GetByConfigKey(SystemDefaultChatModelConfigKey)
 }
 
 func (s *DefaultModelConfigService) GetModelID() (string, error) {
@@ -337,25 +306,7 @@ func (s *DefaultModelConfigService) Set(modelID string) (*models.DefaultModelCon
 	if _, err := ModelCatalog.GetByModelID(modelID); err != nil {
 		return nil, err
 	}
-	item, err := s.Get()
-	if err != nil {
-		return nil, err
-	}
-	if item == nil {
-		created := models.DefaultModelConfig{
-			ConfigKey: SystemDefaultChatModelConfigKey,
-			ModelID:   modelID,
-		}
-		if createErr := database.DB.Create(&created).Error; createErr != nil {
-			return nil, createErr
-		}
-		return &created, nil
-	}
-	item.ModelID = modelID
-	if saveErr := database.DB.Save(item).Error; saveErr != nil {
-		return nil, saveErr
-	}
-	return item, nil
+	return dao.DefaultModelConfig.UpsertByConfigKey(SystemDefaultChatModelConfigKey, modelID)
 }
 
 func buildModelCatalogView(item models.ModelCatalog, provider *models.ModelProvider, isDefault bool) ModelCatalogView {
@@ -393,17 +344,5 @@ func loadProvidersByID(items []models.ModelCatalog) (map[string]*models.ModelPro
 		seen[item.ProviderID] = struct{}{}
 		providerIDs = append(providerIDs, item.ProviderID)
 	}
-	result := make(map[string]*models.ModelProvider, len(providerIDs))
-	if len(providerIDs) == 0 {
-		return result, nil
-	}
-	var providers []models.ModelProvider
-	if err := database.DB.Where("provider_id IN ?", providerIDs).Find(&providers).Error; err != nil {
-		return nil, err
-	}
-	for i := range providers {
-		item := providers[i]
-		result[item.ProviderID] = &item
-	}
-	return result, nil
+	return dao.ModelProvider.LoadByProviderIDs(providerIDs)
 }

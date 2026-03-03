@@ -3,6 +3,7 @@ package dao
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"openIntern/internal/database"
 	"openIntern/internal/models"
@@ -149,6 +150,50 @@ func (d *PluginDAO) ListEnabled() ([]models.Plugin, error) {
 	return plugins, nil
 }
 
+func (d *PluginDAO) ListByIDsAndRuntimeStatus(pluginIDs []string, runtimeType, status string) ([]models.Plugin, error) {
+	if len(pluginIDs) == 0 {
+		return nil, nil
+	}
+
+	var plugins []models.Plugin
+	if err := database.DB.
+		Where("plugin_id IN ? AND runtime_type = ? AND status = ?", pluginIDs, runtimeType, status).
+		Find(&plugins).Error; err != nil {
+		return nil, err
+	}
+	return plugins, nil
+}
+
+func (d *PluginDAO) ListByRuntimeStatusNeedingSync(runtimeType, status string, cutoff time.Time) ([]models.Plugin, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+
+	var plugins []models.Plugin
+	if err := database.DB.
+		Where("runtime_type = ? AND status = ?", runtimeType, status).
+		Where("last_sync_at IS NULL OR last_sync_at <= ?", cutoff).
+		Find(&plugins).Error; err != nil {
+		return nil, err
+	}
+	return plugins, nil
+}
+
+func (d *PluginDAO) ListRuntimeTools(runtimeType, status string, toolIDs []string) ([]models.Tool, error) {
+	query := database.DB.Model(&models.Tool{}).
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
+		Where("plugin.runtime_type = ? AND plugin.status = ? AND tool.enabled = ?", runtimeType, status, true)
+	if len(toolIDs) > 0 {
+		query = query.Where("tool.tool_id IN ?", toolIDs)
+	}
+
+	var tools []models.Tool
+	if err := query.Order("tool.tool_name ASC").Find(&tools).Error; err != nil {
+		return nil, err
+	}
+	return tools, nil
+}
+
 func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {
 	result := make(map[string][]models.Tool, len(pluginIDs))
 	if len(pluginIDs) == 0 {
@@ -167,6 +212,48 @@ func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, e
 		result[tool.PluginID] = append(result[tool.PluginID], tool)
 	}
 	return result, nil
+}
+
+func (d *PluginDAO) ListToolsByPluginID(pluginID string) ([]models.Tool, error) {
+	var tools []models.Tool
+	if err := database.DB.Where("plugin_id = ?", pluginID).Find(&tools).Error; err != nil {
+		return nil, err
+	}
+	return tools, nil
+}
+
+func (d *PluginDAO) ReplaceToolsAndUpdateSyncTime(pluginID string, syncedTools []models.Tool, syncedAt time.Time) error {
+	existingTools, err := d.ListToolsByPluginID(pluginID)
+	if err != nil {
+		return err
+	}
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, syncedTools)
+		if len(removedToolIDs) > 0 {
+			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
+				return err
+			}
+		}
+		for _, tool := range toolsToUpdate {
+			if err := tx.Model(&models.Tool{}).
+				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, pluginID).
+				Updates(buildToolUpdateMap(tool)).Error; err != nil {
+				return err
+			}
+		}
+		if len(toolsToCreate) > 0 {
+			if err := tx.Create(&toolsToCreate).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&models.Plugin{}).
+			Where("plugin_id = ?", pluginID).
+			Update("last_sync_at", &syncedAt).Error
+	})
 }
 
 func applyPluginFilters(db *gorm.DB, filter PluginListFilter) *gorm.DB {

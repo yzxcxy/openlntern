@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
 
@@ -28,8 +29,7 @@ func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]mo
 		pageSize = 20
 	}
 
-	var thread models.Thread
-	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
+	if _, err := dao.Thread.GetByThreadID(threadID); err != nil {
 		return nil, 0, err
 	}
 
@@ -50,14 +50,8 @@ func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]mo
 		}
 	}
 
-	var messages []models.Message
-	var total int64
-	db := database.DB.Model(&models.Message{}).Where("thread_id = ?", threadID)
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	offset := (page - 1) * pageSize
-	if err := db.Order("created_at desc").Offset(offset).Limit(pageSize).Find(&messages).Error; err != nil {
+	messages, total, err := dao.Message.ListByThreadID(threadID, page, pageSize)
+	if err != nil {
 		return nil, 0, err
 	}
 
@@ -81,16 +75,12 @@ func (s *MessageService) ListThreadMessages(threadID string) ([]models.Message, 
 	if threadID == "" {
 		return nil, errors.New("thread_id is required")
 	}
-	var messages []models.Message
-	if err := database.DB.Where("thread_id = ?", threadID).Order("created_at asc").Find(&messages).Error; err != nil {
-		return nil, err
-	}
-	return messages, nil
+	return dao.Message.ListAllByThreadID(threadID)
 }
 
 func (s *MessageService) CreateMessages(messages []models.Message) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	return database.DB.Create(&messages).Error
+	return dao.Message.CreateBatch(messages)
 }

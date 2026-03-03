@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
 
@@ -40,14 +41,8 @@ func (s *ThreadService) ListThreads(page, pageSize int) ([]models.Thread, int64,
 		}
 	}
 
-	var threads []models.Thread
-	var total int64
-	db := database.DB.Model(&models.Thread{})
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	offset := (page - 1) * pageSize
-	if err := db.Order("updated_at desc").Offset(offset).Limit(pageSize).Find(&threads).Error; err != nil {
+	threads, total, err := dao.Thread.List(page, pageSize)
+	if err != nil {
 		return nil, 0, err
 	}
 
@@ -85,8 +80,7 @@ func (s *ThreadService) GetThread(threadID string) (*models.Thread, error) {
 		}
 	}
 
-	var thread models.Thread
-	err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error
+	thread, err := dao.Thread.GetByThreadID(threadID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
@@ -100,26 +94,21 @@ func (s *ThreadService) GetThread(threadID string) (*models.Thread, error) {
 		}
 	}
 
-	return &thread, nil
+	return thread, nil
 }
 
 func (s *ThreadService) GetThreadByThreadID(threadID string) (*models.Thread, error) {
 	if threadID == "" {
 		return nil, errors.New("thread_id is required")
 	}
-	var thread models.Thread
-	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
-		return nil, err
-	}
-	return &thread, nil
+	return dao.Thread.GetByThreadID(threadID)
 }
 
 func (s *ThreadService) EnsureThread(threadID, title string) (*models.Thread, error) {
 	if threadID == "" {
 		return nil, errors.New("thread_id is required")
 	}
-	var thread models.Thread
-	err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error
+	thread, err := dao.Thread.GetByThreadID(threadID)
 	if err == nil {
 		updates := map[string]any{}
 		if thread.Title == "" && title != "" {
@@ -127,23 +116,23 @@ func (s *ThreadService) EnsureThread(threadID, title string) (*models.Thread, er
 			thread.Title = title
 		}
 		if len(updates) > 0 {
-			if err := database.DB.Model(&thread).Updates(updates).Error; err != nil {
+			if err := dao.Thread.UpdateFields(thread, updates); err != nil {
 				return nil, err
 			}
 			invalidateThreadCache(thread.ThreadID)
 		}
-		return &thread, nil
+		return thread, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		thread = models.Thread{
+		thread = &models.Thread{
 			ThreadID: threadID,
 			Title:    title,
 		}
-		if err := database.DB.Create(&thread).Error; err != nil {
+		if err := dao.Thread.Create(thread); err != nil {
 			return nil, err
 		}
 		invalidateThreadCache(thread.ThreadID)
-		return &thread, nil
+		return thread, nil
 	}
 	return nil, err
 }
@@ -155,11 +144,10 @@ func (s *ThreadService) UpdateThreadTitle(threadID, title string) error {
 	if title == "" {
 		return errors.New("title is required")
 	}
-	var thread models.Thread
-	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
+	if _, err := dao.Thread.GetByThreadID(threadID); err != nil {
 		return err
 	}
-	if err := database.DB.Model(&thread).Update("title", title).Error; err != nil {
+	if _, err := dao.Thread.UpdateTitle(threadID, title); err != nil {
 		return err
 	}
 	invalidateThreadCache(threadID)
@@ -170,17 +158,7 @@ func (s *ThreadService) DeleteThread(threadID string) error {
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
-	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		var thread models.Thread
-		if err := tx.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("thread_id = ?", threadID).Delete(&models.Message{}).Error; err != nil {
-			return err
-		}
-		return tx.Delete(&thread).Error
-	})
-	if err != nil {
+	if err := dao.Thread.DeleteWithMessages(threadID); err != nil {
 		return err
 	}
 	invalidateThreadCache(threadID)
@@ -191,14 +169,13 @@ func (s *ThreadService) TouchThread(threadID string) error {
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
-	var thread models.Thread
-	if err := database.DB.Where("thread_id = ?", threadID).First(&thread).Error; err != nil {
+	if _, err := dao.Thread.GetByThreadID(threadID); err != nil {
 		return err
 	}
-	if err := database.DB.Model(&thread).Update("updated_at", time.Now()).Error; err != nil {
+	if _, err := dao.Thread.Touch(threadID, time.Now()); err != nil {
 		return err
 	}
-	invalidateThreadCache(thread.ThreadID)
+	invalidateThreadCache(threadID)
 	return nil
 }
 

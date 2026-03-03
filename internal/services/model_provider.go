@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
-	"openIntern/internal/database"
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"strings"
 )
@@ -79,19 +79,14 @@ func (s *ModelProviderService) Create(input CreateModelProviderInput) (*models.M
 		ExtraConfigJSON:  strings.TrimSpace(input.ExtraConfigJSON),
 		Enabled:          enabled,
 	}
-	if err := database.DB.Create(item).Error; err != nil {
+	if err := dao.ModelProvider.Create(item); err != nil {
 		return nil, err
 	}
 	return item, nil
 }
 
 func (s *ModelProviderService) GetByProviderID(providerID string) (*models.ModelProvider, error) {
-	var item models.ModelProvider
-	err := database.DB.Where("provider_id = ?", providerID).First(&item).Error
-	if err != nil {
-		return nil, err
-	}
-	return &item, nil
+	return dao.ModelProvider.GetByProviderID(providerID)
 }
 
 func (s *ModelProviderService) Update(providerID string, input UpdateModelProviderInput) error {
@@ -138,53 +133,39 @@ func (s *ModelProviderService) Update(providerID string, input UpdateModelProvid
 	if len(updates) == 0 {
 		return nil
 	}
-	result := database.DB.Model(&models.ModelProvider{}).Where("provider_id = ?", providerID).Updates(updates)
-	if result.Error != nil {
-		return result.Error
+	rowsAffected, err := dao.ModelProvider.UpdateByProviderID(providerID, updates)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return errors.New("model provider not found")
 	}
 	return nil
 }
 
 func (s *ModelProviderService) Delete(providerID string) error {
-	var count int64
-	if err := database.DB.Model(&models.ModelCatalog{}).Where("provider_id = ?", providerID).Count(&count).Error; err != nil {
+	count, err := dao.ModelProvider.CountModelsByProviderID(providerID)
+	if err != nil {
 		return err
 	}
 	if count > 0 {
 		return errors.New("provider still has models")
 	}
-	result := database.DB.Where("provider_id = ?", providerID).Delete(&models.ModelProvider{})
-	if result.Error != nil {
-		return result.Error
+	rowsAffected, err := dao.ModelProvider.DeleteByProviderID(providerID)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return errors.New("model provider not found")
 	}
 	return nil
 }
 
 func (s *ModelProviderService) List(page, pageSize int, keyword string) ([]ModelProviderView, int64, error) {
-	var items []models.ModelProvider
-	var total int64
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
-	offset := (page - 1) * pageSize
-	db := database.DB.Model(&models.ModelProvider{})
-	if keyword = strings.TrimSpace(keyword); keyword != "" {
-		pattern := "%" + keyword + "%"
-		db = db.Where("(name LIKE ? OR api_type LIKE ?)", pattern, pattern)
-	}
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	if err := db.Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	items, total, err := dao.ModelProvider.List(page, pageSize, dao.ModelProviderListFilter{
+		Keyword: keyword,
+	})
+	if err != nil {
 		return nil, 0, err
 	}
 	views := make([]ModelProviderView, 0, len(items))
