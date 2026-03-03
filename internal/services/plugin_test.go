@@ -56,3 +56,19 @@ func TestBuildToolCodeLanguageValidation(t *testing.T) {
 		t.Fatal("expected invalid code language error")
 	}
 }
+
+func TestBuildToolRejectsInvalidToolName(t *testing.T) {
+	svc := &PluginService{}
+
+	_, err := svc.buildTool("plugin-1", pluginRuntimeCode, PluginToolInput{
+		ToolName:     "echo input",
+		Code:         "print('ok')",
+		CodeLanguage: "python",
+	})
+	if err == nil {
+		t.Fatal("expected invalid tool name error")
+	}
+	if got := err.Error(); got != "tool_name must match ^[a-zA-Z0-9_-]+$" {
+		t.Fatalf("unexpected error: %s", got)
+	}
+}

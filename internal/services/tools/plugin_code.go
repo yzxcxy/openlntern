@@ -28,10 +28,10 @@ type SandboxCodeRunInput struct {
 }
 
 type codePluginTool struct {
-	def       models.Tool
-	info      *schema.ToolInfo
-	client    *http.Client
-	fieldDefs []codePluginField
+	def            models.Tool
+	info           *schema.ToolInfo
+	client         *http.Client
+	inputFieldDefs []codePluginField
 }
 
 type codePluginField struct {
@@ -62,10 +62,10 @@ func NewCodePluginTool(def models.Tool) (einoTool.BaseTool, error) {
 	}
 
 	return &codePluginTool{
-		def:       def,
-		info:      info,
-		client:    &http.Client{Timeout: timeout},
-		fieldDefs: fieldDefs,
+		def:            def,
+		info:           info,
+		client:         &http.Client{Timeout: timeout},
+		inputFieldDefs: fieldDefs,
 	}, nil
 }
 
@@ -82,16 +82,31 @@ func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 	if err != nil {
 		return "", err
 	}
-	if err := validateCodePluginObject(input, t.fieldDefs, ""); err != nil {
+	if err := validateCodePluginObject(input, t.inputFieldDefs, ""); err != nil {
 		return "", err
 	}
 
-	return RunCodeInSandbox(ctx, t.client, baseURL, SandboxCodeRunInput{
+	wrappedCode, err := WrapCodeForMainExecution(t.def.CodeLanguage, t.def.Code, input)
+	if err != nil {
+		return "", err
+	}
+
+	output, err := RunCodeInSandbox(ctx, t.client, baseURL, SandboxCodeRunInput{
 		CodeLanguage: t.def.CodeLanguage,
-		Code:         t.def.Code,
+		Code:         wrappedCode,
 		Input:        input,
 		TimeoutMS:    t.def.TimeoutMS,
 	})
+	if err != nil {
+		return "", err
+	}
+
+	result, err := ParseSandboxCodeExecutionOutput(output)
+	if err != nil {
+		return "", err
+	}
+
+	return encodeCodePluginResult(result)
 }
 
 func RunCodeInSandbox(ctx context.Context, client *http.Client, baseURL string, input SandboxCodeRunInput) (string, error) {
@@ -149,6 +164,142 @@ func RunCodeInSandbox(ctx context.Context, client *http.Client, baseURL string, 
 		return "", errors.New("sandbox execute returned empty response")
 	}
 	return result, nil
+}
+
+func WrapCodeForMainExecution(codeLanguage string, code string, input map[string]any) (string, error) {
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	inputLiteral := fmt.Sprintf("%q", string(inputJSON))
+
+	switch strings.ToLower(strings.TrimSpace(codeLanguage)) {
+	case "python":
+		return strings.TrimSpace(code) + "\n\n" +
+			"import json\n" +
+			"__openintern_params = json.loads(" + inputLiteral + ")\n" +
+			"__openintern_result = main(__openintern_params)\n" +
+			"print(json.dumps(__openintern_result, ensure_ascii=False))\n", nil
+	case "javascript":
+		return strings.TrimSpace(code) + "\n\n" +
+			"const __openintern_params = JSON.parse(" + inputLiteral + ");\n" +
+			"Promise.resolve(main(__openintern_params))\n" +
+			"  .then((result) => {\n" +
+			"    console.log(JSON.stringify(result ?? null));\n" +
+			"  })\n" +
+			"  .catch((error) => {\n" +
+			"    console.error(error);\n" +
+			"    if (typeof process !== \"undefined\") {\n" +
+			"      process.exitCode = 1;\n" +
+			"    }\n" +
+			"  });\n", nil
+	default:
+		return "", errors.New("code_language must be python or javascript")
+	}
+}
+
+func ParseSandboxCodeExecutionOutput(raw string) (any, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, errors.New("empty output")
+	}
+
+	var payload any
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return trimmed, nil
+	}
+
+	obj, ok := payload.(map[string]any)
+	if !ok {
+		return payload, nil
+	}
+
+	successValue, hasSuccess := obj["success"]
+	if !hasSuccess {
+		return payload, nil
+	}
+	success, ok := successValue.(bool)
+	if !ok {
+		return payload, nil
+	}
+
+	message, _ := obj["message"].(string)
+	if !success {
+		if strings.TrimSpace(message) == "" {
+			message = "sandbox execute failed"
+		}
+		return nil, errors.New(message)
+	}
+
+	data, _ := obj["data"].(map[string]any)
+	if data == nil {
+		return nil, nil
+	}
+
+	if result, ok, err := extractSandboxCodeExecutionResult(data); err != nil {
+		return nil, err
+	} else if ok {
+		return result, nil
+	}
+	return nil, nil
+}
+
+func extractSandboxCodeExecutionResult(data map[string]any) (any, bool, error) {
+	if stdout, ok := data["stdout"].(string); ok {
+		return parseSandboxCodeExecutionValue(stdout)
+	}
+
+	outputs, ok := data["outputs"].([]any)
+	if !ok || len(outputs) == 0 {
+		return nil, false, nil
+	}
+
+	for index := len(outputs) - 1; index >= 0; index-- {
+		if text, ok := outputs[index].(string); ok {
+			if result, found, err := parseSandboxCodeExecutionValue(text); err != nil || found {
+				return result, found, err
+			}
+		}
+	}
+
+	return nil, false, nil
+}
+
+func parseSandboxCodeExecutionValue(raw string) (any, bool, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, false, nil
+	}
+
+	lines := strings.Split(trimmed, "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		line := strings.TrimSpace(lines[index])
+		if line == "" {
+			continue
+		}
+		var payload any
+		if err := json.Unmarshal([]byte(line), &payload); err == nil {
+			return payload, true, nil
+		}
+		return line, true, nil
+	}
+
+	return nil, false, nil
+}
+
+func encodeCodePluginResult(result any) (string, error) {
+	if result == nil {
+		return "null", nil
+	}
+	if text, ok := result.(string); ok {
+		return text, nil
+	}
+
+	body, err := json.Marshal(result)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }
 
 func buildCodePluginToolInfo(def models.Tool) (*schema.ToolInfo, error) {

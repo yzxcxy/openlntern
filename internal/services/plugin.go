@@ -10,6 +10,7 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
+	toolsvc "openIntern/internal/services/tools"
 	"strconv"
 	"strings"
 	"time"
@@ -476,6 +477,9 @@ func (s *PluginService) buildTool(pluginID string, runtimeType string, input Plu
 	toolName := strings.TrimSpace(input.ToolName)
 	if toolName == "" {
 		return models.Tool{}, errors.New("tool_name is required")
+	}
+	if runtimeType != pluginRuntimeMCP && !toolsvc.IsModelSafeToolName(toolName) {
+		return models.Tool{}, errors.New("tool_name must match ^[a-zA-Z0-9_-]+$")
 	}
 
 	toolID := strings.TrimSpace(input.ToolID)
