@@ -124,6 +124,7 @@ type FlatFieldRow = {
 };
 
 const API_BASE = "/api/backend";
+const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 const createId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -131,6 +132,8 @@ const createId = () => {
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
+
+const isValidToolName = (value: string) => TOOL_NAME_PATTERN.test(value.trim());
 
 const createField = (type: FieldType = "string"): PluginField => ({
   id: createId(),
@@ -843,6 +846,9 @@ const validateDraft = (draft: PluginDraft) => {
   if (!draft.name.trim()) return "请输入插件名称";
   if (draft.runtimeType === "api") {
     if (!draft.tool.toolName.trim()) return "请输入工具名称";
+    if (!isValidToolName(draft.tool.toolName)) {
+      return "工具名称仅支持字母、数字、下划线和中划线";
+    }
     if (!draft.tool.toolResponseMode) return "请选择响应模式";
     if (!draft.tool.requestURL.trim() || !validateURL(draft.tool.requestURL.trim())) {
       return "请输入合法的 RequestURL";
@@ -866,6 +872,9 @@ const validateDraft = (draft: PluginDraft) => {
   }
   if (draft.runtimeType === "code") {
     if (!draft.tool.toolName.trim()) return "请输入工具名称";
+    if (!isValidToolName(draft.tool.toolName)) {
+      return "工具名称仅支持字母、数字、下划线和中划线";
+    }
     if (!["python", "javascript"].includes(draft.tool.codeLanguage.trim())) {
       return "代码语言仅支持 python 或 javascript";
     }
