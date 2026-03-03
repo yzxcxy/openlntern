@@ -8,6 +8,7 @@ import (
 	"openIntern/internal/routers"
 	"openIntern/internal/services"
 	"openIntern/internal/services/embedding"
+	pluginsvc "openIntern/internal/services/plugin"
 	"openIntern/internal/services/rag"
 )
 
@@ -23,7 +24,7 @@ func main() {
 	if err := services.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
-	services.InitPlugin(cfg.Plugin)
+	pluginsvc.InitPlugin(cfg.Plugin)
 	if err := embedding.InitEmbedding(cfg.EmbeddingLLM); err != nil {
 		log.Fatalf("failed to init embedding service: %v", err)
 	}

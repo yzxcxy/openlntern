@@ -10,8 +10,10 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
+	builtinTool "openIntern/internal/services/builtin_tool"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
-	"openIntern/internal/services/tools"
+	pluginsvc "openIntern/internal/services/plugin"
+	"openIntern/internal/util"
 	"sort"
 	"strings"
 
@@ -84,10 +86,10 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 		return err
 	}
 	// 注入 A2UI 工具所需的 context：service 与 sender
-	ctx = context.WithValue(ctx, tools.ContextKeyA2UIService, A2UI)
-	ctx = context.WithValue(ctx, tools.ContextKeyA2UISender, s)
-	ctx = context.WithValue(ctx, tools.ContextKeyFileUploader, File)
-	ctx = context.WithValue(ctx, tools.ContextKeySandboxBaseURL, sandboxBaseURL)
+	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UIService, A2UI)
+	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UISender, s)
+	ctx = context.WithValue(ctx, builtinTool.ContextKeyFileUploader, File)
+	ctx = context.WithValue(ctx, builtinTool.ContextKeySandboxBaseURL, sandboxBaseURL)
 	err = runEinoStreaming(ctx, s, einoMessages, runtimeConfig)
 	if err != nil {
 		_ = s.Error(err.Error(), "eino_run_failed")
@@ -192,11 +194,12 @@ func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config
 	if sandboxBaseURL == "" {
 		return nil, fmt.Errorf("tools.sandbox.url is required")
 	}
-	a2uiTools, err := tools.GetA2UITools(ctx)
+	pluginsvc.SetSandboxBaseURL(sandboxBaseURL)
+	a2uiTools, err := builtinTool.GetA2UITools(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cosTools, err := tools.GetCOSTools(ctx)
+	cosTools, err := builtinTool.GetCOSTools(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +487,7 @@ func normalizeForwardedPropsStringList(raw any) ([]string, error) {
 		return nil, nil
 	}
 	if values, ok := raw.([]string); ok {
-		return normalizeUniqueStringList(values), nil
+		return util.NormalizeUniqueStringList(values), nil
 	}
 	if values, ok := raw.([]any); ok {
 		result := make([]string, 0, len(values))
@@ -494,7 +497,7 @@ func normalizeForwardedPropsStringList(raw any) ([]string, error) {
 				result = append(result, text)
 			}
 		}
-		return normalizeUniqueStringList(result), nil
+		return util.NormalizeUniqueStringList(result), nil
 	}
 	if text, ok := raw.(string); ok {
 		text = strings.TrimSpace(text)
@@ -521,7 +524,7 @@ func normalizeForwardedPropsStringList(raw any) ([]string, error) {
 				result = append(result, text)
 			}
 		}
-		return normalizeUniqueStringList(result), nil
+		return util.NormalizeUniqueStringList(result), nil
 	}
 
 	var single string
@@ -620,7 +623,7 @@ func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig)
 		return resolved, nil, nil
 	}
 
-	codeTools, err := Plugin.BuildRuntimeCodeTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	codeTools, err := pluginsvc.Plugin.BuildRuntimeCodeTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -628,7 +631,7 @@ func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig)
 		resolved = append(resolved, codeTools...)
 	}
 
-	apiTools, err := Plugin.BuildRuntimeAPITools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	apiTools, err := pluginsvc.Plugin.BuildRuntimeAPITools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -636,7 +639,7 @@ func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig)
 		resolved = append(resolved, apiTools...)
 	}
 
-	pluginTools, cleanup, err := Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	pluginTools, cleanup, err := pluginsvc.Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()

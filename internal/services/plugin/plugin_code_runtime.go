@@ -1,24 +1,24 @@
-package services
+package plugin
 
 import (
 	"context"
 	"fmt"
 
 	"openIntern/internal/dao"
-	toolsvc "openIntern/internal/services/tools"
+	"openIntern/internal/util"
 
 	einoTool "github.com/cloudwego/eino/components/tool"
 )
 
-func (s *PluginService) BuildRuntimeAPITools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, error) {
+func (s *PluginService) BuildRuntimeCodeTools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, error) {
 	_ = ctx
 
-	toolIDs = normalizeUniqueStringList(toolIDs)
+	toolIDs = util.NormalizeUniqueStringList(toolIDs)
 	if len(toolIDs) == 0 {
 		return nil, nil
 	}
 
-	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeAPI, pluginStatusEnabled, toolIDs)
+	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeCode, pluginStatusEnabled, toolIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -28,9 +28,9 @@ func (s *PluginService) BuildRuntimeAPITools(ctx context.Context, toolIDs []stri
 
 	runtimeTools := make([]einoTool.BaseTool, 0, len(toolRows))
 	for _, row := range toolRows {
-		runtimeTool, err := toolsvc.NewAPIPluginTool(row)
+		runtimeTool, err := NewCodePluginTool(row)
 		if err != nil {
-			return nil, fmt.Errorf("build api plugin tool %s failed: %w", row.ToolID, err)
+			return nil, fmt.Errorf("build code plugin tool %s failed: %w", row.ToolID, err)
 		}
 		runtimeTools = append(runtimeTools, runtimeTool)
 	}

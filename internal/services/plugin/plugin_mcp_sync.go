@@ -1,4 +1,4 @@
-package services
+package plugin
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
+	"openIntern/internal/util"
 
 	mcpTool "github.com/cloudwego/eino-ext/components/tool/mcp"
 	einoTool "github.com/cloudwego/eino/components/tool"
@@ -460,7 +461,7 @@ func hasMCPOutputSchema(tool mcp.Tool) bool {
 }
 
 func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, func(), error) {
-	toolIDs = normalizeUniqueStringList(toolIDs)
+	toolIDs = util.NormalizeUniqueStringList(toolIDs)
 	if len(toolIDs) == 0 {
 		return nil, nil, nil
 	}
@@ -542,24 +543,4 @@ func closeMCPClients(clients []*client.Client) {
 			log.Printf("close mcp client failed err=%v", err)
 		}
 	}
-}
-
-func normalizeUniqueStringList(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-	return result
 }

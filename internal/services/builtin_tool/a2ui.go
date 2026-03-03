@@ -1,4 +1,4 @@
-package tools
+package builtin_tool
 
 import (
 	"context"
@@ -44,8 +44,8 @@ type GetA2UIInput struct {
 
 // SendA2UIInput 渲染数据并发送 A2UI 事件的入参
 type SendA2UIInput struct {
-	A2UIID    string `json:"a2ui_id" jsonschema_description:"A2UI 的业务 ID"`
-	DataJSON  string `json:"data_json" jsonschema_description:"数据模型更新内容的 JSON 字符串，注意如果查询对应A2UI返回的data_json为空，说明其是一个纯展示的A2UI，该字段就不应该被传入，可选"`
+	A2UIID   string `json:"a2ui_id" jsonschema_description:"A2UI 的业务 ID"`
+	DataJSON string `json:"data_json" jsonschema_description:"数据模型更新内容的 JSON 字符串，注意如果查询对应A2UI返回的data_json为空，说明其是一个纯展示的A2UI，该字段就不应该被传入，可选"`
 }
 
 const listA2UIsLimit = 10000 // 一次拉取上限，视为「全部」

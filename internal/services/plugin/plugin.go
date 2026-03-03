@@ -1,4 +1,4 @@
-package services
+package plugin
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
-	toolsvc "openIntern/internal/services/tools"
+	"openIntern/internal/util"
 	"strconv"
 	"strings"
 	"time"
@@ -151,6 +151,7 @@ type PluginService struct{}
 
 var Plugin = new(PluginService)
 var pluginDefaultIconURL string
+var sandboxBaseURL string
 
 func InitPlugin(cfg config.PluginConfig) {
 	pluginDefaultIconURL = strings.TrimSpace(cfg.DefaultIconURL)
@@ -159,6 +160,10 @@ func InitPlugin(cfg config.PluginConfig) {
 
 func GetDefaultPluginIconURL() string {
 	return pluginDefaultIconURL
+}
+
+func SetSandboxBaseURL(baseURL string) {
+	sandboxBaseURL = strings.TrimSpace(baseURL)
 }
 
 func (s *PluginService) Create(input UpsertPluginInput) (*PluginView, error) {
@@ -478,7 +483,7 @@ func (s *PluginService) buildTool(pluginID string, runtimeType string, input Plu
 	if toolName == "" {
 		return models.Tool{}, errors.New("tool_name is required")
 	}
-	if runtimeType != pluginRuntimeMCP && !toolsvc.IsModelSafeToolName(toolName) {
+	if runtimeType != pluginRuntimeMCP && !util.IsModelSafeToolName(toolName) {
 		return models.Tool{}, errors.New("tool_name must match ^[a-zA-Z0-9_-]+$")
 	}
 

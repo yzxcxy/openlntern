@@ -1,8 +1,6 @@
-package tools
+package util
 
-import (
-	"strings"
-)
+import "strings"
 
 func IsModelSafeToolName(name string) bool {
 	name = strings.TrimSpace(name)

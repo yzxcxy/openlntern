@@ -1,4 +1,4 @@
-package tools
+package plugin
 
 import (
 	"bytes"
@@ -76,7 +76,7 @@ func (t *codePluginTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
 func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...einoTool.Option) (string, error) {
 	_ = opts
 
-	baseURL, _ := ctx.Value(ContextKeySandboxBaseURL).(string)
+	baseURL := sandboxBaseURL
 
 	input, err := decodeCodePluginInput(argumentsInJSON)
 	if err != nil {

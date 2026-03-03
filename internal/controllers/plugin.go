@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"openIntern/internal/response"
 	"openIntern/internal/services"
+	pluginsvc "openIntern/internal/services/plugin"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -16,7 +17,7 @@ import (
 func ListPlugins(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	items, total, err := services.Plugin.List(page, pageSize, services.PluginListFilter{
+	items, total, err := pluginsvc.Plugin.List(page, pageSize, pluginsvc.PluginListFilter{
 		Source:      c.Query("source"),
 		RuntimeType: c.Query("runtime_type"),
 		Status:      c.Query("status"),
@@ -35,7 +36,7 @@ func ListPlugins(c *gin.Context) {
 }
 
 func GetPlugin(c *gin.Context) {
-	item, err := services.Plugin.GetByPluginID(strings.TrimSpace(c.Param("id")))
+	item, err := pluginsvc.Plugin.GetByPluginID(strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -44,12 +45,12 @@ func GetPlugin(c *gin.Context) {
 }
 
 func CreatePlugin(c *gin.Context) {
-	var input services.UpsertPluginInput
+	var input pluginsvc.UpsertPluginInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	item, err := services.Plugin.Create(input)
+	item, err := pluginsvc.Plugin.Create(input)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -59,7 +60,7 @@ func CreatePlugin(c *gin.Context) {
 
 func GetPluginDefaults(c *gin.Context) {
 	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"default_icon_url": services.GetDefaultPluginIconURL(),
+		"default_icon_url": pluginsvc.GetDefaultPluginIconURL(),
 	})
 }
 
@@ -95,12 +96,12 @@ func UploadPluginIcon(c *gin.Context) {
 }
 
 func UpdatePlugin(c *gin.Context) {
-	var input services.UpsertPluginInput
+	var input pluginsvc.UpsertPluginInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	item, err := services.Plugin.Update(strings.TrimSpace(c.Param("id")), input)
+	item, err := pluginsvc.Plugin.Update(strings.TrimSpace(c.Param("id")), input)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -109,13 +110,13 @@ func UpdatePlugin(c *gin.Context) {
 }
 
 func DebugCodePlugin(c *gin.Context) {
-	var input services.CodeDebugInput
+	var input pluginsvc.CodeDebugInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
 
-	item, err := services.Plugin.DebugCodeTool(c.Request.Context(), input)
+	item, err := pluginsvc.Plugin.DebugCodeTool(c.Request.Context(), input)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -124,7 +125,7 @@ func DebugCodePlugin(c *gin.Context) {
 }
 
 func EnablePlugin(c *gin.Context) {
-	item, err := services.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), true)
+	item, err := pluginsvc.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), true)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -133,7 +134,7 @@ func EnablePlugin(c *gin.Context) {
 }
 
 func DisablePlugin(c *gin.Context) {
-	item, err := services.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), false)
+	item, err := pluginsvc.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), false)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -142,7 +143,7 @@ func DisablePlugin(c *gin.Context) {
 }
 
 func SyncPlugin(c *gin.Context) {
-	item, err := services.Plugin.Sync(strings.TrimSpace(c.Param("id")))
+	item, err := pluginsvc.Plugin.Sync(strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -151,7 +152,7 @@ func SyncPlugin(c *gin.Context) {
 }
 
 func DeletePlugin(c *gin.Context) {
-	if err := services.Plugin.Delete(strings.TrimSpace(c.Param("id"))); err != nil {
+	if err := pluginsvc.Plugin.Delete(strings.TrimSpace(c.Param("id"))); err != nil {
 		writePluginError(c, err)
 		return
 	}
@@ -159,7 +160,7 @@ func DeletePlugin(c *gin.Context) {
 }
 
 func ListAvailablePluginsForChat(c *gin.Context) {
-	items, err := services.Plugin.ListAvailableForChat()
+	items, err := pluginsvc.Plugin.ListAvailableForChat()
 	if err != nil {
 		response.InternalError(c)
 		return

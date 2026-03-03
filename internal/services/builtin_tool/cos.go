@@ -1,4 +1,4 @@
-package tools
+package builtin_tool
 
 import (
 	"bytes"
@@ -19,8 +19,8 @@ type FileUploader interface {
 }
 
 const (
-	ContextKeyFileUploader     contextKey = "openintern_file_uploader"
-	ContextKeySandboxBaseURL   contextKey = "openintern_sandbox_base_url"
+	ContextKeyFileUploader   contextKey = "openintern_file_uploader"
+	ContextKeySandboxBaseURL contextKey = "openintern_sandbox_base_url"
 )
 
 type UploadToCOSInput struct {

@@ -1,4 +1,4 @@
-package services
+package plugin
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	toolsvc "openIntern/internal/services/tools"
 )
 
 type CodeDebugInput struct {
@@ -34,7 +32,7 @@ func (s *PluginService) DebugCodeTool(ctx context.Context, input CodeDebugInput)
 	if timeoutMS <= 0 {
 		timeoutMS = 30000
 	}
-	wrappedCode, err := toolsvc.WrapCodeForMainExecution(codeLanguage, code, input.Input)
+	wrappedCode, err := WrapCodeForMainExecution(codeLanguage, code, input.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +40,9 @@ func (s *PluginService) DebugCodeTool(ctx context.Context, input CodeDebugInput)
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	output, err := toolsvc.RunCodeInSandbox(ctx, &http.Client{
+	output, err := RunCodeInSandbox(ctx, &http.Client{
 		Timeout: time.Duration(timeoutMS) * time.Millisecond,
-	}, sandboxBaseURL, toolsvc.SandboxCodeRunInput{
+	}, sandboxBaseURL, SandboxCodeRunInput{
 		CodeLanguage: codeLanguage,
 		Code:         wrappedCode,
 		Input:        input.Input,
@@ -54,7 +52,7 @@ func (s *PluginService) DebugCodeTool(ctx context.Context, input CodeDebugInput)
 		return nil, err
 	}
 
-	result, err := toolsvc.ParseSandboxCodeExecutionOutput(output)
+	result, err := ParseSandboxCodeExecutionOutput(output)
 	if err != nil {
 		return nil, err
 	}
