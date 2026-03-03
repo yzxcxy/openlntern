@@ -644,6 +644,14 @@ func resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig)
 		resolved = append(resolved, codeTools...)
 	}
 
+	apiTools, err := Plugin.BuildRuntimeAPITools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(apiTools) > 0 {
+		resolved = append(resolved, apiTools...)
+	}
+
 	pluginTools, cleanup, err := Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
 	if err != nil {
 		if cleanup != nil {
