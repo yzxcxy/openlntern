@@ -91,7 +91,7 @@ const API_BASE = "/api/backend";
 
 const EMPTY_PROVIDER_FORM: ProviderFormState = {
   name: "",
-  api_type: "ark",
+  api_type: "openai",
   base_url: "",
   api_key: "",
   avatar: "",
@@ -423,7 +423,7 @@ export default function ModelsPage() {
     setProviderEditId(item.provider_id);
     setProviderForm({
       name: item.name || "",
-      api_type: item.api_type || "ark",
+      api_type: item.api_type || "openai",
       base_url: item.base_url || "",
       api_key: "",
       avatar: item.avatar || "",
@@ -1047,9 +1047,8 @@ export default function ModelsPage() {
                 setProviderForm((prev) => ({ ...prev, api_type: e.target.value }))
               }
             >
+              <option value="openai">openai</option>
               <option value="ark">ark</option>
-              <option value="deepseek">deepseek</option>
-              <option value="openai_compatible">openai_compatible</option>
             </UiSelect>
             <UiInput
               className="sm:col-span-2"
@@ -1142,7 +1141,7 @@ export default function ModelsPage() {
               ))}
             </UiSelect>
             <UiInput
-              placeholder="模型标识，例如 deepseek-chat"
+              placeholder="模型标识，例如 gpt-4o-mini"
               value={modelForm.model_key}
               onChange={(e) =>
                 setModelForm((prev) => ({
