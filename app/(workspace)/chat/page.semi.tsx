@@ -58,6 +58,10 @@ import {
   updateTokenFromResponse,
   type StoredUser,
 } from "../auth";
+import {
+  dispatchThreadHistoryUpsert,
+  type ThreadHistoryItem,
+} from "../thread-history-events";
 
 const A2UI_MESSAGE_RENDERER = createA2UIMessageRenderer({ theme });
 // 需要稳定引用，避免 renderActivityMessages 触发不稳定数组报错
@@ -167,6 +171,8 @@ type BackendResult<T> = {
   message: string;
   data?: T;
 };
+
+type BackendThreadItem = ThreadHistoryItem;
 
 type ModelCatalogOption = {
   provider_id: string;
@@ -532,6 +538,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const searchParams = useSearchParams();
   const fallbackThreadIdRef = useRef<string>("");
   const currentRunIdRef = useRef<string>("");
+  const titleSyncTokenRef = useRef(0);
+  const titleSyncTimerRef = useRef<number | null>(null);
   const textMessageMapRef = useRef(new Map<string, { runId: string; index: number }>());
   const toolCallMapRef = useRef(new Map<string, { runId: string; index: number }>());
   const reasoningMessageMapRef = useRef(
@@ -568,6 +576,76 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [pluginLoading, setPluginLoading] = useState(false);
   const [pluginError, setPluginError] = useState("");
   const pluginSelectionInitializedRef = useRef(false);
+
+  const clearThreadTitleSync = useCallback(() => {
+    titleSyncTokenRef.current += 1;
+    if (titleSyncTimerRef.current !== null) {
+      window.clearTimeout(titleSyncTimerRef.current);
+      titleSyncTimerRef.current = null;
+    }
+  }, []);
+
+  const startThreadTitleSync = useCallback(
+    (targetThreadId: string) => {
+      if (!targetThreadId || !token) {
+        return;
+      }
+
+      clearThreadTitleSync();
+      const syncToken = titleSyncTokenRef.current;
+
+      const pollTitle = async (attempt: number) => {
+        if (titleSyncTokenRef.current !== syncToken) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/backend/v1/threads/${targetThreadId}`, {
+            headers: buildAuthHeaders(token, userId),
+          });
+          updateTokenFromResponse(response);
+          const data = (await response
+            .json()
+            .catch(() => null)) as BackendResult<BackendThreadItem> | null;
+
+          if (response.ok && data?.code === 0) {
+            const thread = data.data ?? {};
+            const title =
+              typeof thread.title === "string" ? thread.title.trim() : "";
+
+            dispatchThreadHistoryUpsert({
+              thread_id: targetThreadId,
+              title,
+              created_at: thread.created_at,
+              updated_at: thread.updated_at,
+              pending_title: !title,
+            });
+
+            if (title) {
+              titleSyncTimerRef.current = null;
+              return;
+            }
+          }
+        } catch {
+          // 标题同步失败不阻断主对话流程，按下一个轮询周期继续尝试。
+        }
+
+        if (titleSyncTokenRef.current !== syncToken) {
+          return;
+        }
+
+        const delay = Math.min(1000 + attempt * 500, 5000);
+        titleSyncTimerRef.current = window.setTimeout(() => {
+          void pollTitle(attempt + 1);
+        }, delay);
+      };
+
+      void pollTitle(0);
+    },
+    [clearThreadTitleSync, token, userId]
+  );
+
+  useEffect(() => () => clearThreadTitleSync(), [clearThreadTitleSync]);
 
   useEffect(() => {
     let active = true;
@@ -883,6 +961,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   useEffect(() => {
     if (!agent) return;
     if (resolvedThreadId !== threadId) {
+      clearThreadTitleSync();
       setThreadId(resolvedThreadId);
       agent.threadId = resolvedThreadId;
       agent.setMessages([]);
@@ -895,7 +974,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       reasoningMessageMapRef.current.clear();
       activityMessageMapRef.current.clear();
     }
-  }, [agent, resolvedThreadId, threadId]);
+  }, [agent, clearThreadTitleSync, resolvedThreadId, threadId]);
 
   // 拉取历史消息并映射为 SemiMessage[]
   const loadHistory = useCallback(async () => {
@@ -951,7 +1030,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     (runId: string, updater: (message: SemiMessage) => SemiMessage) => {
       setSemiMessages((prev) => {
         const next = [...prev];
-        let index = next.findIndex(
+        const index = next.findIndex(
           (message) => message.id === runId && message.role === "assistant"
         );
         const baseMessage =
@@ -1029,6 +1108,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       // RUN_FINISHED 标记 run 结束，并清空 AG-UI 消息结构
         if (eventType === "RUN_FINISHED") {
           const runId = resolveRunId(rawEvent) ?? currentRunIdRef.current;
+          const finishedThreadId =
+            rawEvent?.threadId ?? rawEvent?.thread_id ?? threadId;
           if (runId) {
             updateRunMessage(runId, (message) => ({
               ...message,
@@ -1041,6 +1122,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           toolCallMapRef.current.clear();
           reasoningMessageMapRef.current.clear();
           activityMessageMapRef.current.clear();
+          startThreadTitleSync(finishedThreadId);
           return;
         }
 
@@ -1351,7 +1433,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     return () => {
       subscription?.unsubscribe?.();
     };
-  }, [agent, updateRunMessage]);
+  }, [agent, startThreadTitleSync, threadId, updateRunMessage]);
 
   const chats = useMemo<SemiMessage[]>(
     () =>
@@ -1649,6 +1731,12 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         return;
       }
       setInputError("");
+      const now = new Date().toISOString();
+      dispatchThreadHistoryUpsert({
+        thread_id: threadId,
+        updated_at: now,
+        pending_title: true,
+      });
       const message: AguiMessage = {
         id: createMessageId(),
         role: "user",
@@ -1699,6 +1787,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       selectedModelOption,
       selectedProviderId,
       selectedToolIds,
+      threadId,
     ]
   );
 

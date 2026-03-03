@@ -10,6 +10,10 @@ import { UiInput } from "../components/ui/UiInput";
 import { ConfirmDialog } from "./a2ui/components/ConfirmDialog";
 import { Modal } from "./a2ui/components/Modal";
 import {
+  THREAD_HISTORY_UPSERT_EVENT,
+  type ThreadHistoryItem,
+} from "./thread-history-events";
+import {
   buildAuthHeaders,
   readStoredUser,
   readValidToken,
@@ -23,12 +27,7 @@ type UserInfo = {
   user_id?: string | number;
 } | null;
 
-type ThreadItem = {
-  thread_id?: string;
-  title?: string;
-  updated_at?: string;
-  created_at?: string;
-};
+type ThreadItem = ThreadHistoryItem;
 
 const createThreadId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -62,6 +61,26 @@ const historyEntryClass = (active: boolean) =>
       ? "history-entry-surface-active text-[var(--color-text-primary)]"
       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
   );
+
+const normalizeThreadTitle = (value?: string) => {
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
+
+const mergeThreadItem = (current: ThreadItem | undefined, incoming: ThreadItem): ThreadItem => {
+  const incomingTitle = normalizeThreadTitle(incoming.title);
+  const currentTitle = normalizeThreadTitle(current?.title);
+  const title = incomingTitle || currentTitle;
+
+  return {
+    ...current,
+    ...incoming,
+    title: title || undefined,
+    pending_title: title
+      ? false
+      : incoming.pending_title ?? current?.pending_title ?? true,
+  };
+};
 
 const formatThreadTime = (value?: string) => {
   if (!value) return "";
@@ -152,9 +171,33 @@ export default function WorkspaceLayout({
         if (!res.ok || data.code !== 0) {
           throw new Error(data.message || "获取历史会话失败");
         }
-        const items = Array.isArray(data.data?.data) ? data.data.data : [];
+        const items = (Array.isArray(data.data?.data) ? data.data.data : []).map((item) =>
+          mergeThreadItem(undefined, item)
+        );
         const total = typeof data.data?.total === "number" ? data.data.total : 0;
-        setHistoryItems((prev) => (shouldAppend ? [...prev, ...items] : items));
+        setHistoryItems((prev) => {
+          if (!shouldAppend) {
+            const pendingItems = prev.filter(
+              (current) =>
+                current.thread_id &&
+                !normalizeThreadTitle(current.title) &&
+                !items.some((item) => item.thread_id === current.thread_id)
+            );
+            return [...pendingItems, ...items];
+          }
+          return items.reduce<ThreadItem[]>((acc, item) => {
+            if (!item.thread_id) {
+              return acc;
+            }
+            const index = acc.findIndex((current) => current.thread_id === item.thread_id);
+            if (index === -1) {
+              acc.push(item);
+              return acc;
+            }
+            acc[index] = mergeThreadItem(acc[index], item);
+            return acc;
+          }, [...prev]);
+        });
         setHistoryPage(nextPage);
         setHistoryTotal(total);
       } catch (err) {
@@ -183,6 +226,36 @@ export default function WorkspaceLayout({
       window.removeEventListener("threads-refresh", handleThreadsRefresh);
     };
   }, [fetchThreads]);
+
+  useEffect(() => {
+    const handleThreadHistoryUpsert = (event: Event) => {
+      const detail = (event as CustomEvent<ThreadItem>).detail;
+      if (!detail?.thread_id) {
+        return;
+      }
+      setHistoryItems((prev) => {
+        const index = prev.findIndex((item) => item.thread_id === detail.thread_id);
+        const current = index === -1 ? undefined : prev[index];
+        const nextItem = mergeThreadItem(current, detail);
+        const rest =
+          index === -1
+            ? prev
+            : [...prev.slice(0, index), ...prev.slice(index + 1)];
+        return [nextItem, ...rest];
+      });
+    };
+
+    window.addEventListener(
+      THREAD_HISTORY_UPSERT_EVENT,
+      handleThreadHistoryUpsert as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        THREAD_HISTORY_UPSERT_EVENT,
+        handleThreadHistoryUpsert as EventListener
+      );
+    };
+  }, []);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -699,9 +772,16 @@ export default function WorkspaceLayout({
                             )}
                           />
                           <span className="min-w-0 flex-1 space-y-0">
-                            <span className="block truncate text-[13px] font-semibold leading-5">
-                              {item.title || item.thread_id || "未命名会话"}
-                            </span>
+                            {normalizeThreadTitle(item.title) ? (
+                              <span className="block truncate text-[13px] font-semibold leading-5">
+                                {normalizeThreadTitle(item.title)}
+                              </span>
+                            ) : (
+                              <span className="flex h-5 items-center gap-2 text-[11px] font-medium leading-5 text-[var(--color-text-muted)]">
+                                <span className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--color-border-default)] border-t-[var(--color-action-primary)]" />
+                                正在生成标题
+                              </span>
+                            )}
                             <span className="block truncate text-[11px] leading-4 text-[var(--color-text-muted)]">
                               {formatThreadTime(item.updated_at || item.created_at) || "最近更新"}
                             </span>
@@ -898,7 +978,8 @@ export default function WorkspaceLayout({
         open={Boolean(deleteTarget)}
         title="确认删除"
         description={`确定要删除会话“${
-          deleteTarget?.title || deleteTarget?.thread_id || "未命名会话"
+          normalizeThreadTitle(deleteTarget?.title) ||
+          (deleteTarget?.pending_title ? "正在生成标题" : "未命名会话")
         }”吗？此操作不可撤销。`}
         confirmText="删除"
         cancelText="取消"
