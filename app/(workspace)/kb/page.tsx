@@ -76,6 +76,51 @@ const normalizeRelPath = (relPath: string) => {
   return trimmed;
 };
 
+const readString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return "";
+};
+
+const readBoolean = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1") {
+        return true;
+      }
+      if (normalized === "false" || normalized === "0") {
+        return false;
+      }
+    }
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+  }
+  return false;
+};
+
+const readNumber = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+};
+
 const splitPath = (relPath: string) => {
   return relPath.split("/").filter(Boolean);
 };
@@ -86,6 +131,52 @@ const parseEntryUriPath = (kbName: string, uri?: string) => {
   const prefix = `viking://resources/${kbName}/`;
   if (!uri.startsWith(prefix)) return "";
   return uri.slice(prefix.length);
+};
+
+const normalizeTreeEntries = (entries: unknown, kbName: string): TreeEntry[] => {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+
+    const raw = entry as Record<string, unknown>;
+    const uri = readString(raw.uri, raw.path, raw.Path);
+    let relPath = readString(raw.rel_path, raw.relPath, raw.RelPath);
+    if (!relPath && uri) {
+      relPath = parseEntryUriPath(kbName, uri);
+    }
+
+    const isDir =
+      readBoolean(raw.isDir, raw.is_dir, raw.IsDir) ||
+      readString(raw.type, raw.Type).toLowerCase() === "dir" ||
+      relPath.endsWith("/") ||
+      uri.endsWith("/");
+
+    let normalizedUri = uri;
+    if (!normalizedUri && kbName && relPath) {
+      const normalizedPath = normalizeRelPath(relPath);
+      normalizedUri = normalizedPath
+        ? `viking://resources/${kbName}/${normalizedPath}`
+        : `viking://resources/${kbName}/`;
+    }
+    if (isDir && normalizedUri && !normalizedUri.endsWith("/")) {
+      normalizedUri = `${normalizedUri}/`;
+    }
+
+    return [
+      {
+        rel_path: relPath,
+        name: readString(raw.name, raw.Name),
+        isDir,
+        uri: normalizedUri,
+        size: readNumber(raw.size, raw.Size),
+      },
+    ];
+  });
 };
 
 const buildTreeNodes = (entries: TreeEntry[], kbName: string) => {
@@ -268,7 +359,7 @@ export default function KnowledgeBasePage() {
         if (!res.ok || data.code !== 0) {
           throw new Error(data.message || "获取知识库文件失败");
         }
-        setTreeEntries(data.data ?? []);
+        setTreeEntries(normalizeTreeEntries(data.data, kbName));
       } catch (err) {
         const message = err instanceof Error ? err.message : "获取知识库文件失败";
         showError(message);
