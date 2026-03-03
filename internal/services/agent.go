@@ -845,7 +845,6 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 		}
 		if len(msg.ToolCalls) > 0 {
 			for _, call := range msg.ToolCalls {
-				log.Printf("tool call: %v", call)
 				callID := call.ID
 				// 流式可能在同一批里先发带 id+name 的项，再发无 id、无 name 仅带 args 的项（解析产物），
 				// 需在「处理当前项时」再算 onlyStartedID，这样同一批里后一项才能归到已开始的那一个。
