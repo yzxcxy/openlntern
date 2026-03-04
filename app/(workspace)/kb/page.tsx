@@ -414,7 +414,13 @@ export default function KnowledgeBasePage() {
     return formatNodePath(parentDir);
   }, [selectedNode]);
 
-  const handleCreate = async () => {
+  const resetCreateModal = useCallback(() => {
+    setCreateVisible(false);
+    setCreateName("");
+    setCreateFile(null);
+  }, []);
+
+  const handleCreate = useCallback(async () => {
     if (!createName.trim()) {
       showError("请输入知识库名称");
       return;
@@ -440,9 +446,7 @@ export default function KnowledgeBasePage() {
         throw new Error(data.message || "创建知识库失败");
       }
       showSuccess("知识库创建成功");
-      setCreateVisible(false);
-      setCreateName("");
-      setCreateFile(null);
+      resetCreateModal();
       await fetchList();
     } catch (err) {
       const message = err instanceof Error ? err.message : "创建知识库失败";
@@ -450,7 +454,7 @@ export default function KnowledgeBasePage() {
     } finally {
       setCreating(false);
     }
-  };
+  }, [createFile, createName, fetchList, getValidToken, resetCreateModal]);
 
   const handleDeleteKb = () => {
     if (!selectedKb) return;
@@ -865,13 +869,13 @@ export default function KnowledgeBasePage() {
       <Modal
         open={createVisible}
         title="新建知识库"
-        onClose={() => setCreateVisible(false)}
+        onClose={resetCreateModal}
         footer={
           <>
             <UiButton
               type="button"
               variant="secondary"
-              onClick={() => setCreateVisible(false)}
+              onClick={resetCreateModal}
             >
               取消
             </UiButton>
