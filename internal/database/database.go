@@ -1,7 +1,7 @@
 package database
 
 import (
-	"log"
+	"fmt"
 	"openIntern/internal/models"
 
 	"gorm.io/driver/mysql"
@@ -23,7 +23,7 @@ func Init(dsn string) error {
 		},
 	})
 	if err != nil {
-		log.Fatalf("failed to connect database: %v", err)
+		return fmt.Errorf("connect database: %w", err)
 	}
 
 	// 自动迁移表结构
@@ -40,21 +40,21 @@ func Init(dsn string) error {
 		&models.ModelCatalog{},
 		&models.DefaultModelConfig{},
 	); err != nil {
-		log.Fatalf("failed to migrate database: %v", err)
+		return fmt.Errorf("migrate database: %w", err)
 	}
 	if DB.Migrator().HasColumn(&models.A2UI{}, "type") {
 		if err := DB.Migrator().DropColumn(&models.A2UI{}, "type"); err != nil {
-			log.Fatalf("failed to drop a2ui.type: %v", err)
+			return fmt.Errorf("drop a2ui.type: %w", err)
 		}
 	}
 	if DB.Migrator().HasColumn(&models.A2UI{}, "user_id") {
 		if err := DB.Migrator().DropColumn(&models.A2UI{}, "user_id"); err != nil {
-			log.Fatalf("failed to drop a2ui.user_id: %v", err)
+			return fmt.Errorf("drop a2ui.user_id: %w", err)
 		}
 	}
 	if DB.Migrator().HasColumn(&models.Thread{}, "owner_id") {
 		if err := DB.Migrator().DropColumn(&models.Thread{}, "owner_id"); err != nil {
-			log.Fatalf("failed to drop thread.owner_id: %v", err)
+			return fmt.Errorf("drop thread.owner_id: %w", err)
 		}
 	}
 

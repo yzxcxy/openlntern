@@ -2,6 +2,8 @@ package skillmiddleware_test
 
 import (
 	"context"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -46,7 +48,7 @@ func (realFrontmatterStore) GetByName(name string) (*skillmiddleware.SkillFrontm
 
 func initOpenViking(t *testing.T) {
 	t.Helper()
-	cfg := config.LoadConfig("config.yaml")
+	cfg := config.LoadConfig(testConfigPath(t))
 	if err := database.Init(cfg.MySQL.DSN); err != nil {
 		t.Fatalf("init database failed: %v", err)
 	}
@@ -54,6 +56,15 @@ func initOpenViking(t *testing.T) {
 	if !dao.SkillStore.Configured() {
 		t.Fatalf("openviking not configured")
 	}
+}
+
+func testConfigPath(t *testing.T) string {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("resolve test file path failed")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "..", "..", "config.yaml"))
 }
 
 func pickFirstSkillName(t *testing.T, ctx context.Context) string {
@@ -137,4 +148,6 @@ func TestRemoteBackend_Get(t *testing.T) {
 	if skill.BaseDirectory != buildSkillURI(root, skillName, "") {
 		t.Fatalf("unexpected base directory: %s", skill.BaseDirectory)
 	}
+	
+	t.Log(skill)
 }
