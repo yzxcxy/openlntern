@@ -125,12 +125,27 @@ const splitPath = (relPath: string) => {
   return relPath.split("/").filter(Boolean);
 };
 
+const buildKbInnerPrefix = (kbName: string) =>
+  `viking://resources/${kbName}/${kbName}/`;
+
+const decodeUriForMatch = (uri: string) => {
+  try {
+    return decodeURI(uri);
+  } catch {
+    return uri;
+  }
+};
+
 const parseEntryUriPath = (kbName: string, uri?: string) => {
   if (!kbName) return "";
   if (!uri) return "";
-  const prefix = `viking://resources/${kbName}/`;
-  if (!uri.startsWith(prefix)) return "";
-  return uri.slice(prefix.length);
+  const innerPrefix = buildKbInnerPrefix(kbName);
+  if (uri.startsWith(innerPrefix)) {
+    return uri.slice(innerPrefix.length);
+  }
+  const decoded = decodeUriForMatch(uri);
+  if (!decoded.startsWith(innerPrefix)) return "";
+  return decoded.slice(innerPrefix.length);
 };
 
 const normalizeTreeEntries = (entries: unknown, kbName: string): TreeEntry[] => {
@@ -159,9 +174,8 @@ const normalizeTreeEntries = (entries: unknown, kbName: string): TreeEntry[] => 
     let normalizedUri = uri;
     if (!normalizedUri && kbName && relPath) {
       const normalizedPath = normalizeRelPath(relPath);
-      normalizedUri = normalizedPath
-        ? `viking://resources/${kbName}/${normalizedPath}`
-        : `viking://resources/${kbName}/`;
+      const innerPrefix = buildKbInnerPrefix(kbName);
+      normalizedUri = normalizedPath ? `${innerPrefix}${normalizedPath}` : innerPrefix;
     }
     if (isDir && normalizedUri && !normalizedUri.endsWith("/")) {
       normalizedUri = `${normalizedUri}/`;
@@ -221,7 +235,7 @@ const buildTreeNodes = (entries: TreeEntry[], kbName: string) => {
   };
 
   entries.forEach((entry) => {
-    const rawPath = parseEntryUriPath(kbName, entry.uri);
+    const rawPath = entry.rel_path ? normalizeRelPath(entry.rel_path) : parseEntryUriPath(kbName, entry.uri);
     if (!rawPath) return;
     let relPath = normalizeRelPath(rawPath);
     const isDir = entry.isDir || relPath.endsWith("/");
@@ -271,13 +285,9 @@ const getBaseName = (pathValue: string) => {
 
 const buildUri = (kbName: string, relPath: string) => {
   const normalized = relPath.replace(/^\/+/, "");
-  if (!normalized) return `viking://resources/${kbName}/`;
-  return `viking://resources/${kbName}/${normalized}`;
-};
-
-const formatNodePath = (pathValue: string) => {
-  const trimmed = pathValue.replace(/\/+$/, "");
-  return trimmed || "/";
+  const base = buildKbInnerPrefix(kbName);
+  if (!normalized) return base;
+  return `${base}${normalized}`;
 };
 
 export default function KnowledgeBasePage() {
@@ -405,14 +415,6 @@ export default function KnowledgeBasePage() {
       files,
     };
   }, [treeEntries]);
-  const uploadTargetLabel = useMemo(() => {
-    if (!selectedNode) return "根目录";
-    if (selectedNode.isDir) {
-      return formatNodePath(selectedNode.path);
-    }
-    const parentDir = getParentDir(selectedNode.path);
-    return formatNodePath(parentDir);
-  }, [selectedNode]);
 
   const resetCreateModal = useCallback(() => {
     setCreateVisible(false);
@@ -445,7 +447,7 @@ export default function KnowledgeBasePage() {
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "创建知识库失败");
       }
-      showSuccess("知识库创建成功");
+      showSuccess("知识库创建请求已受理，后台处理中，请稍后刷新查看结果");
       resetCreateModal();
       await fetchList();
     } catch (err) {
@@ -595,8 +597,7 @@ export default function KnowledgeBasePage() {
       if (!res.ok || data.code !== 0) {
         throw new Error(data.message || "上传失败");
       }
-      showSuccess("上传成功");
-      await fetchTree(selectedKb);
+      showSuccess("上传请求已受理，后台处理中，请稍后刷新查看结果");
     } catch (err) {
       const message = err instanceof Error ? err.message : "上传失败";
       showError(message);
@@ -612,6 +613,7 @@ export default function KnowledgeBasePage() {
     const isSelected = selectedNode?.path === node.path;
     return (
       <div
+        data-kb-tree-node="true"
         className={`group flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-1 py-1 ${
           isSelected
             ? "bg-[linear-gradient(90deg,rgba(37,99,255,0.12),rgba(37,99,255,0.04))] text-[var(--color-text-primary)]"
@@ -789,28 +791,6 @@ export default function KnowledgeBasePage() {
               </Space>
             }
           >
-            {selectedKb && (
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.78)] px-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-[var(--color-text-secondary)]">
-                    当前上传目录
-                  </div>
-                  <div className="truncate text-sm text-[var(--color-text-primary)]">
-                    {uploadTargetLabel}
-                  </div>
-                </div>
-                {selectedNode && (
-                  <UiButton
-                    provider="semi"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setSelectedNode(null)}
-                  >
-                    取消选择
-                  </UiButton>
-                )}
-              </div>
-            )}
             {treeLoading && treeEntries.length === 0 ? (
               <div className="space-y-3 p-2">
                 <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.12)]" />
@@ -822,7 +802,16 @@ export default function KnowledgeBasePage() {
               <Spin spinning={treeLoading}>
                 {selectedKb ? (
                   treeData.length ? (
-                    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.72)] p-2">
+                    <div
+                      className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.72)] p-2"
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement | null;
+                        if (target?.closest('[data-kb-tree-node="true"]')) {
+                          return;
+                        }
+                        setSelectedNode(null);
+                      }}
+                    >
                       <Tree
                         treeData={treeData}
                         className="kb-tree"

@@ -1049,6 +1049,7 @@ export default function ModelsPage() {
             >
               <option value="openai">openai</option>
               <option value="ark">ark</option>
+              <option value="deepseek">deepseek</option>
             </UiSelect>
             <UiInput
               className="sm:col-span-2"
