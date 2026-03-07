@@ -15,6 +15,12 @@ import (
 
 const fallbackModelCryptoSecret = "openintern-model-provider-secret"
 
+var supportedModelProviderAPITypes = map[string]struct{}{
+	"openai":   {},
+	"ark":      {},
+	"deepseek": {},
+}
+
 type CreateModelProviderInput struct {
 	Name            string `json:"name"`
 	APIType         string `json:"api_type"`
@@ -58,8 +64,8 @@ func (s *ModelProviderService) Create(input CreateModelProviderInput) (*models.M
 	if name == "" || apiType == "" {
 		return nil, errors.New("name and api_type are required")
 	}
-	if apiType != "openai" && apiType != "ark" {
-		return nil, errors.New("api_type must be one of: openai, ark")
+	if !isSupportedModelProviderAPIType(apiType) {
+		return nil, errors.New("api_type must be one of: openai, ark, deepseek")
 	}
 	var err error
 	ciphertext, err := encryptModelSecret(strings.TrimSpace(input.APIKey))
@@ -103,8 +109,8 @@ func (s *ModelProviderService) Update(providerID string, input UpdateModelProvid
 		if apiType == "" {
 			return errors.New("api_type cannot be empty")
 		}
-		if apiType != "openai" && apiType != "ark" {
-			return errors.New("api_type must be one of: openai, ark")
+		if !isSupportedModelProviderAPIType(apiType) {
+			return errors.New("api_type must be one of: openai, ark, deepseek")
 		}
 		updates["api_type"] = apiType
 	}
@@ -180,6 +186,11 @@ func (s *ModelProviderService) ToView(item *models.ModelProvider) ModelProviderV
 		return ModelProviderView{}
 	}
 	return buildModelProviderView(*item)
+}
+
+func isSupportedModelProviderAPIType(apiType string) bool {
+	_, ok := supportedModelProviderAPITypes[apiType]
+	return ok
 }
 
 func (s *ModelProviderService) ResolveAPIKey(item *models.ModelProvider) (string, error) {

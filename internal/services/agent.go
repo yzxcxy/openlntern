@@ -665,6 +665,12 @@ func buildChatModel(ctx context.Context, provider *models.ModelProvider, modelIt
 			BaseURL: strings.TrimSpace(provider.BaseURL),
 			Model:   strings.TrimSpace(modelItem.ModelKey),
 		})
+	case "deepseek":
+		return deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+			APIKey:  apiKey,
+			BaseURL: strings.TrimSpace(provider.BaseURL),
+			Model:   strings.TrimSpace(modelItem.ModelKey),
+		})
 	default:
 		return nil, fmt.Errorf("unsupported api_type: %s", provider.APIType)
 	}
