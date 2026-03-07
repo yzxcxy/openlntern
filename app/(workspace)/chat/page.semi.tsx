@@ -32,7 +32,10 @@ import type {
   ActivityMessage,
   Message as AguiMessage,
 } from "@ag-ui/client";
-import type { MessageContent } from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
+import type {
+  Content as AIChatInputContent,
+  MessageContent,
+} from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
 import { ChatModeConfigureArea } from "./ChatModeConfigureArea";
 import { PluginSelectionModal } from "./PluginSelectionModal";
 import {
@@ -186,6 +189,34 @@ type ModelCatalogOption = {
   is_system_default?: boolean;
 };
 
+type SkillCatalogItem = {
+  skill_id?: string;
+  name?: string;
+  path?: string;
+};
+
+type KnowledgeBaseOption = {
+  name?: string;
+  uri?: string;
+};
+
+type MentionTargetType = "skill" | "kb";
+type MentionTriggerSymbol = "@" | "#";
+
+type MentionTargetOption = {
+  type: MentionTargetType;
+  id: string;
+  name: string;
+  displayName: string;
+  keyword: string;
+};
+
+type MentionSelectionItem = {
+  type: MentionTargetType;
+  id: string;
+  name: string;
+};
+
 const joinClasses = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
@@ -238,6 +269,57 @@ const extractToolResultText = (content: unknown) => {
     }
   }
   return "";
+};
+
+// 统一提取输入内容中的纯文本，忽略非文本 slot。
+const extractInputPlainText = (contents: AIChatInputContent[]) =>
+  contents
+    .map((item) =>
+      typeof item?.text === "string" && item.type === "text" ? item.text : ""
+    )
+    .filter(Boolean)
+    .join("");
+
+// 转义文本为安全 HTML。
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+// 将纯文本转换为 AIChatInput 可接受的基础段落 HTML。
+const toEditorParagraphHtml = (value: string) => {
+  if (!value) {
+    return "";
+  }
+  return value
+    .split("\n")
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join("");
+};
+
+// 匹配输入结尾的触发器：@ 用于知识库，# 用于 skill。
+const matchMentionTrigger = (
+  text: string
+): { symbol: MentionTriggerSymbol; keyword: string } | null => {
+  const match = text.match(/(?:^|\s)([@#])([^\s@#]*)$/);
+  if (!match) {
+    return null;
+  }
+  const symbol = match[1] as MentionTriggerSymbol;
+  const keyword = match[2] ?? "";
+  return { symbol, keyword };
+};
+
+// 去掉输入末尾的 mention 触发串，避免把 @ 关键词留在正文中。
+const stripMentionSuffix = (text: string, symbol: MentionTriggerSymbol | null) => {
+  if (!symbol) {
+    return text;
+  }
+  const pattern = new RegExp(`(^|\\s)\\${symbol}[^\\s@#]*$`);
+  return text.replace(pattern, "$1").replace(/\s+$/, " ");
 };
 
 // ISO 时间字符串转为时间戳，解析失败返回 undefined
@@ -536,6 +618,7 @@ type ChatContentProps = {
 
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
   const searchParams = useSearchParams();
+  const inputRef = useRef<{ setContent: (content: string) => void } | null>(null);
   const fallbackThreadIdRef = useRef<string>("");
   const currentRunIdRef = useRef<string>("");
   const titleSyncTokenRef = useRef(0);
@@ -576,6 +659,14 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [pluginLoading, setPluginLoading] = useState(false);
   const [pluginError, setPluginError] = useState("");
   const pluginSelectionInitializedRef = useRef(false);
+  const [mentionOptions, setMentionOptions] = useState<MentionTargetOption[]>([]);
+  const [selectedMentions, setSelectedMentions] = useState<MentionSelectionItem[]>([]);
+  const [mentionKeyword, setMentionKeyword] = useState("");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const [mentionTriggerSymbol, setMentionTriggerSymbol] =
+    useState<MentionTriggerSymbol | null>(null);
+  const [, setComposerTextValue] = useState("");
 
   const clearThreadTitleSync = useCallback(() => {
     titleSyncTokenRef.current += 1;
@@ -684,6 +775,94 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       }
     };
     loadModelCatalog();
+    return () => {
+      active = false;
+    };
+  }, [token, userId]);
+
+  useEffect(() => {
+    let active = true;
+    const loadMentionOptions = async () => {
+      if (!token) return;
+      try {
+        const [skillsResponse, kbsResponse] = await Promise.all([
+          fetch("/api/backend/v1/skills/meta?page=1&page_size=500", {
+            headers: buildAuthHeaders(token, userId),
+          }),
+          fetch("/api/backend/v1/kbs", {
+            headers: buildAuthHeaders(token, userId),
+          }),
+        ]);
+        updateTokenFromResponse(skillsResponse);
+        updateTokenFromResponse(kbsResponse);
+
+        const skillsData = (await skillsResponse
+          .json()
+          .catch(() => null)) as BackendResult<{
+          data?: SkillCatalogItem[];
+        }> | null;
+        const kbsData = (await kbsResponse
+          .json()
+          .catch(() => null)) as BackendResult<KnowledgeBaseOption[]> | null;
+
+        const options: MentionTargetOption[] = [];
+        if (skillsResponse.ok && skillsData?.code === 0) {
+          const skillItems = Array.isArray(skillsData.data?.data)
+            ? skillsData.data?.data
+            : [];
+          skillItems.forEach((item) => {
+            const pathName =
+              typeof item.path === "string" && item.path.includes("/")
+                ? item.path.split("/").filter(Boolean).pop()
+                : item.path;
+            const name =
+              (typeof item.name === "string" && item.name.trim()) ||
+              (typeof pathName === "string" && pathName.trim()) ||
+              "";
+            const id =
+              (typeof item.skill_id === "string" && item.skill_id.trim()) ||
+              name;
+            if (!id || !name) {
+              return;
+            }
+            options.push({
+              type: "skill",
+              id,
+              name,
+              displayName: name,
+              keyword: `${id} ${name}`.toLowerCase(),
+            });
+          });
+        }
+        if (kbsResponse.ok && kbsData?.code === 0) {
+          const kbItems = Array.isArray(kbsData.data) ? kbsData.data : [];
+          kbItems.forEach((item) => {
+            const name =
+              typeof item.name === "string" ? item.name.trim() : "";
+            if (!name) {
+              return;
+            }
+            options.push({
+              type: "kb",
+              id: name,
+              name,
+              displayName: name,
+              keyword: name.toLowerCase(),
+            });
+          });
+        }
+        if (!active) return;
+        const deduped = options.filter((item, index, list) => {
+          const key = `${item.type}:${item.id}`;
+          return list.findIndex((option) => `${option.type}:${option.id}` === key) === index;
+        });
+        setMentionOptions(deduped);
+      } catch {
+        if (!active) return;
+        setMentionOptions([]);
+      }
+    };
+    void loadMentionOptions();
     return () => {
       active = false;
     };
@@ -1446,6 +1625,152 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const showHistorySkeleton = historyLoading && chats.length === 0;
   const showEmptyState =
     !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
+  const mentionCandidates = useMemo(() => {
+    if (!mentionOpen || !mentionTriggerSymbol) {
+      return [];
+    }
+    const keyword = mentionKeyword.trim().toLowerCase();
+    const targetType: MentionTargetType =
+      mentionTriggerSymbol === "@" ? "kb" : "skill";
+    return mentionOptions
+      .filter((item) => item.type === targetType)
+      .filter((item) => {
+        if (!keyword) {
+          return true;
+        }
+        return item.keyword.includes(keyword);
+      })
+      .filter((item) => {
+        const key = `${item.type}:${item.id}`;
+        return !selectedMentions.some(
+          (selection) => `${selection.type}:${selection.id}` === key
+        );
+      })
+      .slice(0, 8);
+  }, [
+    mentionKeyword,
+    mentionOpen,
+    mentionOptions,
+    mentionTriggerSymbol,
+    selectedMentions,
+  ]);
+
+  useEffect(() => {
+    if (!mentionOpen || mentionCandidates.length === 0) {
+      setMentionActiveIndex(0);
+      return;
+    }
+    setMentionActiveIndex((current) =>
+      Math.min(current, mentionCandidates.length - 1)
+    );
+  }, [mentionCandidates, mentionOpen]);
+
+  const setComposerText = useCallback((text: string) => {
+    inputRef.current?.setContent(toEditorParagraphHtml(text));
+  }, []);
+
+  const handleInputContentChange = useCallback(
+    (contents: AIChatInputContent[]) => {
+      const text = extractInputPlainText(contents ?? []);
+      setComposerTextValue(text);
+      const trigger = matchMentionTrigger(text);
+      if (!trigger) {
+        setMentionKeyword("");
+        setMentionTriggerSymbol(null);
+        setMentionOpen(false);
+        return;
+      }
+      setMentionTriggerSymbol(trigger.symbol);
+      setMentionKeyword(trigger.keyword);
+      setMentionOpen(true);
+      setMentionActiveIndex(0);
+    },
+    []
+  );
+
+  const handleMentionSelect = useCallback(
+    (target: MentionTargetOption) => {
+      setSelectedMentions((current) => {
+        const key = `${target.type}:${target.id}`;
+        if (current.some((item) => `${item.type}:${item.id}` === key)) {
+          return current;
+        }
+        return [
+          ...current,
+          {
+            type: target.type,
+            id: target.id,
+            name: target.name,
+          },
+        ];
+      });
+      setMentionOpen(false);
+      setMentionKeyword("");
+      setMentionTriggerSymbol(null);
+      setMentionActiveIndex(0);
+      setComposerTextValue((current) => {
+        const next = stripMentionSuffix(current, mentionTriggerSymbol);
+        setComposerText(next);
+        return next;
+      });
+    },
+    [mentionTriggerSymbol, setComposerText]
+  );
+
+  // mention 下拉打开时拦截方向键与回车，支持纯键盘选择目标。
+  const handleMentionKeyDownCapture = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!mentionOpen || mentionCandidates.length === 0) {
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionActiveIndex((current) =>
+          (current + 1) % mentionCandidates.length
+        );
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionActiveIndex((current) =>
+          (current - 1 + mentionCandidates.length) % mentionCandidates.length
+        );
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const target =
+          mentionCandidates[
+            Math.max(0, Math.min(mentionActiveIndex, mentionCandidates.length - 1))
+          ];
+        if (target) {
+          handleMentionSelect(target);
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMentionOpen(false);
+        setMentionKeyword("");
+        setMentionTriggerSymbol(null);
+        setMentionActiveIndex(0);
+      }
+    },
+    [handleMentionSelect, mentionActiveIndex, mentionCandidates, mentionOpen]
+  );
+
+  const removeMentionSelection = useCallback(
+    (target: MentionSelectionItem) => {
+      setSelectedMentions((current) =>
+        current.filter(
+          (item) =>
+            item.type !== target.type ||
+            item.id !== target.id
+        )
+      );
+    },
+    []
+  );
 
   const roleConfig = useMemo(
     () => ({
@@ -1719,18 +2044,16 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         setInputError("请输入内容");
         return;
       }
-      const textChunks = inputContents
-        .map((item) =>
-          typeof (item as { text?: unknown }).text === "string"
-            ? String((item as { text?: string }).text)
-            : ""
-        )
-        .filter(Boolean);
-      if (!textChunks.length) {
+      const text = extractInputPlainText(inputContents as AIChatInputContent[]);
+      if (!text.trim()) {
         setInputError("暂不支持该输入格式");
         return;
       }
       setInputError("");
+      setMentionOpen(false);
+      setMentionKeyword("");
+      setMentionTriggerSymbol(null);
+      setComposerTextValue("");
       const now = new Date().toISOString();
       dispatchThreadHistoryUpsert({
         thread_id: threadId,
@@ -1740,7 +2063,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       const message: AguiMessage = {
         id: createMessageId(),
         role: "user",
-        content: textChunks.join(""),
+        content: text,
       };
       setSemiMessages((prev) => [
         ...prev,
@@ -1756,6 +2079,20 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       agent
         .runAgent({
           forwardedProps: {
+            contextSelections: {
+              skills: selectedMentions
+                .filter((item) => item.type === "skill")
+                .map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                })),
+              knowledgeBases: selectedMentions
+                .filter((item) => item.type === "kb")
+                .map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                })),
+            },
             agentConfig: {
               conversation: {
                 mode: conversationMode,
@@ -1785,6 +2122,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       conversationMode,
       pluginMode,
       selectedModelOption,
+      selectedMentions,
       selectedProviderId,
       selectedToolIds,
       threadId,
@@ -1868,20 +2206,78 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                   AI 正在生成回复
                 </div>
               )}
-              <AIChatInput
-                keepSkillAfterSend={false}
-                onMessageSend={handleMessageSend}
-                onStopGenerate={handleStopGenerate}
-                generating={agent.isRunning}
-                canSend={!agent.isRunning}
-                showUploadButton={false}
-                showUploadFile={false}
-                showReference={false}
-                round
-                immediatelyRender={false}
-                renderConfigureArea={renderConfigureArea}
-                renderActionArea={renderActionArea}
-              />
+              <div className="relative" onKeyDownCapture={handleMentionKeyDownCapture}>
+                {mentionOpen && mentionCandidates.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-md)]">
+                    <div className="border-b border-[var(--color-border-default)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                      {mentionTriggerSymbol === "@"
+                        ? "当前选择：知识库（@）"
+                        : "当前选择：Skill（#）"}
+                    </div>
+                    {mentionCandidates.map((item, index) => (
+                      <button
+                        key={`${item.type}:${item.id}`}
+                        type="button"
+                        className={joinClasses(
+                          "flex w-full items-center justify-between px-3 py-2 text-left text-sm transition",
+                          mentionActiveIndex === index
+                            ? "bg-[var(--color-bg-page)]"
+                            : "hover:bg-[var(--color-bg-page)]"
+                        )}
+                        onMouseEnter={() => setMentionActiveIndex(index)}
+                        onClick={() => handleMentionSelect(item)}
+                      >
+                        <span className="truncate text-[var(--color-text-primary)]">
+                          {item.displayName}
+                        </span>
+                        <span className="ml-3 shrink-0 rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)]">
+                          {item.type === "skill" ? "Skill" : "知识库"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedMentions.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {selectedMentions.map((item) => (
+                      <span
+                        key={`${item.type}:${item.id}`}
+                        className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+                      >
+                        <span className="font-medium text-[var(--color-text-primary)]">
+                          {item.type === "skill" ? "Skill" : "知识库"}
+                        </span>
+                        <span className="max-w-[220px] truncate">{item.name || item.id}</span>
+                        <button
+                          type="button"
+                          className="rounded px-1 leading-none text-[var(--color-text-muted)] hover:bg-[var(--color-bg-overlay)]"
+                          onClick={() => removeMentionSelection(item)}
+                          aria-label="删除已选项"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <AIChatInput
+                  ref={inputRef as any}
+                  keepSkillAfterSend={false}
+                  placeholder="输入消息；@ 选择知识库，# 选择 Skill"
+                  onContentChange={handleInputContentChange}
+                  onMessageSend={handleMessageSend}
+                  onStopGenerate={handleStopGenerate}
+                  generating={agent.isRunning}
+                  canSend={!agent.isRunning}
+                  showUploadButton={false}
+                  showUploadFile={false}
+                  showReference={false}
+                  round
+                  immediatelyRender={false}
+                  renderConfigureArea={renderConfigureArea}
+                  renderActionArea={renderActionArea}
+                />
+              </div>
               {inputError && (
                 <div
                   role="alert"
