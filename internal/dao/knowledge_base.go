@@ -41,24 +41,9 @@ func (d *KnowledgeBaseDAO) URI(name string) string {
 	return strings.TrimRight(d.RootURI(), "/") + "/" + name + "/"
 }
 
-func (d *KnowledgeBaseDAO) NormalizeUploadPath(rel string, fallback string) string {
-	rel = strings.TrimSpace(rel)
-	if rel == "" {
-		return path.Clean(fallback)
-	}
-	rel = strings.TrimPrefix(rel, "/")
-	rel = path.Clean(rel)
-	if rel == "." {
-		return path.Clean(fallback)
-	}
-	parts := strings.Split(rel, "/")
-	if len(parts) > 1 {
-		rel = path.Join(parts[1:]...)
-	}
-	if rel == "" || rel == "." {
-		return path.Clean(fallback)
-	}
-	return rel
+func (d *KnowledgeBaseDAO) InnerURI(name string) string {
+	outer := strings.TrimRight(d.URI(name), "/")
+	return outer + "/" + strings.Trim(name, "/") + "/"
 }
 
 func (d *KnowledgeBaseDAO) ResolveLocalPath(root string, rel string) (string, error) {
@@ -109,7 +94,7 @@ func (d *KnowledgeBaseDAO) Tree(ctx context.Context, name string) ([]ResourceEnt
 	if err != nil {
 		return nil, err
 	}
-	return treeEntries(ctx, d.URI(kbName))
+	return treeEntries(ctx, d.InnerURI(kbName))
 }
 
 func (d *KnowledgeBaseDAO) Ingest(ctx context.Context, sourcePath string, targetURI string, wait bool, timeoutSeconds float64) error {

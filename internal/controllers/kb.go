@@ -15,7 +15,6 @@ import (
 
 	"openIntern/internal/dao"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -84,10 +83,6 @@ func ImportKnowledgeBase(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if services.File == nil {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "file service not configured")
-		return
-	}
 	fileHeader, err := c.FormFile("file")
 	if err != nil && !isMissingFormFile(err) {
 		response.BadRequest(c)
@@ -114,40 +109,17 @@ func ImportKnowledgeBase(c *gin.Context) {
 			return
 		}
 	}
-	files, err := listLocalFiles(rootDir)
-	if err != nil {
-		response.InternalError(c)
+
+	// Workaround for OpenViking Chinese path bug: create nested directory <kb>/<kb>/.
+	if err := dao.KnowledgeBase.Ingest(c.Request.Context(), rootDir, dao.KnowledgeBase.URI(kbName), false, 0); err != nil {
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	if len(files) == 0 {
-		if err := dao.KnowledgeBase.Ingest(c.Request.Context(), rootDir, dao.KnowledgeBase.RootURI(), true, 0); err != nil {
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-			return
-		}
-		response.JSONSuccess(c, http.StatusOK, gin.H{"name": kbName})
-		return
-	}
-	for _, rel := range files {
-		absPath := filepath.Join(rootDir, filepath.FromSlash(rel))
-		cosKey := path.Join("kbs", kbName, rel)
-		cosURL, err := services.File.UploadPath(c.Request.Context(), cosKey, absPath)
-		if err != nil {
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-			return
-		}
-		baseURI := strings.TrimRight(dao.KnowledgeBase.URI(kbName), "/")
-		dir := path.Dir(strings.TrimLeft(rel, "/"))
-		targetURI := baseURI + "/"
-		if dir != "." && dir != "" {
-			targetURI = baseURI + "/" + dir + "/"
-		}
-		log.Printf("ImportKnowledgeBase upload kb=%s rel=%s cos_key=%s target_uri=%s", kbName, rel, cosKey, targetURI)
-		if err := dao.KnowledgeBase.Ingest(c.Request.Context(), cosURL, targetURI, true, 0); err != nil {
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-			return
-		}
-	}
-	response.JSONSuccess(c, http.StatusOK, gin.H{"name": kbName})
+	response.JSONSuccess(c, http.StatusAccepted, gin.H{
+		"name":   kbName,
+		"status": "accepted",
+		"async":  true,
+	})
 }
 
 func UploadKnowledgeBaseFile(c *gin.Context) {
@@ -160,10 +132,6 @@ func UploadKnowledgeBaseFile(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if services.File == nil {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "file service not configured")
-		return
-	}
 	targetDir := strings.TrimSpace(c.PostForm("target"))
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
@@ -171,38 +139,67 @@ func UploadKnowledgeBaseFile(c *gin.Context) {
 		return
 	}
 	log.Printf("UploadKnowledgeBaseFile start kb=%s target_dir=%s file=%s", kbName, targetDir, fileHeader.Filename)
-	rel := dao.KnowledgeBase.NormalizeUploadPath(targetDir, fileHeader.Filename)
-	if rel == "" {
-		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "invalid target path")
-		return
-	}
-	src, err := fileHeader.Open()
+	fileName := sanitizeUploadedFileName(fileHeader.Filename)
+	tempDir, err := os.MkdirTemp("", "kb-upload-file-*")
 	if err != nil {
 		response.InternalError(c)
 		return
 	}
-	cosKey := path.Join("kbs", kbName, rel)
-	baseURI := strings.TrimRight(dao.KnowledgeBase.URI(kbName), "/")
-	targetURI := baseURI + "/"
-	if targetDir != "" {
-		dir := strings.TrimLeft(targetDir, "/")
-		dir = path.Clean(dir)
-		if dir != "." && dir != "" {
-			targetURI = baseURI + "/" + dir + "/"
-		}
+	defer os.RemoveAll(tempDir)
+	localPath := filepath.Join(tempDir, fileName)
+	if err := c.SaveUploadedFile(fileHeader, localPath); err != nil {
+		response.InternalError(c)
+		return
 	}
-	log.Printf("UploadKnowledgeBaseFile resolved kb=%s rel=%s cos_key=%s target_uri=%s", kbName, rel, cosKey, targetURI)
-	cosURL, err := services.File.UploadWithKey(c.Request.Context(), cosKey, src, fileHeader)
-	src.Close()
-	if err != nil {
+	targetURI := resolveKnowledgeBaseUploadTargetURI(kbName, targetDir)
+	log.Printf("UploadKnowledgeBaseFile resolved kb=%s file=%s local_path=%s target_uri=%s", kbName, fileName, localPath, targetURI)
+	if err := dao.KnowledgeBase.Ingest(c.Request.Context(), localPath, targetURI, false, 0); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	if err := dao.KnowledgeBase.Ingest(c.Request.Context(), cosURL, targetURI, true, 0); err != nil {
-		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		return
+	response.JSONSuccess(c, http.StatusAccepted, gin.H{
+		"path":   targetURI,
+		"status": "accepted",
+		"async":  true,
+	})
+}
+
+func resolveKnowledgeBaseUploadTargetURI(kbName string, targetDir string) string {
+	base := strings.TrimRight(dao.KnowledgeBase.InnerURI(kbName), "/")
+	dir := strings.TrimSpace(targetDir)
+	dir = strings.TrimLeft(dir, "/")
+	dir = path.Clean(dir)
+	if dir == ".." || strings.HasPrefix(dir, "../") {
+		return base + "/"
 	}
-	response.JSONSuccess(c, http.StatusOK, gin.H{"path": targetURI})
+	if dir == "." || dir == "" {
+		return base + "/"
+	}
+	firstPrefix := kbName + "/"
+	if dir == kbName {
+		dir = ""
+	} else if strings.HasPrefix(dir, firstPrefix) {
+		dir = strings.TrimPrefix(dir, firstPrefix)
+	}
+	if dir == kbName {
+		dir = ""
+	} else if strings.HasPrefix(dir, firstPrefix) {
+		dir = strings.TrimPrefix(dir, firstPrefix)
+	}
+	if dir == "." || dir == "" {
+		return base + "/"
+	}
+	return base + "/" + dir + "/"
+}
+
+func sanitizeUploadedFileName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = path.Base(name)
+	if name == "" || name == "." || name == ".." {
+		return "upload.bin"
+	}
+	return name
 }
 
 func MoveKnowledgeBaseEntry(c *gin.Context) {
@@ -459,35 +456,6 @@ func detectZipRoot(files []*zip.File) string {
 		}
 	}
 	return root
-}
-
-func listLocalFiles(rootDir string) ([]string, error) {
-	result := []string{}
-	err := filepath.WalkDir(rootDir, func(entryPath string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(rootDir, entryPath)
-		if err != nil {
-			return err
-		}
-		if rel == "." || rel == "" {
-			return nil
-		}
-		normalized := filepath.ToSlash(rel)
-		if !shouldIncludePath(normalized) {
-			return nil
-		}
-		result = append(result, normalized)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
 }
 
 func shouldIncludePath(rel string) bool {

@@ -112,9 +112,7 @@ func addResource(ctx context.Context, resourcePath string, targetURI string, wai
 	payload := map[string]any{
 		"path":   resourcePath,
 		"target": targetURI,
-	}
-	if wait {
-		payload["wait"] = true
+		"wait":   wait,
 	}
 	if timeoutSeconds > 0 {
 		payload["timeout"] = timeoutSeconds
