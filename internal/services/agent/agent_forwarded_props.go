@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"openIntern/internal/util"
 	"sort"
@@ -85,9 +87,19 @@ func mergeRunAgentInputHistory(input *types.RunAgentInput, history []models.Mess
 }
 
 const (
-	forwardedPropKeyA2UIAction  = "a2uiAction"
-	forwardedPropKeyAgentConfig = "agentConfig"
-	a2uiActionPromptPrefix      = "上一条消息你发送了前端卡片，用户触发的行为以及产生的数据为："
+	forwardedPropKeyA2UIAction        = "a2uiAction"
+	forwardedPropKeyAgentConfig       = "agentConfig"
+	forwardedPropKeyContextSelections = "contextSelections"
+	a2uiActionPromptPrefix            = "上一条消息你发送了前端卡片，用户触发的行为以及产生的数据为："
+)
+
+const (
+	knowledgeSearchLimitPerKB = 3
+)
+
+const (
+	skillInstructionPrefix = "请优先参考并执行以下技能约束："
+	kbContextPrefix        = "以下是当前问题在所选知识库中的检索结果，请优先参考这些信息后再回答："
 )
 
 type AgentRuntimeConfig struct {
@@ -106,6 +118,7 @@ type AgentRuntimeConfig struct {
 }
 
 type forwardedPropsChainContext struct {
+	requestCtx    context.Context
 	props         map[string]any
 	input         *types.RunAgentInput
 	runtimeConfig *AgentRuntimeConfig
@@ -117,6 +130,17 @@ type forwardedPropsChainHandler interface {
 
 type a2uiActionForwardedPropsHandler struct{}
 type agentConfigForwardedPropsHandler struct{}
+type contextSelectionsForwardedPropsHandler struct{}
+
+type forwardedContextSelection struct {
+	Skills         []forwardedContextTarget
+	KnowledgeBases []forwardedContextTarget
+}
+
+type forwardedContextTarget struct {
+	ID   string
+	Name string
+}
 
 // Handle 处理 a2uiAction，并将其转换为追加的 user 消息。
 func (h a2uiActionForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext) error {
@@ -206,13 +230,64 @@ func (h agentConfigForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext
 	return nil
 }
 
+// Handle 处理 contextSelections：检索知识库并在用户消息前插入临时上下文，同时插入技能约束临时消息。
+func (h contextSelectionsForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext) error {
+	if ctx == nil || ctx.input == nil || len(ctx.props) == 0 {
+		return nil
+	}
+	raw, ok := ctx.props[forwardedPropKeyContextSelections]
+	if !ok {
+		return nil
+	}
+	delete(ctx.props, forwardedPropKeyContextSelections)
+	selection, err := normalizeForwardedContextSelection(raw)
+	if err != nil {
+		return fmt.Errorf("normalize %s: %w", forwardedPropKeyContextSelections, err)
+	}
+	if selection == nil {
+		return nil
+	}
+
+	userText, userIndex := findLastUserMessageTextAndIndex(ctx.input.Messages)
+	if len(selection.KnowledgeBases) > 0 && userText != "" {
+		matches, err := dao.KnowledgeBase.SearchInKnowledgeBases(
+			ctx.requestCtx,
+			userText,
+			collectKnowledgeBaseNames(selection.KnowledgeBases),
+			knowledgeSearchLimitPerKB,
+		)
+		if err != nil {
+			return fmt.Errorf("search knowledge bases: %w", err)
+		}
+		if len(matches) > 0 {
+			injectMessageBeforeUserAt(ctx.input, userIndex, types.Message{
+				ID:      events.GenerateMessageID(),
+				Role:    types.RoleSystem,
+				Content: buildKnowledgeBaseContextMessage(matches),
+			})
+			_, userIndex = findLastUserMessageTextAndIndex(ctx.input.Messages)
+		}
+	}
+	if len(selection.Skills) > 0 {
+		injectMessageBeforeUserAt(ctx.input, userIndex, types.Message{
+			ID:      events.GenerateMessageID(),
+			Role:    types.RoleUser,
+			Content: buildSkillInstructionMessage(selection.Skills),
+		})
+	}
+	return nil
+}
+
 // applyForwardedPropsChain 依次执行 forwarded props 处理链并返回运行时配置。
-func applyForwardedPropsChain(input *types.RunAgentInput) (*AgentRuntimeConfig, error) {
+func applyForwardedPropsChain(requestCtx context.Context, input *types.RunAgentInput) (*AgentRuntimeConfig, error) {
 	runtimeConfig := &AgentRuntimeConfig{
 		Features: map[string]any{},
 	}
 	runtimeConfig.Conversation.Mode = "chat"
 	runtimeConfig.Plugins.Mode = "select"
+	if requestCtx == nil {
+		requestCtx = context.Background()
+	}
 	if input == nil {
 		return runtimeConfig, nil
 	}
@@ -224,6 +299,7 @@ func applyForwardedPropsChain(input *types.RunAgentInput) (*AgentRuntimeConfig, 
 		return runtimeConfig, nil
 	}
 	chainCtx := &forwardedPropsChainContext{
+		requestCtx:    requestCtx,
 		props:         props,
 		input:         input,
 		runtimeConfig: runtimeConfig,
@@ -231,6 +307,7 @@ func applyForwardedPropsChain(input *types.RunAgentInput) (*AgentRuntimeConfig, 
 	handlers := []forwardedPropsChainHandler{
 		a2uiActionForwardedPropsHandler{},
 		agentConfigForwardedPropsHandler{},
+		contextSelectionsForwardedPropsHandler{},
 	}
 	for _, handler := range handlers {
 		if err := handler.Handle(chainCtx); err != nil {
@@ -330,4 +407,199 @@ func normalizeForwardedPropsStringList(raw any) ([]string, error) {
 	}
 
 	return nil, fmt.Errorf("must be a string or string list")
+}
+
+// normalizeForwardedContextSelection 将 forwarded contextSelections 结构标准化为内部结构。
+func normalizeForwardedContextSelection(raw any) (*forwardedContextSelection, error) {
+	mapped, err := normalizeForwardedPropsMap(raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(mapped) == 0 {
+		return nil, nil
+	}
+	skills, err := normalizeForwardedContextTargets(mapped["skills"])
+	if err != nil {
+		return nil, fmt.Errorf("skills: %w", err)
+	}
+	kbs, err := normalizeForwardedContextTargets(mapped["knowledgeBases"])
+	if err != nil {
+		return nil, fmt.Errorf("knowledgeBases: %w", err)
+	}
+	return &forwardedContextSelection{
+		Skills:         skills,
+		KnowledgeBases: kbs,
+	}, nil
+}
+
+// normalizeForwardedContextTargets 标准化 skill/kb 目标列表，支持字符串或对象数组。
+func normalizeForwardedContextTargets(raw any) ([]forwardedContextTarget, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	switch raw.(type) {
+	case string, []string:
+		values, err := normalizeForwardedPropsStringList(raw)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]forwardedContextTarget, 0, len(values))
+		for _, item := range values {
+			result = append(result, forwardedContextTarget{
+				ID:   item,
+				Name: item,
+			})
+		}
+		return result, nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		b, marshalErr := json.Marshal(raw)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		if string(b) == "null" {
+			return nil, nil
+		}
+		if unmarshalErr := json.Unmarshal(b, &items); unmarshalErr != nil {
+			return nil, fmt.Errorf("must be a string list or object list")
+		}
+	}
+	result := make([]forwardedContextTarget, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		entryMap, mapErr := normalizeForwardedPropsMap(item)
+		if mapErr != nil || len(entryMap) == 0 {
+			text := normalizeForwardedString(item)
+			if text == "" {
+				continue
+			}
+			key := text + "|" + text
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, forwardedContextTarget{ID: text, Name: text})
+			continue
+		}
+		target := forwardedContextTarget{
+			ID:   normalizeForwardedString(entryMap["id"]),
+			Name: normalizeForwardedString(entryMap["name"]),
+		}
+		if target.ID == "" {
+			target.ID = normalizeForwardedString(entryMap["value"])
+		}
+		if target.Name == "" {
+			target.Name = normalizeForwardedString(entryMap["label"])
+		}
+		if target.ID == "" && target.Name == "" {
+			continue
+		}
+		if target.ID == "" {
+			target.ID = target.Name
+		}
+		if target.Name == "" {
+			target.Name = target.ID
+		}
+		key := target.ID + "|" + target.Name
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, target)
+	}
+	return result, nil
+}
+
+// normalizeForwardedString 将任意值转换为去空白字符串。
+func normalizeForwardedString(raw any) string {
+	text := strings.TrimSpace(fmt.Sprintf("%v", raw))
+	if text == "<nil>" {
+		return ""
+	}
+	return text
+}
+
+// findLastUserMessageTextAndIndex 返回最后一条 user 消息文本与索引。
+func findLastUserMessageTextAndIndex(messages []types.Message) (string, int) {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role != types.RoleUser {
+			continue
+		}
+		return strings.TrimSpace(fmt.Sprintf("%v", messages[i].Content)), i
+	}
+	return "", -1
+}
+
+// collectKnowledgeBaseNames 提取知识库名称，优先使用 ID，回退到 Name。
+func collectKnowledgeBaseNames(items []forwardedContextTarget) []string {
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item.ID)
+		if name == "" {
+			name = strings.TrimSpace(item.Name)
+		}
+		if name != "" {
+			result = append(result, name)
+		}
+	}
+	return util.NormalizeUniqueStringList(result)
+}
+
+// buildKnowledgeBaseContextMessage 构建注入模型上下文的知识库检索消息文本。
+func buildKnowledgeBaseContextMessage(matches []dao.KnowledgeBaseSearchMatch) string {
+	if len(matches) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(matches)*3+1)
+	lines = append(lines, kbContextPrefix)
+	for i, item := range matches {
+		kbName := strings.TrimSpace(item.KnowledgeBaseName)
+		if kbName == "" {
+			kbName = "未命名知识库"
+		}
+		abstract := strings.TrimSpace(item.Abstract)
+		if abstract == "" {
+			abstract = "(无摘要)"
+		}
+		lines = append(lines, fmt.Sprintf("%d. [知识库:%s]", i+1, kbName))
+		lines = append(lines, "uri: "+strings.TrimSpace(item.URI))
+		lines = append(lines, "摘要: "+abstract)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// buildSkillInstructionMessage 构建技能约束消息文本。
+func buildSkillInstructionMessage(skills []forwardedContextTarget) string {
+	labels := make([]string, 0, len(skills))
+	for _, item := range skills {
+		label := strings.TrimSpace(item.Name)
+		if label == "" {
+			label = strings.TrimSpace(item.ID)
+		}
+		if label != "" {
+			labels = append(labels, label)
+		}
+	}
+	labels = util.NormalizeUniqueStringList(labels)
+	if len(labels) == 0 {
+		return ""
+	}
+	return skillInstructionPrefix + "\n- " + strings.Join(labels, "\n- ")
+}
+
+// injectMessageBeforeUserAt 在指定 user 消息索引前插入一条临时消息。
+func injectMessageBeforeUserAt(input *types.RunAgentInput, userIndex int, message types.Message) {
+	if input == nil || strings.TrimSpace(fmt.Sprintf("%v", message.Content)) == "" {
+		return
+	}
+	if userIndex < 0 || userIndex >= len(input.Messages) {
+		input.Messages = append(input.Messages, message)
+		return
+	}
+	next := make([]types.Message, 0, len(input.Messages)+1)
+	next = append(next, input.Messages[:userIndex]...)
+	next = append(next, message)
+	next = append(next, input.Messages[userIndex:]...)
+	input.Messages = next
 }

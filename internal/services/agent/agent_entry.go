@@ -50,7 +50,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		log.Printf("RunAgent history merge failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	runtimeConfig, err := applyForwardedPropsChain(mergedInput)
+	runtimeConfig, err := applyForwardedPropsChain(ctx, mergedInput)
 	if err != nil {
 		_ = sender.Error(err.Error(), "forwarded_props_handle_failed")
 		log.Printf("RunAgent forwarded props handle failed thread_id=%s run_id=%s err=%v", threadID, runID, err)

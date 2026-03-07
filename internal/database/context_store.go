@@ -130,8 +130,18 @@ func extractPayloadSummary(payload any) (string, string) {
 	}
 	target := ""
 	pathValue := ""
-	if value, ok := data["target"]; ok {
+	if value, ok := data["target_uri"]; ok {
 		target = strings.TrimSpace(fmt.Sprint(value))
+	}
+	if target == "" {
+		if value, ok := data["targetUri"]; ok {
+			target = strings.TrimSpace(fmt.Sprint(value))
+		}
+	}
+	if target == "" {
+		if value, ok := data["target"]; ok {
+			target = strings.TrimSpace(fmt.Sprint(value))
+		}
 	}
 	if value, ok := data["path"]; ok {
 		pathValue = strings.TrimSpace(fmt.Sprint(value))
