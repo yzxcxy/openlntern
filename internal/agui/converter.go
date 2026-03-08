@@ -192,25 +192,98 @@ func parseInputParts(values []any) []schema.MessageInputPart {
 			continue
 		}
 		typ, _ := entry["type"].(string)
-		part := schema.MessageInputPart{Type: schema.ChatMessagePartType(typ)}
 		switch typ {
 		case "text":
+			part := schema.MessageInputPart{Type: schema.ChatMessagePartTypeText}
 			part.Text, _ = entry["text"].(string)
+			if extra, ok := entry["extra"].(map[string]any); ok {
+				part.Extra = extra
+			}
+			parts = append(parts, part)
+		case "binary":
+			parts = append(parts, parseInputBinary(entry))
 		case "image_url":
+			part := schema.MessageInputPart{Type: schema.ChatMessagePartTypeImageURL}
 			part.Image = parseInputImage(entry["image"])
+			if extra, ok := entry["extra"].(map[string]any); ok {
+				part.Extra = extra
+			}
+			parts = append(parts, part)
 		case "audio_url":
+			part := schema.MessageInputPart{Type: schema.ChatMessagePartTypeAudioURL}
 			part.Audio = parseInputAudio(entry["audio"])
+			if extra, ok := entry["extra"].(map[string]any); ok {
+				part.Extra = extra
+			}
+			parts = append(parts, part)
 		case "video_url":
+			part := schema.MessageInputPart{Type: schema.ChatMessagePartTypeVideoURL}
 			part.Video = parseInputVideo(entry["video"])
+			if extra, ok := entry["extra"].(map[string]any); ok {
+				part.Extra = extra
+			}
+			parts = append(parts, part)
 		case "file_url":
+			part := schema.MessageInputPart{Type: schema.ChatMessagePartTypeFileURL}
 			part.File = parseInputFile(entry["file"])
+			if extra, ok := entry["extra"].(map[string]any); ok {
+				part.Extra = extra
+			}
+			parts = append(parts, part)
 		}
-		if extra, ok := entry["extra"].(map[string]any); ok {
-			part.Extra = extra
-		}
-		parts = append(parts, part)
 	}
 	return parts
+}
+
+func parseInputBinary(entry map[string]any) schema.MessageInputPart {
+	mimeType := strings.ToLower(readString(entry, "mimeType", "mime_type"))
+	common := schema.MessagePartCommon{
+		MIMEType: mimeType,
+	}
+	if url := readString(entry, "url"); url != "" {
+		common.URL = &url
+	}
+	if base64Data := readString(entry, "data"); base64Data != "" {
+		common.Base64Data = &base64Data
+	}
+	extra := map[string]any{}
+	if entryExtra, ok := entry["extra"].(map[string]any); ok {
+		for k, v := range entryExtra {
+			extra[k] = v
+		}
+	}
+	if id := readString(entry, "id"); id != "" {
+		extra["id"] = id
+	}
+	if len(extra) > 0 {
+		common.Extra = extra
+	}
+
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		return schema.MessageInputPart{
+			Type:  schema.ChatMessagePartTypeImageURL,
+			Image: &schema.MessageInputImage{MessagePartCommon: common},
+		}
+	case strings.HasPrefix(mimeType, "audio/"):
+		return schema.MessageInputPart{
+			Type:  schema.ChatMessagePartTypeAudioURL,
+			Audio: &schema.MessageInputAudio{MessagePartCommon: common},
+		}
+	case strings.HasPrefix(mimeType, "video/"):
+		return schema.MessageInputPart{
+			Type:  schema.ChatMessagePartTypeVideoURL,
+			Video: &schema.MessageInputVideo{MessagePartCommon: common},
+		}
+	default:
+		return schema.MessageInputPart{
+			Type: schema.ChatMessagePartTypeFileURL,
+			File: &schema.MessageInputFile{
+				MessagePartCommon: common,
+				Name:              readString(entry, "filename"),
+			},
+		}
+	}
 }
 
 func parseOutputParts(values []any) []schema.MessageOutputPart {
@@ -331,6 +404,15 @@ func parseCommon(m map[string]any) schema.MessagePartCommon {
 		common.Extra = extra
 	}
 	return common
+}
+
+func readString(m map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if v, ok := m[key].(string); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func concatOutputText(parts []schema.MessageOutputPart) string {

@@ -27,6 +27,7 @@ func SetupRouter() *gin.Engine {
 	})
 
 	r.POST("/v1/chat/sse", middleware.AuthRequired(), controllers.ChatSSE)
+	r.POST("/v1/chat/uploads", middleware.AuthRequired(), controllers.UploadChatAsset)
 
 	// User routes
 	userGroup := r.Group("/v1/users", middleware.AuthRequired())

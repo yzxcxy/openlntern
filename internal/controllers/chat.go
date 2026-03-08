@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"errors"
 	"io"
 	"log"
+	"net/http"
+	"strings"
 
 	"openIntern/internal/response"
 	"openIntern/internal/services"
@@ -50,4 +53,33 @@ func ChatSSE(c *gin.Context) {
 		}
 		return false
 	})
+}
+
+// UploadChatAsset handles chat attachment uploads and returns uploaded URL metadata.
+func UploadChatAsset(c *gin.Context) {
+	ownerID := strings.TrimSpace(c.GetString("user_id"))
+	if ownerID == "" {
+		response.Unauthorized(c)
+		return
+	}
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		response.BadRequest(c)
+		return
+	}
+	threadID := strings.TrimSpace(c.PostForm("thread_id"))
+
+	asset, err := services.ChatUpload.Upload(c.Request.Context(), ownerID, threadID, fileHeader)
+	if err != nil {
+		if errors.Is(err, services.ErrChatUploadValidation) {
+			message := strings.TrimPrefix(err.Error(), services.ErrChatUploadValidation.Error()+": ")
+			response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, strings.TrimSpace(message))
+			return
+		}
+		log.Printf("UploadChatAsset failed owner_id=%s thread_id=%s file=%s err=%v", ownerID, threadID, fileHeader.Filename, err)
+		response.InternalError(c)
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, asset)
 }
