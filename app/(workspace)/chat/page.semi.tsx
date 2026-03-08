@@ -217,6 +217,38 @@ type MentionSelectionItem = {
   name: string;
 };
 
+type UploadAssetKind = "image" | "audio" | "video" | "file";
+
+type UploadAssetItem = {
+  id: string;
+  key: string;
+  url: string;
+  mimeType: string;
+  fileName: string;
+  size: number;
+  mediaKind: UploadAssetKind;
+};
+
+type BackendChatUploadAsset = {
+  key?: string;
+  url?: string;
+  mime_type?: string;
+  file_name?: string;
+  size?: number;
+  media_kind?: UploadAssetKind;
+};
+
+type AguiUserContentPart =
+  | { type: "text"; text: string }
+  | {
+      type: "binary";
+      mimeType: string;
+      id?: string;
+      url?: string;
+      data?: string;
+      filename?: string;
+    };
+
 const joinClasses = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
@@ -245,6 +277,102 @@ const extractText = (content: unknown) => {
       .join("");
   }
   return "";
+};
+
+// 归一化 MIME 字符串，统一转小写并去掉空白。
+const normalizeMimeType = (value: unknown) =>
+  typeof value === "string" ? value.trim().toLowerCase() : "";
+
+// 根据 MIME 推导附件类型，和后端返回保持一致。
+const inferUploadKind = (mimeType: string): UploadAssetKind => {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("audio/")) return "audio";
+  if (mimeType.startsWith("video/")) return "video";
+  return "file";
+};
+
+// 字节大小格式化为更易读的单位文本。
+const formatFileSize = (size: number) => {
+  if (!Number.isFinite(size) || size <= 0) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// 将输入文本与上传附件组合成 AGUI user content 结构。
+const buildAguiUserContent = (
+  text: string,
+  uploads: UploadAssetItem[]
+): string | AguiUserContentPart[] => {
+  const normalizedText = text.trim();
+  const normalizedUploads = uploads.filter(
+    (item) => item.url && item.mimeType && item.fileName
+  );
+  if (normalizedUploads.length === 0) {
+    return normalizedText;
+  }
+  const parts: AguiUserContentPart[] = [];
+  if (normalizedText) {
+    parts.push({ type: "text", text: normalizedText });
+  }
+  normalizedUploads.forEach((item) => {
+    parts.push({
+      type: "binary",
+      mimeType: item.mimeType,
+      url: item.url,
+      filename: item.fileName,
+    });
+  });
+  return parts;
+};
+
+// 将 AGUI user content 映射为 Semi 可展示的输入内容结构。
+const mapAguiUserContentToSemi = (content: unknown): string | Array<Record<string, any>> => {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  const items: Array<Record<string, any>> = [];
+  content.forEach((part) => {
+    const entry = part as Record<string, any>;
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    const partType = String(entry.type ?? "");
+    if (partType === "text") {
+      const text = typeof entry.text === "string" ? entry.text : "";
+      if (text) {
+        items.push({ type: "input_text", text });
+      }
+      return;
+    }
+    if (partType === "binary") {
+      const mimeType = normalizeMimeType(entry.mimeType ?? entry.mime_type);
+      const url = typeof entry.url === "string" ? entry.url : "";
+      const fileName =
+        typeof entry.filename === "string" ? entry.filename : "attachment";
+      if (!url) return;
+      if (mimeType.startsWith("image/")) {
+        items.push({
+          type: "input_image",
+          image_url: url,
+          file_id: fileName,
+        });
+        return;
+      }
+      items.push({
+        type: "input_file",
+        file_url: url,
+        filename: fileName,
+      });
+    }
+  });
+  if (items.length === 0) {
+    return extractText(content);
+  }
+  return [{ type: "message", content: items }];
 };
 
 // tool_result 的 content 可能是 JSON 字符串，优先解析出 text 聚合
@@ -472,7 +600,7 @@ const mapHistoryMessages = (items: BackendMessageItem[]) => {
       result.push({
         id: item.msg_id,
         role: "user",
-        content: extractText(aguiMessage?.content),
+        content: mapAguiUserContentToSemi(aguiMessage?.content),
         status: item.status,
         createdAt,
         updatedAt,
@@ -619,6 +747,7 @@ type ChatContentProps = {
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
   const searchParams = useSearchParams();
   const inputRef = useRef<{ setContent: (content: string) => void } | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const fallbackThreadIdRef = useRef<string>("");
   const currentRunIdRef = useRef<string>("");
   const titleSyncTokenRef = useRef(0);
@@ -666,6 +795,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [mentionTriggerSymbol, setMentionTriggerSymbol] =
     useState<MentionTriggerSymbol | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<UploadAssetItem[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [, setComposerTextValue] = useState("");
 
   const clearThreadTitleSync = useCallback(() => {
@@ -1153,6 +1285,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       setMentionKeyword("");
       setMentionTriggerSymbol(null);
       setMentionActiveIndex(0);
+      setPendingUploads([]);
+      setUploadError("");
+      setUploading(false);
       currentRunIdRef.current = "";
       textMessageMapRef.current.clear();
       toolCallMapRef.current.clear();
@@ -1798,6 +1933,116 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     []
   );
 
+  // 打开本地文件选择器，用于上传聊天附件。
+  const handleOpenUploadPicker = useCallback(() => {
+    if (agent.isRunning || uploading) {
+      return;
+    }
+    uploadInputRef.current?.click();
+  }, [agent.isRunning, uploading]);
+
+  // 从待发送附件列表中删除指定项。
+  const removePendingUpload = useCallback((assetId: string) => {
+    setPendingUploads((current) => current.filter((item) => item.id !== assetId));
+  }, []);
+
+  // 上传单个附件并返回规范化后的上传结果。
+  const uploadSingleAsset = useCallback(
+    async (file: File): Promise<UploadAssetItem> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (threadId) {
+        formData.append("thread_id", threadId);
+      }
+      const response = await fetch("/api/backend/v1/chat/uploads", {
+        method: "POST",
+        headers: buildAuthHeaders(token, userId),
+        body: formData,
+      });
+      updateTokenFromResponse(response);
+      const result = (await response
+        .json()
+        .catch(() => null)) as BackendResult<BackendChatUploadAsset> | null;
+      if (!response.ok || !result || result.code !== 0 || !result.data?.url) {
+        const backendMessage =
+          result?.message && typeof result.message === "string"
+            ? result.message
+            : "";
+        throw new Error(backendMessage || `上传失败：${file.name}`);
+      }
+
+      const normalizedMimeType = normalizeMimeType(
+        result.data.mime_type || file.type || "application/octet-stream"
+      );
+      const normalizedFileName =
+        (typeof result.data.file_name === "string" && result.data.file_name.trim()) ||
+        file.name ||
+        "attachment";
+      const normalizedSize =
+        typeof result.data.size === "number" && Number.isFinite(result.data.size)
+          ? result.data.size
+          : file.size;
+      return {
+        id: createMessageId(),
+        key:
+          (typeof result.data.key === "string" && result.data.key.trim()) ||
+          normalizedFileName,
+        url: String(result.data.url),
+        mimeType: normalizedMimeType,
+        fileName: normalizedFileName,
+        size: normalizedSize,
+        mediaKind:
+          result.data.media_kind ||
+          inferUploadKind(normalizedMimeType || "application/octet-stream"),
+      };
+    },
+    [threadId, token, userId]
+  );
+
+  // 处理文件选择并批量上传，成功项加入待发送附件区。
+  const handleUploadInputChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      if (selectedFiles.length === 0) {
+        return;
+      }
+
+      setUploadError("");
+      setUploading(true);
+      const successItems: UploadAssetItem[] = [];
+      let firstError = "";
+      for (const file of selectedFiles) {
+        try {
+          const uploaded = await uploadSingleAsset(file);
+          successItems.push(uploaded);
+        } catch (error) {
+          if (!firstError) {
+            firstError = error instanceof Error ? error.message : `上传失败：${file.name}`;
+          }
+        }
+      }
+      setUploading(false);
+
+      if (successItems.length > 0) {
+        setPendingUploads((current) => {
+          const merged = [...current];
+          successItems.forEach((item) => {
+            const existed = merged.some((existing) => existing.url === item.url);
+            if (!existed) {
+              merged.push(item);
+            }
+          });
+          return merged;
+        });
+      }
+      if (firstError) {
+        setUploadError(firstError);
+      }
+    },
+    [uploadSingleAsset]
+  );
+
   const roleConfig = useMemo(
     () => ({
       user: {
@@ -2042,14 +2287,32 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
             </UiSelect>
           </div>
         )}
+        <button
+          type="button"
+          onClick={handleOpenUploadPicker}
+          disabled={agent.isRunning || uploading}
+          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-50"
+          title="上传图片/文件/音频/视频"
+        >
+          <span>上传</span>
+          {pendingUploads.length > 0 && (
+            <span className="rounded-full bg-[var(--color-bg-page)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]">
+              {pendingUploads.length}
+            </span>
+          )}
+        </button>
         {props.menuItem}
       </div>
     ),
     [
+      agent.isRunning,
       availableModels,
       conversationMode,
+      handleOpenUploadPicker,
+      pendingUploads.length,
       selectedModelId,
       selectedModelOption,
+      uploading,
     ]
   );
 
@@ -2057,6 +2320,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const handleMessageSend = useCallback(
     (payload: MessageContent) => {
       if (agent.isRunning) return;
+      if (uploading) {
+        setInputError("附件上传中，请稍候");
+        return;
+      }
       if (conversationMode === "agent") {
         setInputError("Agent 模式暂未开放");
         return;
@@ -2066,16 +2333,16 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         return;
       }
       const inputContents = payload?.inputContents ?? [];
-      if (!inputContents.length) {
-        setInputError("请输入内容");
-        return;
-      }
       const text = extractInputPlainText(inputContents as AIChatInputContent[]);
-      if (!text.trim()) {
-        setInputError("暂不支持该输入格式");
+      const textExists = text.trim().length > 0;
+      if (!textExists && pendingUploads.length === 0) {
+        setInputError("请输入内容或上传附件");
         return;
       }
+      const uploadedAssets = [...pendingUploads];
+      const messageContent = buildAguiUserContent(text, uploadedAssets);
       setInputError("");
+      setUploadError("");
       setMentionOpen(false);
       setMentionKeyword("");
       setMentionTriggerSymbol(null);
@@ -2089,18 +2356,19 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       const message: AguiMessage = {
         id: createMessageId(),
         role: "user",
-        content: text,
+        content: messageContent,
       };
       setSemiMessages((prev) => [
         ...prev,
         {
           id: message.id,
           role: "user",
-          content: message.content,
+          content: mapAguiUserContentToSemi(message.content),
           status: "completed",
           createdAt: Date.now(),
         },
       ]);
+      setPendingUploads([]);
       agent.setMessages([message]);
       agent
         .runAgent({
@@ -2136,6 +2404,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           },
         })
         .catch((error) => {
+          if (uploadedAssets.length > 0) {
+            setPendingUploads(uploadedAssets);
+          }
           if (error instanceof Error && error.message) {
             setInputError(error.message);
           } else {
@@ -2152,6 +2423,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       selectedProviderId,
       selectedToolIds,
       threadId,
+      pendingUploads,
+      uploading,
     ]
   );
 
@@ -2286,6 +2559,45 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                     ))}
                   </div>
                 )}
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={handleUploadInputChange}
+                />
+                {(pendingUploads.length > 0 || uploading) && (
+                  <div className="mb-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-2">
+                    <div className="mb-2 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+                      <span>待发送附件</span>
+                      {uploading && <span>上传中...</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {pendingUploads.map((asset) => (
+                        <span
+                          key={asset.id}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+                        >
+                          <span className="font-medium text-[var(--color-text-primary)]">
+                            {asset.mediaKind}
+                          </span>
+                          <span className="max-w-[220px] truncate">{asset.fileName}</span>
+                          <span className="text-[10px] text-[var(--color-text-muted)]">
+                            {formatFileSize(asset.size)}
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded px-1 leading-none text-[var(--color-text-muted)] hover:bg-[var(--color-bg-overlay)]"
+                            onClick={() => removePendingUpload(asset.id)}
+                            aria-label="删除附件"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <AIChatInput
                   ref={inputRef as any}
                   keepSkillAfterSend={false}
@@ -2294,7 +2606,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                   onMessageSend={handleMessageSend}
                   onStopGenerate={handleStopGenerate}
                   generating={agent.isRunning}
-                  canSend={!agent.isRunning}
+                  canSend={!agent.isRunning && !uploading}
                   showUploadButton={false}
                   showUploadFile={false}
                   showReference={false}
@@ -2311,6 +2623,15 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                   className="motion-safe-slide-up mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
                 >
                   {inputError}
+                </div>
+              )}
+              {uploadError && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="motion-safe-slide-up mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
+                >
+                  {uploadError}
                 </div>
               )}
             </div>
