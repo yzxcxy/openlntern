@@ -1275,11 +1275,22 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         // RUN_STARTED 用来确立 runId
         if (eventType === "RUN_STARTED") {
           const runId = resolveRunId(rawEvent);
+          const startedThreadId =
+            rawEvent?.threadId ?? rawEvent?.thread_id ?? "";
           // 关键日志：runId 为空会导致后续流式消息无法归档
-          console.debug("[chat][RUN_STARTED]", { runId });
+          console.debug("[chat][RUN_STARTED]", { runId, threadId: startedThreadId });
           if (runId) {
             currentRunIdRef.current = runId;
             updateRunMessage(runId, (message) => message);
+          }
+          if (startedThreadId) {
+            dispatchThreadHistoryUpsert({
+              thread_id: startedThreadId,
+              replace_thread_id:
+                threadId && startedThreadId !== threadId ? threadId : undefined,
+              updated_at: new Date().toISOString(),
+              pending_title: true,
+            });
           }
           return;
         }
@@ -1289,6 +1300,15 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           const runId = resolveRunId(rawEvent) ?? currentRunIdRef.current;
           const finishedThreadId =
             rawEvent?.threadId ?? rawEvent?.thread_id ?? threadId;
+          if (finishedThreadId) {
+            dispatchThreadHistoryUpsert({
+              thread_id: finishedThreadId,
+              replace_thread_id:
+                threadId && finishedThreadId !== threadId ? threadId : undefined,
+              updated_at: new Date().toISOString(),
+              pending_title: true,
+            });
+          }
           if (runId) {
             updateRunMessage(runId, (message) => ({
               ...message,

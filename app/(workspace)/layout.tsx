@@ -82,6 +82,33 @@ const mergeThreadItem = (current: ThreadItem | undefined, incoming: ThreadItem):
   };
 };
 
+const upsertThreadItemToTop = (items: ThreadItem[], incoming: ThreadItem): ThreadItem[] => {
+  const { replace_thread_id: replaceThreadID, ...payload } = incoming;
+  const baseItems = replaceThreadID
+    ? items.filter((item) => item.thread_id !== replaceThreadID)
+    : items;
+  if (!payload.thread_id) {
+    return baseItems;
+  }
+  const index = baseItems.findIndex((item) => item.thread_id === payload.thread_id);
+  const current = index === -1 ? undefined : baseItems[index];
+  const nextItem = mergeThreadItem(current, payload);
+  if (
+    index === 0 &&
+    current?.title === nextItem.title &&
+    current?.created_at === nextItem.created_at &&
+    current?.updated_at === nextItem.updated_at &&
+    current?.pending_title === nextItem.pending_title
+  ) {
+    return baseItems;
+  }
+  const rest =
+    index === -1
+      ? baseItems
+      : [...baseItems.slice(0, index), ...baseItems.slice(index + 1)];
+  return [nextItem, ...rest];
+};
+
 const formatThreadTime = (value?: string) => {
   if (!value) return "";
   const parsed = Date.parse(value);
@@ -233,16 +260,7 @@ export default function WorkspaceLayout({
       if (!detail?.thread_id) {
         return;
       }
-      setHistoryItems((prev) => {
-        const index = prev.findIndex((item) => item.thread_id === detail.thread_id);
-        const current = index === -1 ? undefined : prev[index];
-        const nextItem = mergeThreadItem(current, detail);
-        const rest =
-          index === -1
-            ? prev
-            : [...prev.slice(0, index), ...prev.slice(index + 1)];
-        return [nextItem, ...rest];
-      });
+      setHistoryItems((prev) => upsertThreadItemToTop(prev, detail));
     };
 
     window.addEventListener(
@@ -256,6 +274,88 @@ export default function WorkspaceLayout({
       );
     };
   }, []);
+
+  useEffect(() => {
+    const pendingThreadIds = Array.from(
+      new Set(
+        historyItems
+          .filter(
+            (item) =>
+              item.thread_id &&
+              !normalizeThreadTitle(item.title) &&
+              item.pending_title !== false
+          )
+          .map((item) => item.thread_id as string)
+      )
+    );
+    if (pendingThreadIds.length === 0) {
+      return;
+    }
+
+    let disposed = false;
+    let syncing = false;
+
+    // 在布局层同步待生成标题，避免切换会话后停止更新历史列表标题。
+    const syncPendingTitles = async () => {
+      if (disposed || syncing) {
+        return;
+      }
+      const token = getValidToken();
+      if (!token) {
+        return;
+      }
+      syncing = true;
+      try {
+        await Promise.all(
+          pendingThreadIds.map(async (threadID) => {
+            try {
+              const params = new URLSearchParams();
+              params.set("_ts", String(Date.now()));
+              const response = await fetch(
+                `/api/backend/v1/threads/${threadID}?${params.toString()}`,
+                {
+                  headers: buildAuthHeaders(token),
+                  cache: "no-store",
+                }
+              );
+              updateTokenFromResponse(response);
+              const data = (await response
+                .json()
+                .catch(() => null)) as { code?: number; data?: ThreadItem } | null;
+              if (!response.ok || data?.code !== 0 || disposed) {
+                return;
+              }
+              const thread = data.data ?? {};
+              const title = normalizeThreadTitle(thread.title);
+              setHistoryItems((prev) =>
+                upsertThreadItemToTop(prev, {
+                  thread_id: threadID,
+                  title,
+                  created_at: thread.created_at,
+                  updated_at: thread.updated_at,
+                  pending_title: !title,
+                })
+              );
+            } catch {
+              // 轮询异常忽略，等待下一轮重试。
+            }
+          })
+        );
+      } finally {
+        syncing = false;
+      }
+    };
+
+    void syncPendingTitles();
+    const timer = window.setInterval(() => {
+      void syncPendingTitles();
+    }, 3000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [getValidToken, historyItems]);
 
   useEffect(() => {
     if (!contextMenu) return;

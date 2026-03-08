@@ -4,6 +4,7 @@ export const THREAD_HISTORY_UPSERT_EVENT = "thread-history-upsert";
 
 export type ThreadHistoryItem = {
   thread_id?: string;
+  replace_thread_id?: string;
   title?: string;
   updated_at?: string;
   created_at?: string;
