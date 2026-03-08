@@ -1147,6 +1147,12 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       setInputError("");
       setSemiMessages([]);
       setHistoryLoading(false);
+      // 新会话不继承上一会话的 @知识库 / #skill 选择，避免上下文串线。
+      setSelectedMentions([]);
+      setMentionOpen(false);
+      setMentionKeyword("");
+      setMentionTriggerSymbol(null);
+      setMentionActiveIndex(0);
       currentRunIdRef.current = "";
       textMessageMapRef.current.clear();
       toolCallMapRef.current.clear();
