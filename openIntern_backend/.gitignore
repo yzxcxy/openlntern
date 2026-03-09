@@ -1,0 +1,16 @@
+/bin/
+/dist/
+/tmp/
+*.exe
+*.out
+*.test
+*.cover
+coverage.*
+*.log
+.idea/
+.vscode/
+.DS_Store
+config.yaml
+script/openviking/data/
+
+.gocache/

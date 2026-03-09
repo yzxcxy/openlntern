@@ -1,0 +1,84 @@
+package controllers
+
+import (
+	"net/http"
+	"openIntern/internal/models"
+	"openIntern/internal/response"
+	"openIntern/internal/services"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+)
+
+// CreateA2UI 创建 A2UI
+func CreateA2UI(c *gin.Context) {
+	var a2ui models.A2UI
+	if err := c.ShouldBindJSON(&a2ui); err != nil {
+		response.BadRequest(c)
+		return
+	}
+
+	if err := services.A2UI.CreateA2UI(&a2ui); err != nil {
+		response.InternalError(c)
+		return
+	}
+
+	response.JSONSuccess(c, http.StatusCreated, a2ui)
+}
+
+// GetA2UI 获取 A2UI
+func GetA2UI(c *gin.Context) {
+	id := c.Param("id")
+	a2ui, err := services.A2UI.GetA2UIByID(id)
+	if err != nil {
+		response.NotFound(c, "a2ui not found")
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, a2ui)
+}
+
+// UpdateA2UI 更新 A2UI
+func UpdateA2UI(c *gin.Context) {
+	id := c.Param("id")
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		response.BadRequest(c)
+		return
+	}
+	if err := services.A2UI.UpdateA2UI(id, updates); err != nil {
+		response.InternalError(c)
+		return
+	}
+
+	response.JSONMessage(c, http.StatusOK, "a2ui updated successfully")
+}
+
+// DeleteA2UI 删除 A2UI
+func DeleteA2UI(c *gin.Context) {
+	id := c.Param("id")
+	if err := services.A2UI.DeleteA2UI(id); err != nil {
+		response.InternalError(c)
+		return
+	}
+	response.JSONMessage(c, http.StatusOK, "a2ui deleted successfully")
+}
+
+// ListA2UIs 获取 A2UI 列表
+func ListA2UIs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	keyword := c.Query("keyword")
+
+	a2uis, total, err := services.A2UI.ListA2UIs(page, pageSize, keyword)
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+
+	response.JSONSuccess(c, http.StatusOK, gin.H{
+		"data":  a2uis,
+		"total": total,
+		"page":  page,
+		"size":  pageSize,
+	})
+}
