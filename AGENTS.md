@@ -1,76 +1,28 @@
-# Repository Guidelines
+# openIntern 协作说明
 
-## Project Structure & Module Organization
-This workspace contains multiple codebases:
-- `openIntern/openIntern_backend/`: Gin-based backend (`internal/controllers`, `internal/services`, `internal/dao`, `internal/models`).
-- `openIntern/openIntern_forentend/`: Next.js 16 + TypeScript frontend (`app/`, `app/components/ui`, `app/components/layout`, `docs/`).
-- `openIntern/go/`: Go SDK (`pkg/`) and runnable examples (`example/client`, `example/server`).
+## 1) 仓库结构
+- `openIntern_backend`：Go 后端服务（Gin + GORM + Redis + Milvus）。
+- `openIntern_forentend`：Next.js 前端（TypeScript，目录名按仓库现状保留 `forentend` 拼写）。
+- `go`：本地 AG-UI Go SDK，后端 `go.mod` 里通过 `replace` 指向该目录。
+- `scripts`：项目脚本。
+- `开发文档`：设计与实现文档（可能包含错误的设计）。
 
-Keep changes scoped to one module when possible; run commands from that module root.
+## 2) 环境与配置
+- 后端默认读取 `openIntern_backend/config.yaml`。
+- 前端本地环境变量使用 `openIntern_forentend/.env.local`。
+- `config.yaml`、`.env.local` 中的密钥和凭证禁止提交到仓库。
 
-## Build, Test, and Development Commands
-- `cd openIntern/openIntern_backend && go run .`: start backend (reads `config.yaml`).
-- `cd openIntern/openIntern_backend && go test ./...`: run backend unit tests.
-- `cd openIntern/openIntern_forentend && pnpm dev`: start frontend locally.
-- `cd openIntern/openIntern_forentend && pnpm build`: production build.
-- `cd openIntern/openIntern_forentend && pnpm lint && pnpm lint:style-guard`: ESLint + style guard checks.
-- `cd openIntern/go && go test ./...`: run SDK tests.
+## 3) 协作约定
+- 仅修改与任务直接相关的文件，避免顺手重构无关模块。
+- 变更涉及接口、数据结构或行为时，同步更新文档或注释。
+- 新增代码需要添加注释
+- 提交前至少说明：
+  - 改了什么；
+  - 为什么这么改；
+  - 如何验证（命令与结果）。
+- 不要随便加go 的test文件
 
-## Coding Style & Naming Conventions
-- Go: always format with `gofmt` (and `goimports` for import grouping). Use exported GoDoc comments where required.
-- Frontend: TypeScript strict mode is enabled; use `PascalCase` for React components (e.g., `UiButton.tsx`) and Next.js route conventions (`page.tsx`, `layout.tsx`).
-- In frontend pages/features, prefer shared primitives in `app/components/ui/*` and `app/components/layout/*` over raw controls.
-- 
+## 测试约定
 
-## Testing Guidelines
-- Go tests live beside source as `*_test.go`, with `TestXxx` naming; table-driven tests are preferred.
-- Frontend currently relies on lint/style-guard gates; add tests with new test tooling when introducing complex UI logic.
-- No fixed coverage threshold is configured; new features should include meaningful regression tests.
-
-## Commit & Pull Request Guidelines
-- Follow Conventional Commits as used in history: `feat(scope): ...`, `fix(scope): ...`, `refactor(scope): ...`.
-- Keep commits focused and small; include scope when it clarifies the area (`kb`, `plugins`, `agent`, `ui`).
-- Frontend PRs should satisfy the style-guard checklist in `.github/pull_request_template.md`, and document any exception in `docs/residual-backlog.md`.
-
-## Security & Configuration Tips
-- Do not commit secrets or local configs. `openIntern/openIntern_backend/config.yaml` and frontend `.env*` are local-only.
-- Use sanitized example values in docs and test fixtures.
-
-# Agent Development Rules
-
-## Code Documentation
-- Every function and method must include clear comments or docstrings.
-- The comment should explain the purpose
-
-## Code Organization
-- Avoid putting too much logic into a single file.
-- Split code into multiple modules when the file grows large.
-- Separate responsibilities into different files (e.g., service, utils, controllers).
-
-## Maintainability
-- Write readable and maintainable code.
-- Prefer small functions with clear responsibilities.
-
-# Development Phase Rules
-
-## No Legacy Compatibility
-The project is currently in the active development phase.
-
-- Do NOT add compatibility layers for old data structures or APIs.
-- Prefer updating the implementation directly instead of supporting legacy formats.
-- If a schema or interface changes, update all related code accordingly.
-
-## Avoid Redundant Code
-- Do not introduce temporary adapters or compatibility wrappers.
-- Remove unused or obsolete logic immediately.
-- Prefer refactoring over adding workaround code.
-
-## Clean Architecture
-- Keep the codebase simple and maintainable.
-- Avoid premature abstractions meant for backward compatibility.
-- Implement the simplest correct solution for the current design.
-
-## Refactoring Policy
-When changing data structures, APIs, or modules:
-- Update all usages in the repository.
-- Do not keep deprecated fields or functions unless explicitly required.
+- 不要执行`pnpm lint` 之类耗时很长的命令
+- 没有允许，不允许执行go test
