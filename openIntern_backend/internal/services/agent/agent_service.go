@@ -8,6 +8,7 @@ import (
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	"sync"
 
+	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/adk"
 	einoTool "github.com/cloudwego/eino/components/tool"
@@ -21,6 +22,18 @@ type RuntimeModelSelection struct {
 type MessageStore interface {
 	ListThreadMessages(threadID string) ([]models.Message, error)
 	CreateMessages(messages []models.Message) error
+}
+
+type MemorySyncStateStore interface {
+	ScheduleThreadSync(threadID, runID string) error
+}
+
+type MemoryUsageLogStore interface {
+	RecordRunMemoryUsage(threadID, runID string, uris []string) error
+}
+
+type MemoryRetriever interface {
+	BuildMemoryContext(ctx context.Context, input *types.RunAgentInput) (*types.Message, []string, error)
 }
 
 type ThreadContextSnapshotStore interface {
@@ -46,6 +59,9 @@ type Dependencies struct {
 	A2UIService                builtinTool.A2UIServiceInterface
 	FileUploader               builtinTool.FileUploader
 	MessageStore               MessageStore
+	MemoryRetriever            MemoryRetriever
+	MemorySyncStateStore       MemorySyncStateStore
+	MemoryUsageLogStore        MemoryUsageLogStore
 	ThreadContextSnapshotStore ThreadContextSnapshotStore
 	ThreadStore                ThreadStore
 	ModelCatalogResolver       ModelCatalogResolver

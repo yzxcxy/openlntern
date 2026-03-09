@@ -57,6 +57,7 @@ func (d *ThreadDAO) Touch(threadID string, updatedAt time.Time) (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
+// DeleteWithMessages removes the thread and all thread-scoped persistence records in one transaction.
 func (d *ThreadDAO) DeleteWithMessages(threadID string) error {
 	return database.DB.Transaction(func(tx *gorm.DB) error {
 		var thread models.Thread
@@ -64,6 +65,12 @@ func (d *ThreadDAO) DeleteWithMessages(threadID string) error {
 			return err
 		}
 		if err := tx.Where("thread_id = ?", threadID).Delete(&models.Message{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("thread_id = ?", threadID).Delete(&models.MemorySyncState{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("thread_id = ?", threadID).Delete(&models.MemoryUsageLog{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&thread).Error

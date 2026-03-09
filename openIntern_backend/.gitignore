@@ -14,3 +14,4 @@ config.yaml
 script/openviking/data/
 
 .gocache/
+.gocache-test/

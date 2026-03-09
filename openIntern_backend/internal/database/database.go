@@ -32,6 +32,8 @@ func Init(dsn string) error {
 		&models.A2UI{},
 		&models.Thread{},
 		&models.Message{},
+		&models.MemorySyncState{},
+		&models.MemoryUsageLog{},
 		&models.SkillFrontmatter{},
 		&models.Plugin{},
 		&models.Tool{},

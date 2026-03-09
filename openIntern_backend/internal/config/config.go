@@ -90,11 +90,16 @@ type SandboxConfig struct {
 }
 
 type OpenVikingConfig struct {
-	BaseURL        string `yaml:"base_url"`
-	APIKey         string `yaml:"api_key"`
-	SkillsRoot     string `yaml:"skills_root"`
-	ToolsRoot      string `yaml:"tools_root"`
-	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	BaseURL                    string `yaml:"base_url"`
+	APIKey                     string `yaml:"api_key"`
+	SkillsRoot                 string `yaml:"skills_root"`
+	ToolsRoot                  string `yaml:"tools_root"`
+	TimeoutSeconds             int    `yaml:"timeout_seconds"`
+	MemorySearchTimeoutSeconds int    `yaml:"memory_search_timeout_seconds"`
+	MemorySyncDelaySeconds     int    `yaml:"memory_sync_delay_seconds"`
+	MemorySyncPollSeconds      int    `yaml:"memory_sync_poll_seconds"`
+	MemorySyncTimeoutSeconds   int    `yaml:"memory_sync_timeout_seconds"`
+	MemorySyncRetrySeconds     int    `yaml:"memory_sync_retry_seconds"`
 }
 
 type APMPlusConfig struct {

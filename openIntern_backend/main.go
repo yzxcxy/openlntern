@@ -32,6 +32,8 @@ func main() {
 		log.Fatalf("failed to init rag service: %v", err)
 	}
 	database.InitContextStore(cfg.Tools.OpenViking)
+	services.InitMemoryRetriever(cfg.Tools.OpenViking)
+	services.InitMemorySync(cfg.Tools.OpenViking)
 	shutdown, err := services.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.ContextCompression, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)

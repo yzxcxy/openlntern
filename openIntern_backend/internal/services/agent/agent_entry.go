@@ -61,7 +61,13 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		_ = sender.Error(err.Error(), "agent_mode_not_available")
 		return err
 	}
-	compressedInput, compressionStats, err := s.compressInputContext(ctx, mergedInput, runtimeConfig, state)
+	preparedInput, retrievedMemoryURIs, err := injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, mergedInput)
+	if err != nil {
+		log.Printf("RunAgent memory retrieval failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+		preparedInput = mergedInput
+		retrievedMemoryURIs = nil
+	}
+	compressedInput, compressionStats, err := s.compressInputContext(ctx, preparedInput, runtimeConfig, state)
 	if err != nil {
 		_ = sender.Error(err.Error(), "context_compress_failed")
 		log.Printf("RunAgent context compression failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
@@ -121,11 +127,25 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		log.Printf("RunAgent touch thread failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
+	if err := recordRetrievedMemoryUsage(s.deps.MemoryUsageLogStore, threadID, runID, retrievedMemoryURIs); err != nil {
+		log.Printf("RunAgent record memory usage failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+	}
+	if err := scheduleThreadMemorySync(s.deps.MemorySyncStateStore, threadID, runID); err != nil {
+		log.Printf("RunAgent schedule memory sync failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+	}
 	if err := ensureThreadTitle(ctx, s.deps.ThreadStore, threadID, input.Messages, state.titleModel); err != nil {
 		log.Printf("RunAgent generate title failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 	}
 
 	return nil
+}
+
+// scheduleThreadMemorySync marks the completed run as pending long-term memory synchronization.
+func scheduleThreadMemorySync(store MemorySyncStateStore, threadID, runID string) error {
+	if store == nil {
+		return nil
+	}
+	return store.ScheduleThreadSync(threadID, runID)
 }
 
 // runEinoStreaming 消费 runner 事件流并按 AGUI 协议转发到 sender。
