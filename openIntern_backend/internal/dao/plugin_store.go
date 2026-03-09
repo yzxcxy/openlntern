@@ -108,8 +108,8 @@ func (d *PluginDAO) ReplaceToolStoreResourcesByPlugin(ctx context.Context, plugi
 	if pluginID == "" {
 		return errors.New("plugin_id is required")
 	}
-	pluginURI := d.ToolStorePluginURI(pluginID)
-	if err := deletePath(ctx, pluginURI, true); err != nil && !isToolStoreNotFoundError(err) {
+	// 先通过 ls 探测并按资源级删除，避免目录不存在时触发后端 rm 异常导致连接被重置。
+	if err := d.DeleteToolStorePluginURI(ctx, pluginID); err != nil {
 		return err
 	}
 	if len(documents) == 0 {
@@ -137,8 +137,12 @@ func (d *PluginDAO) ListToolStoreResourceURIsByPlugin(ctx context.Context, plugi
 	if !d.ToolStoreConfigured() {
 		return []string{}, nil
 	}
-	pluginURI := d.ToolStorePluginURI(pluginID)
-	entries, err := listEntries(ctx, pluginURI, false)
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return []string{}, nil
+	}
+	rootURI := d.ToolStoreRootURI()
+	entries, err := listEntries(ctx, rootURI, true)
 	if err != nil {
 		if isToolStoreNotFoundError(err) {
 			return []string{}, nil
@@ -148,14 +152,16 @@ func (d *PluginDAO) ListToolStoreResourceURIsByPlugin(ctx context.Context, plugi
 
 	seen := make(map[string]struct{}, len(entries))
 	uris := make([]string, 0, len(entries))
+	pluginPrefix := pluginID + "/"
 	for _, entry := range entries {
 		if entry.IsDir {
 			continue
 		}
-		uri := normalizeToolStoreEntryURI(pluginURI, entry.Path, entry.Name)
-		if uri == "" {
+		relativePath := toolStoreRelativePathFromEntry(rootURI, entry.Path, entry.Name)
+		if relativePath == "" || !strings.HasPrefix(relativePath, pluginPrefix) {
 			continue
 		}
+		uri := strings.TrimRight(rootURI, "/") + "/" + relativePath
 		if _, ok := seen[uri]; ok {
 			continue
 		}
@@ -219,6 +225,15 @@ func normalizeToolStoreURI(uri string) string {
 
 // normalizeToolStoreEntryURI 规范化 fs/ls 返回的资源路径。
 func normalizeToolStoreEntryURI(pluginURI string, entryPath string, entryName string) string {
+	relativePath := toolStoreRelativePathFromEntry(pluginURI, entryPath, entryName)
+	if relativePath == "" {
+		return ""
+	}
+	return strings.TrimRight(pluginURI, "/") + "/" + relativePath
+}
+
+// toolStoreRelativePathFromEntry 从 fs/ls 返回条目提取相对根目录路径。
+func toolStoreRelativePathFromEntry(rootURI string, entryPath string, entryName string) string {
 	candidate := strings.TrimSpace(entryPath)
 	if candidate == "" {
 		candidate = strings.TrimSpace(entryName)
@@ -226,14 +241,43 @@ func normalizeToolStoreEntryURI(pluginURI string, entryPath string, entryName st
 	if candidate == "" {
 		return ""
 	}
+
+	rootURI = strings.TrimRight(strings.TrimSpace(rootURI), "/")
 	if strings.HasPrefix(candidate, "viking://") {
-		return strings.TrimRight(candidate, "/")
+		if rootURI != "" && strings.HasPrefix(candidate, rootURI) {
+			candidate = strings.TrimPrefix(candidate, rootURI)
+		} else {
+			candidate = pathFromToolsMarker(candidate)
+		}
+	} else if rootURI != "" && strings.HasPrefix(candidate, rootURI) {
+		candidate = strings.TrimPrefix(candidate, rootURI)
+	} else {
+		candidate = pathFromToolsMarker(candidate)
 	}
-	baseName := strings.TrimSpace(path.Base(candidate))
-	if baseName == "" || baseName == "." || baseName == "/" {
+
+	candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "/")
+	if candidate == "" {
 		return ""
 	}
-	return strings.TrimRight(pluginURI, "/") + "/" + baseName
+	cleaned := strings.TrimPrefix(path.Clean("/"+candidate), "/")
+	if cleaned == "." || cleaned == "" {
+		return ""
+	}
+	return cleaned
+}
+
+// pathFromToolsMarker 尝试从返回路径中提取 resources/tools 之后的路径。
+func pathFromToolsMarker(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.ReplaceAll(value, "\\", "/")
+	const marker = "resources/tools/"
+	if idx := strings.Index(value, marker); idx >= 0 {
+		return value[idx+len(marker):]
+	}
+	return value
 }
 
 // validateToolStoreToolID 校验 tool_id 是否可用作资源文件名。
