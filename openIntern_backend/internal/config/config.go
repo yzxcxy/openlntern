@@ -8,18 +8,19 @@ import (
 )
 
 type Config struct {
-	Port         string             `yaml:"port"`
-	MySQL        MySQLConfig        `yaml:"mysql"`
-	Redis        RedisConfig        `yaml:"redis"`
-	JWT          JWTConfig          `yaml:"jwt"`
-	COS          COSConfig          `yaml:"cos"`
-	Plugin       PluginConfig       `yaml:"plugin"`
-	LLM          LLMConfig          `yaml:"llm"`
-	SummaryLLM   LLMConfig          `yaml:"summary_llm"`
-	EmbeddingLLM EmbeddingLLMConfig `yaml:"embedding_llm"`
-	Milvus       MilvusConfig       `yaml:"milvus"`
-	Tools        ToolsConfig        `yaml:"tools"`
-	APMPlus      APMPlusConfig      `yaml:"apmplus"`
+	Port               string                   `yaml:"port"`
+	MySQL              MySQLConfig              `yaml:"mysql"`
+	Redis              RedisConfig              `yaml:"redis"`
+	JWT                JWTConfig                `yaml:"jwt"`
+	COS                COSConfig                `yaml:"cos"`
+	Plugin             PluginConfig             `yaml:"plugin"`
+	LLM                LLMConfig                `yaml:"llm"`
+	SummaryLLM         LLMConfig                `yaml:"summary_llm"`
+	EmbeddingLLM       EmbeddingLLMConfig       `yaml:"embedding_llm"`
+	Milvus             MilvusConfig             `yaml:"milvus"`
+	Tools              ToolsConfig              `yaml:"tools"`
+	ContextCompression ContextCompressionConfig `yaml:"context_compression"`
+	APMPlus            APMPlusConfig            `yaml:"apmplus"`
 }
 
 type MySQLConfig struct {
@@ -101,6 +102,15 @@ type APMPlusConfig struct {
 	AppKey      string `yaml:"app_key"`
 	ServiceName string `yaml:"service_name"`
 	Release     string `yaml:"release"`
+}
+
+type ContextCompressionConfig struct {
+	Enabled                *bool `yaml:"enabled"`
+	SoftLimitTokens        int   `yaml:"soft_limit_tokens"`
+	HardLimitTokens        int   `yaml:"hard_limit_tokens"`
+	OutputReserveTokens    int   `yaml:"output_reserve_tokens"`
+	MaxRecentMessages      int   `yaml:"max_recent_messages"`
+	EstimatedCharsPerToken int   `yaml:"estimated_chars_per_token"`
 }
 
 func LoadConfig(configFile string) *Config {

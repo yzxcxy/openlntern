@@ -61,7 +61,29 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		_ = sender.Error(err.Error(), "agent_mode_not_available")
 		return err
 	}
-	einoMessages, err := agui.AGUIRunInputToEinoMessages(mergedInput)
+	compressedInput, compressionStats, err := s.compressInputContext(ctx, mergedInput, runtimeConfig, state)
+	if err != nil {
+		_ = sender.Error(err.Error(), "context_compress_failed")
+		log.Printf("RunAgent context compression failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+		return err
+	}
+	if compressionStats != nil && compressionStats.Enabled && compressionStats.Triggered {
+		log.Printf(
+			"RunAgent context compressed thread_id=%s run_id=%s original_tokens=%d compressed_tokens=%d removed_messages=%d soft_limit=%d hard_limit=%d summary_used=%t summary_updated=%t snapshot_index=%d",
+			threadID,
+			runID,
+			compressionStats.OriginalTokens,
+			compressionStats.CompressedTokens,
+			compressionStats.RemovedMessages,
+			compressionStats.SoftLimitTokens,
+			compressionStats.HardLimitTokens,
+			compressionStats.SummaryUsed,
+			compressionStats.SummaryUpdated,
+			compressionStats.SnapshotIndex,
+		)
+	}
+
+	einoMessages, err := agui.AGUIRunInputToEinoMessages(compressedInput)
 	if err != nil {
 		_ = sender.Error(err.Error(), "agui_to_eino_failed")
 		log.Printf("RunAgent agui to eino failed thread_id=%s run_id=%s err=%v", threadID, runID, err)

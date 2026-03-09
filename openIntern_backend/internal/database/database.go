@@ -39,6 +39,7 @@ func Init(dsn string) error {
 		&models.ModelProvider{},
 		&models.ModelCatalog{},
 		&models.DefaultModelConfig{},
+		&models.ThreadContextSnapshot{},
 	); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}

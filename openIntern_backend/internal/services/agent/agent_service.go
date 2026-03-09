@@ -23,6 +23,11 @@ type MessageStore interface {
 	CreateMessages(messages []models.Message) error
 }
 
+type ThreadContextSnapshotStore interface {
+	GetLatestByThreadID(threadID string) (*models.ThreadContextSnapshot, error)
+	Create(item *models.ThreadContextSnapshot) error
+}
+
 type ThreadStore interface {
 	GetThreadByThreadID(threadID string) (*models.Thread, error)
 	UpdateThreadTitle(threadID, title string) error
@@ -38,13 +43,14 @@ type ModelProviderKeyResolver interface {
 }
 
 type Dependencies struct {
-	A2UIService           builtinTool.A2UIServiceInterface
-	FileUploader          builtinTool.FileUploader
-	MessageStore          MessageStore
-	ThreadStore           ThreadStore
-	ModelCatalogResolver  ModelCatalogResolver
-	ModelProviderResolver ModelProviderKeyResolver
-	SkillFrontmatterStore skillmiddleware.SkillFrontmatterStore
+	A2UIService                builtinTool.A2UIServiceInterface
+	FileUploader               builtinTool.FileUploader
+	MessageStore               MessageStore
+	ThreadContextSnapshotStore ThreadContextSnapshotStore
+	ThreadStore                ThreadStore
+	ModelCatalogResolver       ModelCatalogResolver
+	ModelProviderResolver      ModelProviderKeyResolver
+	SkillFrontmatterStore      skillmiddleware.SkillFrontmatterStore
 }
 
 type runtimeState struct {
@@ -54,6 +60,7 @@ type runtimeState struct {
 	agentTools          []einoTool.BaseTool
 	agentMiddlewares    []adk.AgentMiddleware
 	bootstrapChatConfig config.LLMConfig
+	contextCompression  contextCompressionSettings
 }
 
 type Service struct {

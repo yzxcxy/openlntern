@@ -39,6 +39,9 @@ func TestNormalizeToolSearchScoreThreshold(t *testing.T) {
 	if normalizeToolSearchScoreThreshold(0) != defaultToolSearchScoreThreshold {
 		t.Fatalf("unexpected default score threshold")
 	}
+	if defaultToolSearchScoreThreshold != 0 {
+		t.Fatalf("default score threshold should stay disabled")
+	}
 	if normalizeToolSearchScoreThreshold(0.6) != 0.6 {
 		t.Fatalf("unexpected score threshold")
 	}

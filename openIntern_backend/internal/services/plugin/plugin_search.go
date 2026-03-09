@@ -15,7 +15,7 @@ const (
 	defaultToolSearchCandidateFactor    = 4
 	defaultToolSearchTargetURI          = "viking://resources/tools/"
 	defaultToolSearchMinCandidateAmount = 20
-	defaultToolSearchScoreThreshold     = 0.4
+	defaultToolSearchScoreThreshold     = 0
 )
 
 // ToolSearchOptions 表示 search 模式下工具召回参数。
@@ -124,7 +124,7 @@ func normalizeToolSearchMaxMCPTools(value int) int {
 	return value
 }
 
-// normalizeToolSearchScoreThreshold 归一化分数阈值，默认启用阈值限制。
+// normalizeToolSearchScoreThreshold 归一化分数阈值，默认不主动下发阈值给 OpenViking。
 func normalizeToolSearchScoreThreshold(value float64) float64 {
 	if value <= 0 {
 		return defaultToolSearchScoreThreshold

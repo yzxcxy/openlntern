@@ -27,13 +27,14 @@ func (modelCatalogResolverAdapter) ResolveRuntimeSelection(modelID, providerID s
 }
 
 var defaultAgentService = agentpkg.NewService(agentpkg.Dependencies{
-	A2UIService:           A2UI,
-	FileUploader:          File,
-	MessageStore:          Message,
-	ThreadStore:           Thread,
-	ModelCatalogResolver:  modelCatalogResolverAdapter{},
-	ModelProviderResolver: ModelProvider,
-	SkillFrontmatterStore: skillFrontmatterStore{},
+	A2UIService:                A2UI,
+	FileUploader:               File,
+	MessageStore:               Message,
+	ThreadContextSnapshotStore: ThreadContextSnapshot,
+	ThreadStore:                Thread,
+	ModelCatalogResolver:       modelCatalogResolverAdapter{},
+	ModelProviderResolver:      ModelProvider,
+	SkillFrontmatterStore:      skillFrontmatterStore{},
 })
 
 // RunAgent 运行一个 Agent
@@ -41,7 +42,7 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	return defaultAgentService.RunAgent(ctx, w, input)
 }
 
-// InitEino 初始化 agent 运行所需的模型、工具与中间件。
-func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
-	return defaultAgentService.InitEino(cfg, summaryCfg, toolsCfg, apmCfg)
+// InitEino 初始化 agent 运行所需的模型、工具、中间件和上下文压缩策略。
+func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
+	return defaultAgentService.InitEino(cfg, summaryCfg, toolsCfg, compressionCfg, apmCfg)
 }

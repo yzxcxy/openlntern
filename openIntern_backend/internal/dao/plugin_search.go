@@ -78,7 +78,11 @@ func (d *PluginDAO) FindToolSearchMatches(ctx context.Context, filter PluginTool
 	seen := make(map[string]struct{}, len(result.Resources))
 	matches := make([]PluginToolSearchMatch, 0, len(result.Resources))
 	for _, item := range result.Resources {
-		toolID := extractToolIDFromVikingURI(item.URI)
+		uri := strings.TrimSpace(item.URI)
+		if !isToolSearchURIUnderTarget(uri, targetURI) {
+			continue
+		}
+		toolID := extractToolIDFromVikingURIWithTarget(uri, targetURI)
 		if toolID == "" {
 			continue
 		}
@@ -88,15 +92,77 @@ func (d *PluginDAO) FindToolSearchMatches(ctx context.Context, filter PluginTool
 		seen[toolID] = struct{}{}
 		matches = append(matches, PluginToolSearchMatch{
 			ToolID: toolID,
-			URI:    strings.TrimSpace(item.URI),
+			URI:    uri,
 			Score:  item.Score,
 		})
 	}
 	return matches, nil
 }
 
+// extractToolIDFromVikingURIWithTarget 基于 target_uri 和 URI 路径层级提取 tool_id。
+func extractToolIDFromVikingURIWithTarget(uri string, targetURI string) string {
+	normalizedURI := normalizeVikingURI(uri)
+	normalizedTarget := normalizeVikingURI(targetURI)
+	if normalizedURI == "" || normalizedTarget == "" {
+		return extractToolIDFromVikingURI(uri)
+	}
+	normalizedTarget = strings.TrimRight(normalizedTarget, "/") + "/"
+	if !strings.HasPrefix(normalizedURI, normalizedTarget) {
+		return ""
+	}
+
+	relative := strings.TrimPrefix(normalizedURI, normalizedTarget)
+	parts := splitPathSegments(relative)
+	if len(parts) < 2 {
+		return ""
+	}
+
+	base := path.Base(normalizedURI)
+	// 插件级目录摘要（例如 tools/<plugin_id>/.overview.md）不属于具体工具，直接忽略。
+	if strings.HasPrefix(base, ".") && len(parts) < 3 {
+		return ""
+	}
+	return extractToolIDFromVikingURI(normalizedURI)
+}
+
 // extractToolIDFromVikingURI 从 viking URI 的最后路径段推导 tool_id。
 func extractToolIDFromVikingURI(uri string) string {
+	normalized := normalizeVikingURI(uri)
+	if normalized == "" {
+		return ""
+	}
+
+	base := path.Base(normalized)
+	if base == "." || base == "/" || base == "" {
+		return ""
+	}
+
+	// OpenViking 会返回目录级摘要资源（例如 `/.overview.md`），这类 URI 需要回退父目录名作为 tool_id。
+	if strings.HasPrefix(base, ".") {
+		return toolIDFromParentDir(normalized)
+	}
+
+	base = strings.TrimSuffix(base, path.Ext(base))
+	base = strings.TrimSpace(base)
+	if base == "" || strings.HasPrefix(base, ".") {
+		return toolIDFromParentDir(normalized)
+	}
+	return base
+}
+
+// isToolSearchURIUnderTarget 判断候选 URI 是否位于目标 URI 前缀下。
+func isToolSearchURIUnderTarget(uri string, targetURI string) bool {
+	candidate := normalizeVikingURI(uri)
+	target := normalizeVikingURI(targetURI)
+	if candidate == "" || target == "" {
+		return false
+	}
+	target = strings.TrimRight(target, "/") + "/"
+	return strings.HasPrefix(candidate, target)
+}
+
+// normalizeVikingURI 清理 URI 的 query/fragment，并去掉末尾斜杠。
+func normalizeVikingURI(uri string) string {
 	trimmed := strings.TrimSpace(uri)
 	if trimmed == "" {
 		return ""
@@ -107,18 +173,35 @@ func extractToolIDFromVikingURI(uri string) string {
 	if idx := strings.Index(trimmed, "#"); idx >= 0 {
 		trimmed = trimmed[:idx]
 	}
-	trimmed = strings.TrimRight(trimmed, "/")
-	if trimmed == "" {
-		return ""
-	}
+	return strings.TrimRight(strings.TrimSpace(trimmed), "/")
+}
 
-	base := path.Base(trimmed)
-	if base == "." || base == "/" {
+// splitPathSegments 将相对路径按 `/` 切分并移除空段。
+func splitPathSegments(relative string) []string {
+	relative = strings.TrimSpace(relative)
+	if relative == "" {
+		return []string{}
+	}
+	rawParts := strings.Split(relative, "/")
+	parts := make([]string, 0, len(rawParts))
+	for _, item := range rawParts {
+		segment := strings.TrimSpace(item)
+		if segment == "" {
+			continue
+		}
+		parts = append(parts, segment)
+	}
+	return parts
+}
+
+// toolIDFromParentDir 使用 URI 父目录名推导 tool_id。
+func toolIDFromParentDir(uri string) string {
+	parent := strings.TrimSpace(path.Base(path.Dir(uri)))
+	if parent == "" || parent == "." || parent == "/" {
 		return ""
 	}
-	ext := path.Ext(base)
-	if ext != "" {
-		base = strings.TrimSuffix(base, ext)
+	if strings.HasPrefix(parent, ".") {
+		return ""
 	}
-	return strings.TrimSpace(base)
+	return parent
 }

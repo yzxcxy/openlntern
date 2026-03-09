@@ -18,8 +18,8 @@ import (
 	einoTool "github.com/cloudwego/eino/components/tool"
 )
 
-// InitEino 初始化模型、工具、中间件及运行时依赖。
-func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
+// InitEino 初始化模型、工具、中间件、运行时依赖和上下文压缩参数。
+func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
 
 	shutdown := func(context.Context) error { return nil }
@@ -90,6 +90,7 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 		agentTools:          allTools,
 		agentMiddlewares:    []adk.AgentMiddleware{skillMiddleware},
 		bootstrapChatConfig: cfg,
+		contextCompression:  newContextCompressionSettings(compressionCfg),
 	})
 
 	return shutdown, nil
