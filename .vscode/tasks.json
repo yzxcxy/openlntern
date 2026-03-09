@@ -1,0 +1,69 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "backend: dev",
+      "type": "shell",
+      "command": "go run main.go",
+      "options": {
+        "cwd": "${workspaceFolder}/openIntern_backend"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "group": "backend",
+        "reveal": "always",
+        "clear": false
+      }
+    },
+    {
+      "label": "frontend: dev",
+      "type": "shell",
+      "command": "pnpm dev",
+      "options": {
+        "cwd": "${workspaceFolder}/openIntern_forentend"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "group": "frontend",
+        "reveal": "always",
+        "clear": false
+      }
+    },
+    {
+      "label": "openviking: dev",
+      "type": "shell",
+      "command": "openviking-server",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "group": "openviking",
+        "reveal": "always",
+        "clear": false
+      }
+    },
+    {
+      "label": "dev: start all",
+      "dependsOn": [
+        "backend: dev",
+        "frontend: dev",
+        "openviking: dev"
+      ],
+      "dependsOrder": "parallel",
+      "runOptions": {
+        "runOn": "default"
+      },
+      "presentation": {
+        "panel": "shared",
+        "reveal": "never"
+      }
+    }
+  ]
+}
