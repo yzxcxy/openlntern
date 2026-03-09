@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"openIntern/internal/models"
 	pluginsvc "openIntern/internal/services/plugin"
 	"strings"
@@ -52,11 +53,29 @@ func (s *Service) resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentR
 	resolved := make([]einoTool.BaseTool, 0, len(state.agentTools))
 	resolved = append(resolved, state.agentTools...)
 
-	if runtimeConfig == nil || strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
+	if runtimeConfig == nil {
 		return resolved, nil, nil
 	}
 
-	codeTools, err := pluginsvc.Plugin.BuildRuntimeCodeTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	selectedToolIDs := runtimeConfig.Plugins.SelectedToolIDs
+	if strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
+		searchedToolIDs, err := pluginsvc.Plugin.SearchRuntimeToolIDs(ctx, runtimeConfig.Plugins.SearchQuery, pluginsvc.ToolSearchOptions{
+			TopK:         runtimeConfig.Plugins.Search.TopK,
+			RuntimeTypes: runtimeConfig.Plugins.Search.RuntimeTypes,
+			MinScore:     runtimeConfig.Plugins.Search.MinScore,
+			MaxMCPTools:  runtimeConfig.Plugins.Search.MaxMCPTools,
+		})
+		if err != nil {
+			log.Printf("RunAgent tool search failed err=%v", err)
+			return resolved, nil, nil
+		}
+		selectedToolIDs = searchedToolIDs
+	}
+	if len(selectedToolIDs) == 0 {
+		return resolved, nil, nil
+	}
+
+	codeTools, err := pluginsvc.Plugin.BuildRuntimeCodeTools(ctx, selectedToolIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -64,7 +83,7 @@ func (s *Service) resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentR
 		resolved = append(resolved, codeTools...)
 	}
 
-	apiTools, err := pluginsvc.Plugin.BuildRuntimeAPITools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	apiTools, err := pluginsvc.Plugin.BuildRuntimeAPITools(ctx, selectedToolIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -72,7 +91,7 @@ func (s *Service) resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentR
 		resolved = append(resolved, apiTools...)
 	}
 
-	pluginTools, cleanup, err := pluginsvc.Plugin.BuildRuntimeMCPTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+	pluginTools, cleanup, err := pluginsvc.Plugin.BuildRuntimeMCPTools(ctx, selectedToolIDs)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()

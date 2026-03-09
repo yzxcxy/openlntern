@@ -109,6 +109,11 @@ func readContent(ctx context.Context, uri string, endpoint string) (string, erro
 }
 
 func addResource(ctx context.Context, resourcePath string, targetURI string, wait bool, timeoutSeconds float64) error {
+	_, err := addResourceWithRootURI(ctx, resourcePath, targetURI, wait, timeoutSeconds)
+	return err
+}
+
+func addResourceWithRootURI(ctx context.Context, resourcePath string, targetURI string, wait bool, timeoutSeconds float64) (string, error) {
 	payload := map[string]any{
 		"path":   resourcePath,
 		"target": targetURI,
@@ -119,29 +124,42 @@ func addResource(ctx context.Context, resourcePath string, targetURI string, wai
 	}
 	body, err := database.Context.Post(ctx, "/api/v1/resources", payload)
 	if err != nil {
-		return err
+		return "", err
 	}
 	var resp storeResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return err
+		return "", err
 	}
 	if err := resp.err(); err != nil {
-		return err
+		return "", err
 	}
 	if len(resp.Result) == 0 {
-		return nil
+		return "", nil
 	}
 	var result storeAddResult
-	if err := json.Unmarshal(resp.Result, &result); err == nil && len(result.Errors) > 0 {
-		return errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
+	if err := json.Unmarshal(resp.Result, &result); err == nil {
+		if len(result.Errors) > 0 {
+			return "", errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
+		}
+		return strings.TrimSpace(result.RootURI), nil
 	}
-	return nil
+	return "", nil
 }
 
 func movePath(ctx context.Context, fromURI string, toURI string) error {
 	body, err := database.Context.Post(ctx, "/api/v1/fs/mv", map[string]any{
 		"from_uri": fromURI,
 		"to_uri":   toURI,
+	})
+	if err != nil {
+		return err
+	}
+	return decodeStoreResult(body, nil)
+}
+
+func mkdirPath(ctx context.Context, uri string) error {
+	body, err := database.Context.Post(ctx, "/api/v1/fs/mkdir", map[string]any{
+		"uri": uri,
 	})
 	if err != nil {
 		return err

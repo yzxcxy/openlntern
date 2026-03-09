@@ -9,6 +9,7 @@ import (
 	"openIntern/internal/models"
 	"openIntern/internal/util"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
@@ -98,6 +99,11 @@ const (
 )
 
 const (
+	defaultPluginSearchTopK        = 10
+	defaultPluginSearchMaxMCPTools = 3
+)
+
+const (
 	skillInstructionPrefix = "请优先参考并执行以下技能约束："
 	kbContextPrefix        = "以下是当前问题在所选知识库中的检索结果，请优先参考这些信息后再回答："
 )
@@ -113,6 +119,13 @@ type AgentRuntimeConfig struct {
 	Plugins struct {
 		Mode            string
 		SelectedToolIDs []string
+		Search          struct {
+			TopK         int
+			RuntimeTypes []string
+			MinScore     float64
+			MaxMCPTools  int
+		}
+		SearchQuery string
 	}
 	Features map[string]any
 }
@@ -217,6 +230,40 @@ func (h agentConfigForwardedPropsHandler) Handle(ctx *forwardedPropsChainContext
 			}
 			ctx.runtimeConfig.Plugins.SelectedToolIDs = selectedToolIDs
 		}
+		if searchRaw, ok := pluginsMap["search"]; ok {
+			searchMap, err := normalizeForwardedPropsMap(searchRaw)
+			if err != nil {
+				return fmt.Errorf("normalize %s.plugins.search: %w", forwardedPropKeyAgentConfig, err)
+			}
+			if topKRaw, ok := searchMap["topK"]; ok {
+				topK, err := normalizeForwardedPropsInt(topKRaw)
+				if err != nil {
+					return fmt.Errorf("normalize %s.plugins.search.topK: %w", forwardedPropKeyAgentConfig, err)
+				}
+				ctx.runtimeConfig.Plugins.Search.TopK = topK
+			}
+			if runtimeTypesRaw, ok := searchMap["runtimeTypes"]; ok {
+				runtimeTypes, err := normalizeForwardedPropsStringList(runtimeTypesRaw)
+				if err != nil {
+					return fmt.Errorf("normalize %s.plugins.search.runtimeTypes: %w", forwardedPropKeyAgentConfig, err)
+				}
+				ctx.runtimeConfig.Plugins.Search.RuntimeTypes = runtimeTypes
+			}
+			if minScoreRaw, ok := searchMap["minScore"]; ok {
+				minScore, err := normalizeForwardedPropsFloat(minScoreRaw)
+				if err != nil {
+					return fmt.Errorf("normalize %s.plugins.search.minScore: %w", forwardedPropKeyAgentConfig, err)
+				}
+				ctx.runtimeConfig.Plugins.Search.MinScore = minScore
+			}
+			if maxMCPToolsRaw, ok := searchMap["maxMCPTools"]; ok {
+				maxMCPTools, err := normalizeForwardedPropsInt(maxMCPToolsRaw)
+				if err != nil {
+					return fmt.Errorf("normalize %s.plugins.search.maxMCPTools: %w", forwardedPropKeyAgentConfig, err)
+				}
+				ctx.runtimeConfig.Plugins.Search.MaxMCPTools = maxMCPTools
+			}
+		}
 	}
 	if featuresRaw, ok := cfgMap["features"]; ok {
 		featuresMap, err := normalizeForwardedPropsMap(featuresRaw)
@@ -285,6 +332,8 @@ func applyForwardedPropsChain(requestCtx context.Context, input *types.RunAgentI
 	}
 	runtimeConfig.Conversation.Mode = "chat"
 	runtimeConfig.Plugins.Mode = "select"
+	runtimeConfig.Plugins.Search.TopK = defaultPluginSearchTopK
+	runtimeConfig.Plugins.Search.MaxMCPTools = defaultPluginSearchMaxMCPTools
 	if requestCtx == nil {
 		requestCtx = context.Background()
 	}
@@ -321,6 +370,10 @@ func applyForwardedPropsChain(requestCtx context.Context, input *types.RunAgentI
 		}
 		sort.Strings(keys)
 		log.Printf("RunAgent forwarded props ignored keys=%v", keys)
+	}
+	runtimeConfig.Plugins.Search.RuntimeTypes = normalizePluginSearchRuntimeTypes(runtimeConfig.Plugins.Search.RuntimeTypes)
+	if strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
+		runtimeConfig.Plugins.SearchQuery, _ = findLastUserMessageTextAndIndex(input.Messages)
 	}
 	return chainCtx.runtimeConfig, nil
 }
@@ -407,6 +460,116 @@ func normalizeForwardedPropsStringList(raw any) ([]string, error) {
 	}
 
 	return nil, fmt.Errorf("must be a string or string list")
+}
+
+// normalizeForwardedPropsInt 将任意整型输入标准化为 int。
+func normalizeForwardedPropsInt(raw any) (int, error) {
+	if raw == nil {
+		return 0, nil
+	}
+	switch value := raw.(type) {
+	case int:
+		return value, nil
+	case int8:
+		return int(value), nil
+	case int16:
+		return int(value), nil
+	case int32:
+		return int(value), nil
+	case int64:
+		return int(value), nil
+	case float32:
+		return int(value), nil
+	case float64:
+		return int(value), nil
+	case json.Number:
+		n, err := value.Int64()
+		if err != nil {
+			return 0, err
+		}
+		return int(n), nil
+	case string:
+		text := strings.TrimSpace(value)
+		if text == "" {
+			return 0, nil
+		}
+		n, err := strconv.Atoi(text)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	default:
+		text := strings.TrimSpace(fmt.Sprintf("%v", raw))
+		if text == "" || text == "<nil>" {
+			return 0, nil
+		}
+		n, err := strconv.Atoi(text)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	}
+}
+
+// normalizeForwardedPropsFloat 将任意浮点输入标准化为 float64。
+func normalizeForwardedPropsFloat(raw any) (float64, error) {
+	if raw == nil {
+		return 0, nil
+	}
+	switch value := raw.(type) {
+	case float64:
+		return value, nil
+	case float32:
+		return float64(value), nil
+	case int:
+		return float64(value), nil
+	case int8:
+		return float64(value), nil
+	case int16:
+		return float64(value), nil
+	case int32:
+		return float64(value), nil
+	case int64:
+		return float64(value), nil
+	case json.Number:
+		n, err := value.Float64()
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	case string:
+		text := strings.TrimSpace(value)
+		if text == "" {
+			return 0, nil
+		}
+		n, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	default:
+		text := strings.TrimSpace(fmt.Sprintf("%v", raw))
+		if text == "" || text == "<nil>" {
+			return 0, nil
+		}
+		n, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	}
+}
+
+// normalizePluginSearchRuntimeTypes 仅保留支持的 runtime_type 并去重。
+func normalizePluginSearchRuntimeTypes(runtimeTypes []string) []string {
+	normalized := make([]string, 0, len(runtimeTypes))
+	for _, item := range runtimeTypes {
+		switch strings.ToLower(strings.TrimSpace(item)) {
+		case "api", "mcp", "code":
+			normalized = append(normalized, strings.ToLower(strings.TrimSpace(item)))
+		}
+	}
+	return util.NormalizeUniqueStringList(normalized)
 }
 
 // normalizeForwardedContextSelection 将 forwarded contextSelections 结构标准化为内部结构。
@@ -526,9 +689,57 @@ func findLastUserMessageTextAndIndex(messages []types.Message) (string, int) {
 		if messages[i].Role != types.RoleUser {
 			continue
 		}
-		return strings.TrimSpace(fmt.Sprintf("%v", messages[i].Content)), i
+		return extractMessageTextContent(messages[i].Content), i
 	}
 	return "", -1
+}
+
+// extractMessageTextContent 提取 message.content 中的文本内容，不读取非文本字段。
+func extractMessageTextContent(content any) string {
+	switch value := content.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case []types.InputContent:
+		return joinInputTextContent(value)
+	case []any:
+		items := make([]types.InputContent, 0, len(value))
+		for _, rawItem := range value {
+			entryMap, err := normalizeForwardedPropsMap(rawItem)
+			if err != nil || len(entryMap) == 0 {
+				continue
+			}
+			itemType := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", entryMap["type"])))
+			if itemType != types.InputContentTypeText {
+				continue
+			}
+			items = append(items, types.InputContent{
+				Type: itemType,
+				Text: normalizeForwardedString(entryMap["text"]),
+			})
+		}
+		return joinInputTextContent(items)
+	default:
+		return ""
+	}
+}
+
+// joinInputTextContent 按顺序拼接文本 content fragment。
+func joinInputTextContent(items []types.InputContent) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.ToLower(strings.TrimSpace(item.Type)) != types.InputContentTypeText {
+			continue
+		}
+		text := strings.TrimSpace(item.Text)
+		if text == "" {
+			continue
+		}
+		parts = append(parts, text)
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 // collectKnowledgeBaseNames 提取知识库名称，优先使用 ID，回退到 Name。

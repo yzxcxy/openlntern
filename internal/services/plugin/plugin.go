@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/url"
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
@@ -156,6 +155,7 @@ var sandboxBaseURL string
 func InitPlugin(cfg config.PluginConfig) {
 	pluginDefaultIconURL = strings.TrimSpace(cfg.DefaultIconURL)
 	initPluginMCPSync(cfg)
+	initPluginOpenVikingSync(cfg)
 }
 
 func GetDefaultPluginIconURL() string {
@@ -171,12 +171,22 @@ func (s *PluginService) Create(input UpsertPluginInput) (*PluginView, error) {
 	if err != nil {
 		return nil, err
 	}
+	shouldQueueMCPSync := plugin.RuntimeType == pluginRuntimeMCP && plugin.Status == pluginStatusEnabled
+	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
+	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
+		return nil, err
+	}
 	if err := dao.Plugin.Create(plugin, tools); err != nil {
 		return nil, err
 	}
-	if plugin.RuntimeType == pluginRuntimeMCP {
+	if shouldQueueMCPSync {
 		if err := s.queueMCPPluginSync(plugin.PluginID, mcpSyncDelay); err != nil {
-			log.Printf("enqueue mcp sync after create failed plugin_id=%s err=%v", plugin.PluginID, err)
+			return nil, err
+		}
+	}
+	if shouldQueueOpenVikingSync {
+		if err := s.queueOpenVikingPluginReconcile(plugin.PluginID, openVikingSyncDelay); err != nil {
+			return nil, err
 		}
 	}
 	return s.GetByPluginID(plugin.PluginID)
@@ -191,15 +201,25 @@ func (s *PluginService) Update(pluginID string, input UpsertPluginInput) (*Plugi
 	if err != nil {
 		return nil, err
 	}
+	shouldQueueMCPSync := plugin.RuntimeType == pluginRuntimeMCP && plugin.Status == pluginStatusEnabled
+	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
+	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
+		return nil, err
+	}
 	if err := dao.Plugin.Update(pluginID, plugin, tools); err != nil {
 		return nil, err
 	}
-	if plugin.RuntimeType == pluginRuntimeMCP {
+	if shouldQueueMCPSync {
 		if err := s.queueMCPPluginSync(plugin.PluginID, mcpSyncDelay); err != nil {
-			log.Printf("enqueue mcp sync after update failed plugin_id=%s err=%v", plugin.PluginID, err)
+			return nil, err
 		}
 	} else {
 		s.clearMCPPluginSync(pluginID)
+	}
+	if shouldQueueOpenVikingSync {
+		if err := s.queueOpenVikingPluginReconcile(plugin.PluginID, openVikingSyncDelay); err != nil {
+			return nil, err
+		}
 	}
 	return s.GetByPluginID(pluginID)
 }
@@ -256,10 +276,20 @@ func (s *PluginService) Delete(pluginID string) error {
 	if plugin.Source == pluginSourceBuiltin {
 		return errors.New("builtin plugin is read-only")
 	}
+	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
+	if err := s.ensureSyncQueuesReady(false, shouldQueueOpenVikingSync); err != nil {
+		return err
+	}
 	if err := dao.Plugin.Delete(pluginID); err != nil {
 		return err
 	}
 	s.clearMCPPluginSync(pluginID)
+	s.clearOpenVikingPluginTasks(pluginID)
+	if shouldQueueOpenVikingSync {
+		if err := s.queueOpenVikingPluginCleanup(pluginID, 0); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -275,16 +305,26 @@ func (s *PluginService) SetEnabled(pluginID string, enabled bool) (*PluginView, 
 	if enabled {
 		status = pluginStatusEnabled
 	}
+	shouldQueueMCPSync := plugin.RuntimeType == pluginRuntimeMCP && enabled
+	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
+	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
+		return nil, err
+	}
 	if err := dao.Plugin.UpdateStatus(pluginID, status); err != nil {
 		return nil, err
 	}
 	if plugin.RuntimeType == pluginRuntimeMCP {
 		if enabled {
 			if err := s.queueMCPPluginSync(pluginID, 0); err != nil {
-				log.Printf("enqueue mcp sync after enable failed plugin_id=%s err=%v", pluginID, err)
+				return nil, err
 			}
 		} else {
 			s.clearMCPPluginSync(pluginID)
+		}
+	}
+	if shouldQueueOpenVikingSync {
+		if err := s.queueOpenVikingPluginReconcile(pluginID, openVikingSyncDelay); err != nil {
+			return nil, err
 		}
 	}
 	return s.GetByPluginID(pluginID)

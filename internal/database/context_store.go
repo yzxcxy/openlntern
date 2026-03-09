@@ -20,6 +20,7 @@ type ContextStore struct {
 	baseURL    string
 	apiKey     string
 	skillsRoot string
+	toolsRoot  string
 	client     *http.Client
 }
 
@@ -29,6 +30,7 @@ func InitContextStore(cfg config.OpenVikingConfig) {
 	Context.baseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	Context.apiKey = strings.TrimSpace(cfg.APIKey)
 	Context.skillsRoot = strings.TrimRight(strings.TrimSpace(cfg.SkillsRoot), "/")
+	Context.toolsRoot = strings.TrimRight(strings.TrimSpace(cfg.ToolsRoot), "/")
 	timeoutSeconds := cfg.TimeoutSeconds
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 600
@@ -45,6 +47,14 @@ func (s *ContextStore) SkillsRoot() string {
 		return ""
 	}
 	return s.skillsRoot
+}
+
+// ToolsRoot 返回 OpenViking 中工具索引的根 URI。
+func (s *ContextStore) ToolsRoot() string {
+	if s == nil {
+		return ""
+	}
+	return s.toolsRoot
 }
 
 func (s *ContextStore) Get(ctx context.Context, endpoint string, params url.Values) ([]byte, error) {

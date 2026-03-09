@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -63,5 +64,81 @@ func TestBuildSkillInstructionMessage(t *testing.T) {
 	}
 	if !strings.Contains(message, "Skill A") || !strings.Contains(message, "Skill B") {
 		t.Fatalf("unexpected instruction message: %s", message)
+	}
+}
+
+// TestApplyForwardedPropsChainPluginSearch verifies plugin search config and query extraction.
+func TestApplyForwardedPropsChainPluginSearch(t *testing.T) {
+	input := &types.RunAgentInput{
+		Messages: []types.Message{
+			{ID: "u-1", Role: types.RoleUser, Content: "old question"},
+			{
+				ID:   "u-2",
+				Role: types.RoleUser,
+				Content: []any{
+					map[string]any{"type": "text", "text": "latest question"},
+					map[string]any{"type": "binary", "mimeType": "image/png", "url": "https://example.com/a.png"},
+				},
+			},
+		},
+		ForwardedProps: map[string]any{
+			"agentConfig": map[string]any{
+				"plugins": map[string]any{
+					"mode": "search",
+					"search": map[string]any{
+						"topK":         12,
+						"runtimeTypes": []any{" api ", "mcp", "invalid"},
+						"minScore":     0.45,
+						"maxMCPTools":  2,
+					},
+				},
+			},
+		},
+	}
+
+	runtimeConfig, err := applyForwardedPropsChain(context.Background(), input)
+	if err != nil {
+		t.Fatalf("applyForwardedPropsChain error: %v", err)
+	}
+	if runtimeConfig == nil {
+		t.Fatal("runtimeConfig is nil")
+	}
+	if runtimeConfig.Plugins.Mode != "search" {
+		t.Fatalf("unexpected plugin mode: %s", runtimeConfig.Plugins.Mode)
+	}
+	if runtimeConfig.Plugins.Search.TopK != 12 {
+		t.Fatalf("unexpected topK: %d", runtimeConfig.Plugins.Search.TopK)
+	}
+	if runtimeConfig.Plugins.Search.MaxMCPTools != 2 {
+		t.Fatalf("unexpected maxMCPTools: %d", runtimeConfig.Plugins.Search.MaxMCPTools)
+	}
+	if runtimeConfig.Plugins.Search.MinScore != 0.45 {
+		t.Fatalf("unexpected minScore: %f", runtimeConfig.Plugins.Search.MinScore)
+	}
+	if len(runtimeConfig.Plugins.Search.RuntimeTypes) != 2 {
+		t.Fatalf("unexpected runtime types: %#v", runtimeConfig.Plugins.Search.RuntimeTypes)
+	}
+	if runtimeConfig.Plugins.Search.RuntimeTypes[0] != "api" || runtimeConfig.Plugins.Search.RuntimeTypes[1] != "mcp" {
+		t.Fatalf("unexpected runtime types order: %#v", runtimeConfig.Plugins.Search.RuntimeTypes)
+	}
+	if runtimeConfig.Plugins.SearchQuery != "latest question" {
+		t.Fatalf("unexpected search query: %s", runtimeConfig.Plugins.SearchQuery)
+	}
+}
+
+// TestFindLastUserMessageTextAndIndexOnlyText verifies non-text content does not fallback to string dump.
+func TestFindLastUserMessageTextAndIndexOnlyText(t *testing.T) {
+	messages := []types.Message{
+		{ID: "u-1", Role: types.RoleUser, Content: "first"},
+		{ID: "a-1", Role: types.RoleAssistant, Content: "answer"},
+		{ID: "u-2", Role: types.RoleUser, Content: map[string]any{"foo": "bar"}},
+	}
+
+	text, index := findLastUserMessageTextAndIndex(messages)
+	if index != 2 {
+		t.Fatalf("unexpected user index: %d", index)
+	}
+	if text != "" {
+		t.Fatalf("expected empty text, got: %s", text)
 	}
 }

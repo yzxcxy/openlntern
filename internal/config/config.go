@@ -45,13 +45,17 @@ type COSConfig struct {
 }
 
 type PluginConfig struct {
-	DefaultIconURL         string `yaml:"default_icon_url"`
-	MCPSyncDelaySeconds    int    `yaml:"mcp_sync_delay_seconds"`
-	MCPSyncPollSeconds     int    `yaml:"mcp_sync_poll_seconds"`
-	MCPSyncScanSeconds     int    `yaml:"mcp_sync_scan_seconds"`
-	MCPSyncIntervalSeconds int    `yaml:"mcp_sync_interval_seconds"`
-	MCPSyncTimeoutSeconds  int    `yaml:"mcp_sync_timeout_seconds"`
-	MCPSyncRetrySeconds    int    `yaml:"mcp_sync_retry_seconds"`
+	DefaultIconURL               string `yaml:"default_icon_url"`
+	MCPSyncDelaySeconds          int    `yaml:"mcp_sync_delay_seconds"`
+	MCPSyncPollSeconds           int    `yaml:"mcp_sync_poll_seconds"`
+	MCPSyncScanSeconds           int    `yaml:"mcp_sync_scan_seconds"`
+	MCPSyncIntervalSeconds       int    `yaml:"mcp_sync_interval_seconds"`
+	MCPSyncTimeoutSeconds        int    `yaml:"mcp_sync_timeout_seconds"`
+	MCPSyncRetrySeconds          int    `yaml:"mcp_sync_retry_seconds"`
+	OpenVikingSyncDelaySeconds   int    `yaml:"openviking_sync_delay_seconds"`
+	OpenVikingSyncPollSeconds    int    `yaml:"openviking_sync_poll_seconds"`
+	OpenVikingSyncTimeoutSeconds int    `yaml:"openviking_sync_timeout_seconds"`
+	OpenVikingSyncRetrySeconds   int    `yaml:"openviking_sync_retry_seconds"`
 }
 
 type LLMConfig struct {
@@ -88,6 +92,7 @@ type OpenVikingConfig struct {
 	BaseURL        string `yaml:"base_url"`
 	APIKey         string `yaml:"api_key"`
 	SkillsRoot     string `yaml:"skills_root"`
+	ToolsRoot      string `yaml:"tools_root"`
 	TimeoutSeconds int    `yaml:"timeout_seconds"`
 }
 

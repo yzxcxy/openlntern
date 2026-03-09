@@ -7,6 +7,7 @@ import (
 
 	"openIntern/internal/database"
 	"openIntern/internal/models"
+	"openIntern/internal/util"
 
 	"gorm.io/gorm"
 )
@@ -18,6 +19,12 @@ type PluginListFilter struct {
 	RuntimeType string
 	Status      string
 	Keyword     string
+}
+
+// EnabledRuntimeToolRecord 表示可运行工具及其运行时类型。
+type EnabledRuntimeToolRecord struct {
+	ToolID      string `gorm:"column:tool_id"`
+	RuntimeType string `gorm:"column:runtime_type"`
 }
 
 type PluginDAO struct{}
@@ -139,10 +146,26 @@ func (d *PluginDAO) UpdateStatus(pluginID string, status string) error {
 	return database.DB.Model(&models.Plugin{}).Where("plugin_id = ?", pluginID).Update("status", status).Error
 }
 
+// UpdateLastSyncAt 更新插件最近同步时间。
+func (d *PluginDAO) UpdateLastSyncAt(pluginID string, syncedAt time.Time) error {
+	return database.DB.Model(&models.Plugin{}).Where("plugin_id = ?", pluginID).Update("last_sync_at", &syncedAt).Error
+}
+
 func (d *PluginDAO) ListEnabled() ([]models.Plugin, error) {
 	var plugins []models.Plugin
 	if err := database.DB.
 		Where("status = ?", "enabled").
+		Order("updated_at DESC").
+		Find(&plugins).Error; err != nil {
+		return nil, err
+	}
+	return plugins, nil
+}
+
+// ListAll 返回全部插件记录。
+func (d *PluginDAO) ListAll() ([]models.Plugin, error) {
+	var plugins []models.Plugin
+	if err := database.DB.
 		Order("updated_at DESC").
 		Find(&plugins).Error; err != nil {
 		return nil, err
@@ -192,6 +215,29 @@ func (d *PluginDAO) ListRuntimeTools(runtimeType, status string, toolIDs []strin
 		return nil, err
 	}
 	return tools, nil
+}
+
+// ListEnabledRuntimeToolRecords 根据 tool_id 列表过滤可运行工具并返回运行时类型。
+func (d *PluginDAO) ListEnabledRuntimeToolRecords(toolIDs []string, runtimeTypes []string) ([]EnabledRuntimeToolRecord, error) {
+	toolIDs = util.NormalizeUniqueStringList(toolIDs)
+	if len(toolIDs) == 0 {
+		return []EnabledRuntimeToolRecord{}, nil
+	}
+
+	query := database.DB.
+		Table("tool").
+		Select("tool.tool_id AS tool_id, plugin.runtime_type AS runtime_type").
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
+		Where("tool.tool_id IN ? AND tool.enabled = ? AND plugin.status = ?", toolIDs, true, "enabled")
+	if len(runtimeTypes) > 0 {
+		query = query.Where("plugin.runtime_type IN ?", runtimeTypes)
+	}
+
+	var rows []EnabledRuntimeToolRecord
+	if err := query.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {

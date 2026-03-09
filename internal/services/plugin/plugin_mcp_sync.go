@@ -80,10 +80,7 @@ func (s *PluginService) queueMCPPluginSync(pluginID string, delay time.Duration)
 
 	redisClient := database.GetRedis()
 	if redisClient == nil {
-		time.AfterFunc(delay, func() {
-			s.triggerScheduledMCPSync(pluginID)
-		})
-		return nil
+		return errors.New("mcp sync queue requires redis")
 	}
 
 	runAt := time.Now().Add(delay).UnixMilli()
@@ -128,7 +125,7 @@ func (s *PluginService) runMCPSyncQueueWorker() {
 func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int64) error {
 	redisClient := database.GetRedis()
 	if redisClient == nil {
-		return nil
+		return errors.New("mcp sync queue requires redis")
 	}
 	if limit <= 0 {
 		limit = defaultMCPSyncWorkerBatch
@@ -192,7 +189,6 @@ func (s *PluginService) scheduleDueMCPSyncs(ctx context.Context) error {
 	for _, plugin := range plugins {
 		if err := s.queueMCPPluginSync(plugin.PluginID, 0); err != nil {
 			log.Printf("enqueue scheduled mcp sync failed plugin_id=%s err=%v", plugin.PluginID, err)
-			go s.triggerScheduledMCPSync(plugin.PluginID)
 		}
 	}
 
@@ -265,8 +261,70 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 	if err != nil {
 		return err
 	}
+	syncedAt := time.Now()
 
-	return dao.Plugin.ReplaceToolsAndUpdateSyncTime(plugin.PluginID, syncedTools, time.Now())
+	if !hasMCPToolRecordChanges(existingTools, syncedTools) {
+		return dao.Plugin.UpdateLastSyncAt(plugin.PluginID, syncedAt)
+	}
+	if err := s.ensureSyncQueuesReady(false, dao.Plugin.ToolStoreConfigured()); err != nil {
+		return err
+	}
+
+	if err := dao.Plugin.ReplaceToolsAndUpdateSyncTime(plugin.PluginID, syncedTools, syncedAt); err != nil {
+		return err
+	}
+	if err := s.queueOpenVikingPluginReconcile(plugin.PluginID, 0); err != nil {
+		return err
+	}
+	return nil
+}
+
+type mcpToolComparable struct {
+	ToolID           string
+	PluginID         string
+	ToolName         string
+	Description      string
+	InputSchemaJSON  string
+	OutputSchemaJSON string
+	ToolResponseMode string
+	Enabled          bool
+	TimeoutMS        int
+}
+
+// hasMCPToolRecordChanges 比较 MCP 工具快照是否发生变化。
+func hasMCPToolRecordChanges(existingTools []models.Tool, syncedTools []models.Tool) bool {
+	if len(existingTools) != len(syncedTools) {
+		return true
+	}
+	existingMap := make(map[string]mcpToolComparable, len(existingTools))
+	for _, item := range existingTools {
+		existingMap[item.ToolID] = toMCPToolComparable(item)
+	}
+	for _, item := range syncedTools {
+		existing, ok := existingMap[item.ToolID]
+		if !ok {
+			return true
+		}
+		if existing != toMCPToolComparable(item) {
+			return true
+		}
+	}
+	return false
+}
+
+// toMCPToolComparable 仅提取 MCP 同步判定所需字段。
+func toMCPToolComparable(item models.Tool) mcpToolComparable {
+	return mcpToolComparable{
+		ToolID:           strings.TrimSpace(item.ToolID),
+		PluginID:         strings.TrimSpace(item.PluginID),
+		ToolName:         strings.TrimSpace(item.ToolName),
+		Description:      strings.TrimSpace(item.Description),
+		InputSchemaJSON:  strings.TrimSpace(item.InputSchemaJSON),
+		OutputSchemaJSON: strings.TrimSpace(item.OutputSchemaJSON),
+		ToolResponseMode: strings.TrimSpace(item.ToolResponseMode),
+		Enabled:          item.Enabled,
+		TimeoutMS:        item.TimeoutMS,
+	}
 }
 
 func fetchMCPToolDefinitions(ctx context.Context, baseURL string, protocol string) ([]mcp.Tool, error) {
