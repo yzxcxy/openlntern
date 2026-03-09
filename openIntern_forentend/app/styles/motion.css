@@ -1,0 +1,170 @@
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-safe-fade-in {
+  animation: fade-in var(--motion-emphasized) both;
+}
+
+.motion-safe-slide-up {
+  animation: slide-up var(--motion-emphasized) both;
+}
+
+.motion-safe-lift {
+  transition:
+    transform var(--motion-standard),
+    box-shadow var(--motion-standard),
+    border-color var(--motion-standard),
+    background-color var(--motion-standard),
+    color var(--motion-standard);
+}
+
+.motion-safe-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.motion-safe-highlight {
+  transition:
+    background-color var(--motion-standard),
+    border-color var(--motion-standard),
+    color var(--motion-standard),
+    opacity var(--motion-standard);
+}
+
+.chat-page .semi-ai-chat-dialogue-content-tool-call {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 255, 0.07),
+    rgba(14, 165, 233, 0.08)
+  );
+  color: var(--color-text-secondary);
+  padding: 10px 12px;
+}
+
+.chat-page .semi-ai-chat-dialogue-content-bubble {
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.chat-page .semi-ai-chat-dialogue-content-bubble pre {
+  border-radius: var(--radius-md);
+}
+
+.chat-page [class*="semi-ai-chat-input"] .semi-input-textarea-wrapper {
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.chat-page [class*="semi-ai-chat-input"] .semi-input-textarea-wrapper:hover {
+  border-color: var(--color-border-strong);
+  background: #fff;
+}
+
+.chat-page [class*="semi-ai-chat-input"] .semi-input-textarea-wrapper-focus {
+  border-color: var(--color-action-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 255, 0.12);
+}
+
+.kb-page .semi-card {
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-page .semi-card-header {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  background: linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0.95),
+    rgba(255, 255, 255, 0.9)
+  );
+}
+
+.kb-page .semi-list-item {
+  transition:
+    background-color var(--motion-standard),
+    color var(--motion-standard);
+}
+
+.kb-page .semi-upload-drag-area {
+  border-radius: var(--radius-lg);
+  border-color: var(--color-border-default);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.kb-page .semi-tree-option {
+  border-radius: var(--radius-md);
+  transition:
+    background-color var(--motion-standard),
+    color var(--motion-standard),
+    box-shadow var(--motion-standard);
+}
+
+.kb-page .semi-tree-option:hover {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+.kb-page .semi-tree-option-selected,
+.kb-page .semi-tree-option-selected:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 255, 0.12),
+    rgba(37, 99, 255, 0.04)
+  );
+}
+
+.kb-page .semi-tree-option-drag-over,
+.kb-page .semi-tree-option-drag-over:hover {
+  background: rgba(14, 165, 233, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.18);
+}
+
+.kb-page .semi-tree-option-drag-over-gap-top::before,
+.kb-page .semi-tree-option-drag-over-gap-bottom::after {
+  background-color: var(--color-action-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .motion-safe-lift:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
+}

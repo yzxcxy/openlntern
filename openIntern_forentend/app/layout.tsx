@@ -1,0 +1,51 @@
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import "./a2ui-theme.css";
+import "../node_modules/@douyinfe/semi-ui-19/dist/css/semi.min.css";
+import "./styles/tokens.css";
+import "./styles/motion.css";
+import "@copilotkit/react-core/v2/styles.css";
+import "katex/dist/katex.min.css";
+import "highlight.js/styles/github-dark.css";
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+});
+
+export const metadata: Metadata = {
+  title: "让你专注更美好的事",
+  description: "让你专注更美好的事",
+  icons: {
+    icon: "/openIntern_logo_concept_1_open_connection.svg",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Google+Sans+Code&family=Google+Sans+Flex:opsz,wght,ROND@6..144,1..1000,100&family=Google+Sans:opsz,wght@17..18,400..700&display=block&family=IBM+Plex+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Google+Symbols:opsz,wght,FILL,GRAD,ROND@20..48,100..700,0..1,-50..200,0..100&display=swap&icon_names=arrow_drop_down,check_circle,close,communication,content_copy,delete,draw,error,info,mobile_layout,pen_size_1,progress_activity,rectangle,send,upload,warning"
+        />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        {children}
+      </body>
+    </html>
+  );
+}
