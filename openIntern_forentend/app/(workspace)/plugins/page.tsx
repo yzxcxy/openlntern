@@ -103,7 +103,7 @@ type PluginDraft = {
   runtimeType: RuntimeType;
   mcpURL: string;
   mcpProtocol: MCPProtocol;
-  tool: ToolDraft;
+  tools: ToolDraft[];
 };
 
 type DetailFieldSection = {
@@ -183,7 +183,7 @@ const createPluginDraft = (): PluginDraft => ({
   runtimeType: "",
   mcpURL: "",
   mcpProtocol: "sse",
-  tool: createToolDraft(),
+  tools: [createToolDraft()],
 });
 
 const runtimeLabel: Record<Exclude<RuntimeType, "">, string> = {
@@ -544,6 +544,24 @@ const applyCodeToolDefaults = (tool: ToolDraft): ToolDraft => ({
   bodyFields: getEffectiveCodeBodyFields(tool),
 });
 
+const requiresRuntimeTools = (runtimeType: RuntimeType) =>
+  runtimeType === "api" || runtimeType === "code";
+
+// 保证 API/Code 插件至少有一个工具，避免表单进入空状态。
+const ensureRuntimeTools = (tools: ToolDraft[], runtimeType: RuntimeType): ToolDraft[] => {
+  if (!requiresRuntimeTools(runtimeType)) {
+    return tools;
+  }
+  if (tools.length === 0) {
+    const nextTool = createToolDraft();
+    return runtimeType === "code" ? [applyCodeToolDefaults(nextTool)] : [nextTool];
+  }
+  if (runtimeType === "code") {
+    return tools.map((tool) => applyCodeToolDefaults(tool));
+  }
+  return tools;
+};
+
 const buildFieldSchemaObject = (field: PluginField): Record<string, unknown> => {
   const schema: Record<string, unknown> = {
     type: field.type,
@@ -713,41 +731,43 @@ const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
     return payload;
   }
 
-  const toolPayload: Record<string, unknown> = {
-    ...(draft.tool.toolId ? { tool_id: draft.tool.toolId } : {}),
-    tool_name: draft.tool.toolName.trim(),
-    description: draft.tool.description.trim(),
-    enabled: true,
-  };
+  const nextTools = ensureRuntimeTools(draft.tools, draft.runtimeType);
+  payload.tools = nextTools.map((tool) => {
+    const toolPayload: Record<string, unknown> = {
+      ...(tool.toolId ? { tool_id: tool.toolId } : {}),
+      tool_name: tool.toolName.trim(),
+      description: tool.description.trim(),
+      enabled: true,
+    };
 
-  if (draft.runtimeType === "api") {
-    toolPayload.tool_response_mode = draft.tool.toolResponseMode;
-    toolPayload.api_request_type = draft.tool.apiRequestType;
-    toolPayload.request_url = draft.tool.requestURL.trim();
-    toolPayload.auth_config_ref = "";
-    toolPayload.timeout_ms =
-      Number.isFinite(draft.tool.timeoutMS) && draft.tool.timeoutMS >= 1
-        ? draft.tool.timeoutMS
-        : 30000;
-    toolPayload.query_fields = draft.tool.queryFields.map((field) => toFieldPayload(field));
-    toolPayload.header_fields = draft.tool.headerFields.map((field) => toFieldPayload(field));
-    toolPayload.body_fields =
-      draft.tool.apiRequestType === "POST"
-        ? draft.tool.bodyFields.map((field) => toFieldPayload(field))
-        : [];
-  }
+    if (draft.runtimeType === "api") {
+      toolPayload.tool_response_mode = tool.toolResponseMode;
+      toolPayload.api_request_type = tool.apiRequestType;
+      toolPayload.request_url = tool.requestURL.trim();
+      toolPayload.auth_config_ref = "";
+      toolPayload.timeout_ms =
+        Number.isFinite(tool.timeoutMS) && tool.timeoutMS >= 1
+          ? tool.timeoutMS
+          : 30000;
+      toolPayload.query_fields = tool.queryFields.map((field) => toFieldPayload(field));
+      toolPayload.header_fields = tool.headerFields.map((field) => toFieldPayload(field));
+      toolPayload.body_fields =
+        tool.apiRequestType === "POST"
+          ? tool.bodyFields.map((field) => toFieldPayload(field))
+          : [];
+    }
 
-  if (draft.runtimeType === "code") {
-    const codeBodyFields = getEffectiveCodeBodyFields(draft.tool);
-    const outputFields = sanitizeOutputFields(draft.tool.outputFields);
-    toolPayload.tool_response_mode = "non_streaming";
-    toolPayload.code_language = draft.tool.codeLanguage.trim();
-    toolPayload.code = draft.tool.code;
-    toolPayload.body_fields = codeBodyFields.map((field) => toFieldPayload(field));
-    toolPayload.output_schema_json = buildObjectSchemaJSON(outputFields);
-  }
-
-  payload.tools = [toolPayload];
+    if (draft.runtimeType === "code") {
+      const codeBodyFields = getEffectiveCodeBodyFields(tool);
+      const outputFields = sanitizeOutputFields(tool.outputFields);
+      toolPayload.tool_response_mode = "non_streaming";
+      toolPayload.code_language = tool.codeLanguage.trim();
+      toolPayload.code = tool.code;
+      toolPayload.body_fields = codeBodyFields.map((field) => toFieldPayload(field));
+      toolPayload.output_schema_json = buildObjectSchemaJSON(outputFields);
+    }
+    return toolPayload;
+  });
   return payload;
 };
 
@@ -845,24 +865,36 @@ const validateDraft = (draft: PluginDraft) => {
   if (!draft.runtimeType) return "请选择插件运行方式";
   if (!draft.name.trim()) return "请输入插件名称";
   if (draft.runtimeType === "api") {
-    if (!draft.tool.toolName.trim()) return "请输入工具名称";
-    if (!isValidToolName(draft.tool.toolName)) {
-      return "工具名称仅支持字母、数字、下划线和中划线";
-    }
-    if (!draft.tool.toolResponseMode) return "请选择响应模式";
-    if (!draft.tool.requestURL.trim() || !validateURL(draft.tool.requestURL.trim())) {
-      return "请输入合法的 RequestURL";
-    }
-    const queryError = validateFieldList(draft.tool.queryFields, "Query 参数");
-    if (queryError) return queryError;
-    const headerError = validateFieldList(draft.tool.headerFields, "Header 参数");
-    if (headerError) return headerError;
-    if (draft.tool.apiRequestType === "GET" && draft.tool.bodyFields.length > 0) {
-      return "GET 类型不支持 body";
-    }
-    if (draft.tool.apiRequestType === "POST") {
-      const bodyError = validateFieldList(draft.tool.bodyFields, "Body 参数");
-      if (bodyError) return bodyError;
+    const tools = ensureRuntimeTools(draft.tools, draft.runtimeType);
+    if (tools.length === 0) return "请至少添加一个工具";
+    const toolNameSet = new Set<string>();
+    for (let index = 0; index < tools.length; index += 1) {
+      const tool = tools[index];
+      const label = `工具 ${index + 1}`;
+      const toolName = tool.toolName.trim();
+      if (!toolName) return `${label}：请输入工具名称`;
+      if (!isValidToolName(toolName)) {
+        return `${label}：工具名称仅支持字母、数字、下划线和中划线`;
+      }
+      if (toolNameSet.has(toolName)) {
+        return `工具名称不能重复：${toolName}`;
+      }
+      toolNameSet.add(toolName);
+      if (!tool.toolResponseMode) return `${label}：请选择响应模式`;
+      if (!tool.requestURL.trim() || !validateURL(tool.requestURL.trim())) {
+        return `${label}：请输入合法的 RequestURL`;
+      }
+      const queryError = validateFieldList(tool.queryFields, `${label}/Query 参数`);
+      if (queryError) return queryError;
+      const headerError = validateFieldList(tool.headerFields, `${label}/Header 参数`);
+      if (headerError) return headerError;
+      if (tool.apiRequestType === "GET" && tool.bodyFields.length > 0) {
+        return `${label}：GET 类型不支持 body`;
+      }
+      if (tool.apiRequestType === "POST") {
+        const bodyError = validateFieldList(tool.bodyFields, `${label}/Body 参数`);
+        if (bodyError) return bodyError;
+      }
     }
   }
   if (draft.runtimeType === "mcp") {
@@ -871,18 +903,33 @@ const validateDraft = (draft: PluginDraft) => {
     }
   }
   if (draft.runtimeType === "code") {
-    if (!draft.tool.toolName.trim()) return "请输入工具名称";
-    if (!isValidToolName(draft.tool.toolName)) {
-      return "工具名称仅支持字母、数字、下划线和中划线";
+    const tools = ensureRuntimeTools(draft.tools, draft.runtimeType);
+    if (tools.length === 0) return "请至少添加一个工具";
+    const toolNameSet = new Set<string>();
+    for (let index = 0; index < tools.length; index += 1) {
+      const tool = tools[index];
+      const label = `工具 ${index + 1}`;
+      const toolName = tool.toolName.trim();
+      if (!toolName) return `${label}：请输入工具名称`;
+      if (!isValidToolName(toolName)) {
+        return `${label}：工具名称仅支持字母、数字、下划线和中划线`;
+      }
+      if (toolNameSet.has(toolName)) {
+        return `工具名称不能重复：${toolName}`;
+      }
+      toolNameSet.add(toolName);
+      if (!["python", "javascript"].includes(tool.codeLanguage.trim())) {
+        return `${label}：代码语言仅支持 python 或 javascript`;
+      }
+      if (!tool.code.trim()) return `${label}：请输入代码内容`;
+      const inputError = validateFieldList(tool.bodyFields, `${label}/输入参数`);
+      if (inputError) return inputError;
+      const outputError = validateFieldList(
+        sanitizeOutputFields(tool.outputFields),
+        `${label}/输出参数`
+      );
+      if (outputError) return outputError;
     }
-    if (!["python", "javascript"].includes(draft.tool.codeLanguage.trim())) {
-      return "代码语言仅支持 python 或 javascript";
-    }
-    if (!draft.tool.code.trim()) return "请输入代码内容";
-    const inputError = validateFieldList(draft.tool.bodyFields, "输入参数");
-    if (inputError) return inputError;
-    const outputError = validateFieldList(sanitizeOutputFields(draft.tool.outputFields), "输出参数");
-    if (outputError) return outputError;
   }
   return "";
 };
@@ -1213,6 +1260,63 @@ function FieldTable({
   );
 }
 
+function ToolDraftSwitcher({
+  tools,
+  activeIndex,
+  onSelect,
+  onAdd,
+  onRemove,
+}: {
+  tools: ToolDraft[];
+  activeIndex: number;
+  onSelect: (index: number) => void;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-[var(--color-text-primary)]">
+          工具配置（{tools.length}）
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <UiButton type="button" variant="secondary" size="sm" onClick={onAdd}>
+            添加工具
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onRemove(activeIndex)}
+            disabled={tools.length <= 1}
+          >
+            删除当前工具
+          </UiButton>
+        </div>
+      </div>
+      <div className="mt-3 flex min-w-full gap-2 overflow-x-auto pb-1">
+        {tools.map((tool, index) => {
+          const active = index === activeIndex;
+          return (
+            <button
+              key={`${tool.toolId || "draft"}-${index}`}
+              type="button"
+              onClick={() => onSelect(index)}
+              className={`shrink-0 whitespace-nowrap rounded-[var(--radius-md)] border px-3 py-1.5 text-sm transition ${
+                active
+                  ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.08)] font-semibold text-[var(--color-action-primary)]"
+                  : "border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)]"
+              }`}
+            >
+              {tool.toolName.trim() || `工具 ${index + 1}`}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CodeToolEditor({
   tool,
   onChange,
@@ -1456,12 +1560,18 @@ export default function PluginsPage() {
   const [formError, setFormError] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [selectedToolKey, setSelectedToolKey] = useState("");
+  const [wizardToolIndex, setWizardToolIndex] = useState(0);
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [defaultPluginIconURL, setDefaultPluginIconURL] = useState("");
   const iconUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const previewJSON = useMemo(() => JSON.stringify(buildPayload(draft), null, 2), [draft]);
+  const activeDraftTool = useMemo(() => {
+    const nextTools = ensureRuntimeTools(draft.tools, draft.runtimeType);
+    if (nextTools.length === 0) return null;
+    return nextTools[Math.min(wizardToolIndex, nextTools.length - 1)] ?? null;
+  }, [draft.runtimeType, draft.tools, wizardToolIndex]);
   const activeTool = useMemo(() => {
     const tools = selectedPlugin?.tools ?? [];
     if (tools.length === 0) return null;
@@ -1493,6 +1603,18 @@ export default function PluginsPage() {
       current && nextKeys.includes(current) ? current : (nextKeys[0] ?? "")
     );
   }, [selectedPlugin]);
+
+  useEffect(() => {
+    if (!requiresRuntimeTools(draft.runtimeType)) {
+      setWizardToolIndex(0);
+      return;
+    }
+    setWizardToolIndex((current) => {
+      const nextTools = ensureRuntimeTools(draft.tools, draft.runtimeType);
+      if (nextTools.length === 0) return 0;
+      return Math.min(current, nextTools.length - 1);
+    });
+  }, [draft.runtimeType, draft.tools]);
 
   const fetchList = useCallback(async () => {
     const token = getToken();
@@ -1573,40 +1695,42 @@ export default function PluginsPage() {
   };
 
   const fillDraftFromPlugin = (plugin: PluginRecord) => {
-    const tool = plugin.tools?.[0];
+    const runtimeType = plugin.runtime_type ?? "";
+    const draftTools = (plugin.tools ?? []).map((tool) => ({
+      toolId: tool.tool_id,
+      toolName: tool.tool_name ?? "",
+      description: tool.description ?? "",
+      toolResponseMode:
+        tool.tool_response_mode === "streaming" ? "streaming" : "non_streaming",
+      apiRequestType: tool.api_request_type ?? "GET",
+      requestURL: tool.request_url ?? "",
+      authConfigRef: tool.auth_config_ref ?? "",
+      timeoutMS:
+        typeof tool.timeout_ms === "number" && tool.timeout_ms >= 1
+          ? tool.timeout_ms
+          : 30000,
+      queryFields: parseFields(tool.query_fields),
+      headerFields: parseFields(tool.header_fields),
+      bodyFields: parseFields(tool.body_fields),
+      outputFields: getOutputFields(tool),
+      codeLanguage: tool.code_language === "python" ? "python" : "javascript",
+      code:
+        tool.code && tool.code.trim()
+          ? tool.code
+          : getCodeTemplate(tool.code_language === "python" ? "python" : "javascript"),
+    }));
     setDraft({
       pluginId: plugin.plugin_id,
       name: plugin.name ?? "",
       description: plugin.description ?? "",
       icon: plugin.icon ?? "",
       enabled: plugin.status !== "disabled",
-      runtimeType: plugin.runtime_type ?? "",
+      runtimeType,
       mcpURL: plugin.mcp_url ?? "",
       mcpProtocol: normalizeMCPProtocolValue(plugin.mcp_protocol),
-      tool: {
-        toolId: tool?.tool_id,
-        toolName: tool?.tool_name ?? "",
-        description: tool?.description ?? "",
-        toolResponseMode:
-          tool?.tool_response_mode === "streaming" ? "streaming" : "non_streaming",
-        apiRequestType: tool?.api_request_type ?? "GET",
-        requestURL: tool?.request_url ?? "",
-        authConfigRef: tool?.auth_config_ref ?? "",
-        timeoutMS:
-          typeof tool?.timeout_ms === "number" && tool.timeout_ms >= 1
-            ? tool.timeout_ms
-            : 30000,
-        queryFields: parseFields(tool?.query_fields),
-        headerFields: parseFields(tool?.header_fields),
-        bodyFields: parseFields(tool?.body_fields),
-        outputFields: getOutputFields(tool ?? {}),
-        codeLanguage: tool?.code_language === "python" ? "python" : "javascript",
-        code:
-          tool?.code && tool.code.trim()
-            ? tool.code
-            : getCodeTemplate(tool?.code_language === "python" ? "python" : "javascript"),
-      },
+      tools: ensureRuntimeTools(draftTools, runtimeType),
     });
+    setWizardToolIndex(0);
   };
 
   const openCreate = () => {
@@ -1614,6 +1738,7 @@ export default function PluginsPage() {
       return;
     }
     setDraft(createPluginDraft());
+    setWizardToolIndex(0);
     setWizardStep(1);
     setFormError("");
     setIsWizardOpen(true);
@@ -1734,6 +1859,55 @@ export default function PluginsPage() {
     },
     [getToken]
   );
+
+  const updateDraftToolAt = useCallback(
+    (index: number, updater: (tool: ToolDraft) => ToolDraft) => {
+      setDraft((current) => {
+        const currentTools = ensureRuntimeTools(current.tools, current.runtimeType);
+        if (currentTools.length === 0) {
+          return current;
+        }
+        const safeIndex = Math.min(Math.max(index, 0), currentTools.length - 1);
+        const nextTools = currentTools.map((tool, toolIndex) =>
+          toolIndex === safeIndex ? updater(tool) : tool
+        );
+        return { ...current, tools: nextTools };
+      });
+    },
+    []
+  );
+
+  const addDraftTool = useCallback(() => {
+    const nextIndex = draft.tools.length;
+    setDraft((current) => {
+      const currentTools = ensureRuntimeTools(current.tools, current.runtimeType);
+      const nextTool =
+        current.runtimeType === "code" ? applyCodeToolDefaults(createToolDraft()) : createToolDraft();
+      return {
+        ...current,
+        tools: [...currentTools, nextTool],
+      };
+    });
+    setWizardToolIndex(nextIndex);
+  }, [draft.tools.length]);
+
+  const removeDraftToolAt = useCallback((index: number) => {
+    setDraft((current) => {
+      if (!requiresRuntimeTools(current.runtimeType) || current.tools.length <= 1) {
+        return current;
+      }
+      return {
+        ...current,
+        tools: current.tools.filter((_, toolIndex) => toolIndex !== index),
+      };
+    });
+    setWizardToolIndex((current) => {
+      if (current <= index) {
+        return Math.max(0, current - 1);
+      }
+      return current - 1;
+    });
+  }, []);
 
   const goNext = async () => {
     if (wizardStep === 1 && !draft.runtimeType) {
@@ -1977,8 +2151,9 @@ export default function PluginsPage() {
                         onClick={() => {
                           const next = createPluginDraft();
                           next.runtimeType = "api";
-                          next.tool.toolResponseMode = "non_streaming";
+                          next.tools = ensureRuntimeTools(next.tools, "api");
                           setDraft(next);
+                          setWizardToolIndex(0);
                           setWizardStep(2);
                           setFormError("");
                           setIsWizardOpen(true);
@@ -1993,6 +2168,7 @@ export default function PluginsPage() {
                           const next = createPluginDraft();
                           next.runtimeType = "mcp";
                           setDraft(next);
+                          setWizardToolIndex(0);
                           setWizardStep(2);
                           setFormError("");
                           setIsWizardOpen(true);
@@ -2006,8 +2182,9 @@ export default function PluginsPage() {
                         onClick={() => {
                           const next = createPluginDraft();
                           next.runtimeType = "code";
-                          next.tool = applyCodeToolDefaults(next.tool);
+                          next.tools = ensureRuntimeTools(next.tools, "code");
                           setDraft(next);
+                          setWizardToolIndex(0);
                           setWizardStep(2);
                           setFormError("");
                           setIsWizardOpen(true);
@@ -2450,16 +2627,14 @@ export default function PluginsPage() {
                             <button
                               key={runtime}
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
                                 setDraft((current) => ({
                                   ...current,
                                   runtimeType: runtime,
-                                  tool:
-                                    runtime === "code"
-                                      ? applyCodeToolDefaults(current.tool)
-                                      : current.tool,
-                                }))
-                              }
+                                  tools: ensureRuntimeTools(current.tools, runtime),
+                                }));
+                                setWizardToolIndex(0);
+                              }}
                               className={`rounded-[var(--radius-lg)] border p-4 text-left ${
                                 draft.runtimeType === runtime
                                   ? "border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.06)]"

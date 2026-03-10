@@ -19,9 +19,11 @@ const (
 	defaultAgentMemoryFindLimit  = 2
 	defaultPreferenceFindLimit   = 2
 	defaultMemoryContextMaxItems = 5
-	defaultMemorySearchTimeout   = 2 * time.Second
-	defaultPreferenceQuery       = "用户偏好 回答风格 语气 风格偏好 写作风格"
-	memoryContextPrefix          = "以下是与当前请求相关的长期记忆，仅在确实相关时参考；若与用户当前明确要求冲突，以当前要求为准："
+	// defaultMemoryScoreThreshold filters low-relevance long-term memory hits before prompt injection.
+	defaultMemoryScoreThreshold = 0.4
+	defaultMemorySearchTimeout  = 2 * time.Second
+	defaultPreferenceQuery      = "用户偏好 回答风格 语气 风格偏好 写作风格"
+	memoryContextPrefix         = "以下是与当前请求相关的长期记忆，仅在确实相关时参考；若与用户当前明确要求冲突，以当前要求为准："
 )
 
 // MemoryRetrieverService retrieves OpenViking long-term memories for the current turn.
@@ -77,9 +79,10 @@ func InitMemoryRetriever(cfg config.OpenVikingConfig) {
 // findRelevantMemoryMatches queries user memories first and agent memories second, then trims the merged result set.
 func (s *MemoryRetrieverService) findRelevantMemoryMatches(ctx context.Context, query string) ([]dao.MemorySearchMatch, error) {
 	userMatches, err := dao.MemorySearch.FindMemoryMatches(ctx, dao.MemorySearchFilter{
-		Query:     query,
-		TargetURI: dao.MemorySearch.UserRootURI(),
-		Limit:     defaultUserMemoryFindLimit,
+		Query:          query,
+		TargetURI:      dao.MemorySearch.UserRootURI(),
+		Limit:          defaultUserMemoryFindLimit,
+		ScoreThreshold: defaultMemoryScoreThreshold,
 	})
 	if err != nil {
 		return nil, err
@@ -87,9 +90,10 @@ func (s *MemoryRetrieverService) findRelevantMemoryMatches(ctx context.Context, 
 
 	if !containsPreferenceMemory(userMatches) {
 		preferenceMatches, preferenceErr := dao.MemorySearch.FindMemoryMatches(ctx, dao.MemorySearchFilter{
-			Query:     defaultPreferenceQuery,
-			TargetURI: dao.MemorySearch.UserRootURI(),
-			Limit:     defaultPreferenceFindLimit,
+			Query:          defaultPreferenceQuery,
+			TargetURI:      dao.MemorySearch.UserRootURI(),
+			Limit:          defaultPreferenceFindLimit,
+			ScoreThreshold: defaultMemoryScoreThreshold,
 		})
 		if preferenceErr == nil {
 			userMatches = append(userMatches, preferenceMatches...)
@@ -97,9 +101,10 @@ func (s *MemoryRetrieverService) findRelevantMemoryMatches(ctx context.Context, 
 	}
 
 	agentMatches, err := dao.MemorySearch.FindMemoryMatches(ctx, dao.MemorySearchFilter{
-		Query:     query,
-		TargetURI: dao.MemorySearch.AgentRootURI(),
-		Limit:     defaultAgentMemoryFindLimit,
+		Query:          query,
+		TargetURI:      dao.MemorySearch.AgentRootURI(),
+		Limit:          defaultAgentMemoryFindLimit,
+		ScoreThreshold: defaultMemoryScoreThreshold,
 	})
 	if err != nil {
 		return nil, err
@@ -178,47 +183,23 @@ func buildMemoryContextMessage(matches []dao.MemorySearchMatch) string {
 		return ""
 	}
 
-	lines := make([]string, 0, len(matches)*2+1)
+	lines := make([]string, 0, len(matches)+1)
 	lines = append(lines, memoryContextPrefix)
-	for i, item := range matches {
-		uri := strings.TrimSpace(item.URI)
-		if uri == "" {
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("%d. [%s] %s", i+1, formatMemoryTypeLabel(item.MemoryType), uri))
-
+	displayIndex := 1
+	for _, item := range matches {
+		// 仅注入摘要文本，避免把 URI/类型等检索元数据暴露给模型提示词。
 		summary := strings.TrimSpace(item.Abstract)
 		if summary == "" {
-			lines = append(lines, "摘要: (无摘要)")
 			continue
 		}
-		lines = append(lines, "摘要: "+summary)
+		lines = append(lines, fmt.Sprintf("%d. %s", displayIndex, summary))
+		displayIndex++
 	}
 
 	if len(lines) == 1 {
 		return ""
 	}
 	return strings.Join(lines, "\n")
-}
-
-// formatMemoryTypeLabel converts OpenViking memory categories into human-readable labels.
-func formatMemoryTypeLabel(memoryType string) string {
-	switch strings.ToLower(strings.TrimSpace(memoryType)) {
-	case "profile":
-		return "用户画像"
-	case "preferences":
-		return "用户偏好"
-	case "entities":
-		return "关键实体"
-	case "events":
-		return "历史事件"
-	case "cases":
-		return "Agent案例"
-	case "patterns":
-		return "Agent模式"
-	default:
-		return "长期记忆"
-	}
 }
 
 // collectMemoryMatchURIs returns the injected memory URIs in prompt order for later used(contexts) reporting.
