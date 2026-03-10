@@ -60,6 +60,10 @@ func Init(dsn string) error {
 			return fmt.Errorf("drop thread.owner_id: %w", err)
 		}
 	}
-
+	if DB.Migrator().HasColumn(&models.MemorySyncState{}, "openviking_session_id") {
+		if err := DB.Migrator().DropColumn(&models.MemorySyncState{}, "openviking_session_id"); err != nil {
+			return fmt.Errorf("drop memory_sync_state.openviking_session_id: %w", err)
+		}
+	}
 	return err
 }

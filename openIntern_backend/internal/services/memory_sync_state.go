@@ -50,6 +50,7 @@ func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) erro
 	item := &models.MemorySyncState{
 		ThreadID:           threadID,
 		LastCommittedRunID: runID,
+		CommitStatus:       models.MemoryCommitStatusPending,
 		Status:             models.MemorySyncStatusPending,
 		RetryCount:         0,
 		LastError:          "",
@@ -67,40 +68,48 @@ func (s *MemorySyncStateService) MarkSyncing(threadID string) (bool, error) {
 	return dao.MemorySyncState.MarkSyncing(threadID)
 }
 
-// UpdateSessionID stores the OpenViking session id as soon as the session creation call succeeds.
-func (s *MemorySyncStateService) UpdateSessionID(threadID, sessionID string) error {
-	threadID = strings.TrimSpace(threadID)
-	sessionID = strings.TrimSpace(sessionID)
-	if threadID == "" {
-		return errors.New("thread_id is required")
-	}
-	if sessionID == "" {
-		return errors.New("session_id is required")
-	}
-	return dao.MemorySyncState.UpdateSessionID(threadID, sessionID)
-}
-
 // MarkReady marks the thread as fully synchronized and updates the cursor.
-func (s *MemorySyncStateService) MarkReady(threadID, sessionID, lastSyncedMsgID, runID string) error {
+func (s *MemorySyncStateService) MarkReady(threadID, lastSyncedMsgID, runID string) error {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
 	return dao.MemorySyncState.MarkReady(
 		threadID,
-		strings.TrimSpace(sessionID),
 		strings.TrimSpace(lastSyncedMsgID),
 		strings.TrimSpace(runID),
 	)
 }
 
 // MarkFailed stores the latest synchronization error for the thread and schedules the next retry time.
-func (s *MemorySyncStateService) MarkFailed(threadID, lastError string, nextAttemptAt *time.Time) error {
+func (s *MemorySyncStateService) MarkFailed(threadID, lastError string, nextAttemptAt *time.Time, commitStatus string) error {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
-	return dao.MemorySyncState.MarkFailed(threadID, strings.TrimSpace(lastError), nextAttemptAt)
+	commitStatus = strings.TrimSpace(commitStatus)
+	if commitStatus == "" {
+		commitStatus = models.MemoryCommitStatusPending
+	}
+	return dao.MemorySyncState.MarkFailed(
+		threadID,
+		strings.TrimSpace(lastError),
+		nextAttemptAt,
+		commitStatus,
+	)
+}
+
+// MarkMessagesAdded records that add-message phase has completed up to the provided cursor.
+func (s *MemorySyncStateService) MarkMessagesAdded(threadID, lastAddedMsgID string) error {
+	threadID = strings.TrimSpace(threadID)
+	lastAddedMsgID = strings.TrimSpace(lastAddedMsgID)
+	if threadID == "" {
+		return errors.New("thread_id is required")
+	}
+	if lastAddedMsgID == "" {
+		return errors.New("last_added_msg_id is required")
+	}
+	return dao.MemorySyncState.MarkMessagesAdded(threadID, lastAddedMsgID)
 }
 
 // IsNotFound reports whether the error means the sync state row does not exist.

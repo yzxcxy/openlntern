@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	defaultUserMemoryRootURI  = "viking://user/memories/"
-	defaultAgentMemoryRootURI = "viking://agent/memories/"
+	defaultUserMemoryRootURI  = "viking://user/default/memories/"
+	defaultAgentMemoryRootURI = "viking://agent/default/memories/"
 )
 
 type openVikingMatchedContext struct {
@@ -156,23 +156,7 @@ func isMemoryURIUnderTarget(uri string, targetURI string) bool {
 	if candidate == "" || target == "" {
 		return false
 	}
-	if strings.HasPrefix(candidate, strings.TrimRight(target, "/")+"/") {
-		return true
-	}
-	return isMemoryURIUnderTenantTarget(candidate, target)
-}
-
-// isMemoryURIUnderTenantTarget accepts multi-tenant URIs such as viking://user/default/memories/... for the logical root viking://user/memories/.
-func isMemoryURIUnderTenantTarget(candidate string, target string) bool {
-	target = strings.TrimRight(target, "/")
-	switch target {
-	case defaultUserMemoryRootURI[:len(defaultUserMemoryRootURI)-1]:
-		return strings.HasPrefix(candidate, "viking://user/") && strings.Contains(candidate, "/memories/")
-	case defaultAgentMemoryRootURI[:len(defaultAgentMemoryRootURI)-1]:
-		return strings.HasPrefix(candidate, "viking://agent/") && strings.Contains(candidate, "/memories/")
-	default:
-		return false
-	}
+	return strings.HasPrefix(candidate, strings.TrimRight(target, "/")+"/")
 }
 
 // deriveMemoryTypeFromURI infers the OpenViking memory category from the resource URI.

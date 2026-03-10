@@ -20,11 +20,16 @@ const (
 	defaultMemorySyncPollInterval = 3 * time.Second
 	defaultMemorySyncBatchSize    = 10
 	defaultMemorySyncDelay        = 5 * time.Minute
-	defaultMemorySyncTimeout      = 3 * time.Minute
+	defaultMemorySyncTimeout      = 10 * time.Minute
 	defaultMemorySyncRetryDelay   = 30 * time.Second
 )
 
+const (
+	memorySyncErrCommitSubmitFailedPrefix = "memory_sync_commit_submit_failed: "
+)
+
 type sessionSyncMessage struct {
+	MsgID   string
 	Role    string
 	Content string
 }
@@ -81,7 +86,11 @@ func ProcessPendingMemorySyncStates(ctx context.Context, limit int) error {
 		if err := syncThreadMemoryState(ctx, item); err != nil {
 			log.Printf("memory sync process failed thread_id=%s err=%v", item.ThreadID, err)
 			nextAttemptAt := nextMemorySyncAttemptAt(time.Now())
-			if markErr := MemorySyncState.MarkFailed(item.ThreadID, err.Error(), nextAttemptAt); markErr != nil {
+			commitStatus := models.MemoryCommitStatusPending
+			if strings.HasPrefix(strings.TrimSpace(err.Error()), memorySyncErrCommitSubmitFailedPrefix) {
+				commitStatus = models.MemoryCommitStatusFailed
+			}
+			if markErr := MemorySyncState.MarkFailed(item.ThreadID, err.Error(), nextAttemptAt, commitStatus); markErr != nil {
 				log.Printf("memory sync mark failed failed thread_id=%s err=%v", item.ThreadID, markErr)
 			}
 		}
@@ -110,58 +119,70 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 		return err
 	}
 	usedContextURIs, usageLogIDs := collectPendingMemoryUsageContextURIs(pendingUsageLogs)
-	sessionMessages, lastMsgID, err := buildSessionSyncMessages(threadMessages, state.LastSyncedMsgID)
+	addCursor := strings.TrimSpace(state.LastAddedMsgID)
+	if addCursor == "" {
+		addCursor = strings.TrimSpace(state.LastSyncedMsgID)
+	}
+	sessionMessages, lastMsgID, err := buildSessionSyncMessages(threadMessages, addCursor)
 	if err != nil {
 		return err
 	}
+	hasPendingCommit := strings.TrimSpace(state.LastAddedMsgID) != "" && strings.TrimSpace(state.LastAddedMsgID) != strings.TrimSpace(state.LastSyncedMsgID)
 	if lastMsgID == "" && len(usedContextURIs) == 0 {
-		return MemorySyncState.MarkReady(state.ThreadID, strings.TrimSpace(state.OpenVikingSessionID), state.LastSyncedMsgID, state.LastCommittedRunID)
+		if !hasPendingCommit {
+			return MemorySyncState.MarkReady(state.ThreadID, state.LastSyncedMsgID, state.LastCommittedRunID)
+		}
 	}
-	if len(sessionMessages) == 0 && len(usedContextURIs) == 0 {
-		return MemorySyncState.MarkReady(state.ThreadID, strings.TrimSpace(state.OpenVikingSessionID), lastMsgID, state.LastCommittedRunID)
+	if len(sessionMessages) == 0 && len(usedContextURIs) == 0 && !hasPendingCommit {
+		return MemorySyncState.MarkReady(state.ThreadID, lastMsgID, state.LastCommittedRunID)
+	}
+	if len(sessionMessages) == 0 && !hasPendingCommit {
+		if err := MemoryUsageLog.MarkReportedByIDs(usageLogIDs); err != nil {
+			return err
+		}
+		return MemorySyncState.MarkReady(state.ThreadID, state.LastSyncedMsgID, state.LastCommittedRunID)
 	}
 
-	sessionID, err := ensureOpenVikingSession(runCtx, state)
+	sessionID, err := ensureOpenVikingSession(state)
 	if err != nil {
 		return err
 	}
-	state.OpenVikingSessionID = sessionID
 	for _, item := range sessionMessages {
 		if err := dao.OpenVikingSession.AddMessage(runCtx, sessionID, item.Role, item.Content); err != nil {
 			return err
 		}
-	}
-	if err := dao.OpenVikingSession.UsedContexts(runCtx, sessionID, usedContextURIs); err != nil {
-		return err
+		if msgID := strings.TrimSpace(item.MsgID); msgID != "" {
+			addCursor = msgID
+			if err := MemorySyncState.MarkMessagesAdded(state.ThreadID, addCursor); err != nil {
+				return err
+			}
+		}
 	}
 	if err := dao.OpenVikingSession.Commit(runCtx, sessionID); err != nil {
-		return err
+		return fmt.Errorf("%s%w", memorySyncErrCommitSubmitFailedPrefix, err)
 	}
 	if err := MemoryUsageLog.MarkReportedByIDs(usageLogIDs); err != nil {
 		return err
 	}
 
-	lastCursor := strings.TrimSpace(state.LastSyncedMsgID)
-	if strings.TrimSpace(lastMsgID) != "" {
-		lastCursor = strings.TrimSpace(lastMsgID)
+	finalCursor := strings.TrimSpace(addCursor)
+	if finalCursor == "" {
+		finalCursor = strings.TrimSpace(state.LastSyncedMsgID)
 	}
-	return MemorySyncState.MarkReady(state.ThreadID, sessionID, lastCursor, state.LastCommittedRunID)
+	if err := MemorySyncState.MarkReady(state.ThreadID, finalCursor, state.LastCommittedRunID); err != nil {
+		return err
+	}
+	return nil
 }
 
-// ensureOpenVikingSession resolves the deterministic OpenViking session id for the thread.
-func ensureOpenVikingSession(ctx context.Context, state models.MemorySyncState) (string, error) {
-	sessionID := strings.TrimSpace(state.OpenVikingSessionID)
-	if sessionID != "" {
-		return sessionID, nil
+// ensureOpenVikingSession returns the deterministic session id used for OpenViking session APIs.
+func ensureOpenVikingSession(state models.MemorySyncState) (string, error) {
+	threadID := strings.TrimSpace(state.ThreadID)
+	if threadID == "" {
+		return "", fmt.Errorf("thread_id is required")
 	}
-	sessionID, err := dao.OpenVikingSession.Create(ctx, state.ThreadID)
-	if err != nil {
-		return "", err
-	}
-	if err := MemorySyncState.UpdateSessionID(state.ThreadID, sessionID); err != nil {
-		return "", err
-	}
-	return sessionID, nil
+	// Follow thread-scoped deterministic session id: use thread_id as session_id in all /sessions/{id}/... calls.
+	return threadID, nil
 }
 
 // memorySyncDurationFromSeconds converts a positive seconds value into a duration or returns the fallback.
@@ -177,6 +198,9 @@ func applyMemorySyncConfig(cfg config.OpenVikingConfig) {
 	memorySyncDelay = memorySyncDurationFromSeconds(cfg.MemorySyncDelaySeconds, defaultMemorySyncDelay)
 	memorySyncPollInterval = memorySyncDurationFromSeconds(cfg.MemorySyncPollSeconds, defaultMemorySyncPollInterval)
 	memorySyncTimeout = memorySyncDurationFromSeconds(cfg.MemorySyncTimeoutSeconds, defaultMemorySyncTimeout)
+	if memorySyncTimeout < 10*time.Minute {
+		memorySyncTimeout = 10 * time.Minute
+	}
 	memorySyncRetryDelay = memorySyncDurationFromSeconds(cfg.MemorySyncRetrySeconds, defaultMemorySyncRetryDelay)
 }
 
@@ -271,13 +295,13 @@ func buildSessionSyncMessage(modelMessage models.Message) (sessionSyncMessage, b
 		if content == "" {
 			return sessionSyncMessage{}, false, nil
 		}
-		return sessionSyncMessage{Role: "user", Content: content}, true, nil
+		return sessionSyncMessage{MsgID: strings.TrimSpace(modelMessage.MsgID), Role: "user", Content: content}, true, nil
 	case agtypes.RoleAssistant:
 		content := extractMessageText(*decoded)
 		if content == "" {
 			return sessionSyncMessage{}, false, nil
 		}
-		return sessionSyncMessage{Role: "assistant", Content: content}, true, nil
+		return sessionSyncMessage{MsgID: strings.TrimSpace(modelMessage.MsgID), Role: "assistant", Content: content}, true, nil
 	default:
 		return sessionSyncMessage{}, false, nil
 	}

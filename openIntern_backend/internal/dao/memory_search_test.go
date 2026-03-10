@@ -9,13 +9,13 @@ func TestDeriveMemoryTypeFromURI(t *testing.T) {
 		uri  string
 		want string
 	}{
-		{name: "profile overview", uri: "viking://user/memories/.overview.md", want: "profile"},
-		{name: "profile file", uri: "viking://user/memories/profile.md", want: "profile"},
-		{name: "preferences", uri: "viking://user/memories/preferences/coding/style.md", want: "preferences"},
-		{name: "entities", uri: "viking://user/memories/entities/project/openintern.md", want: "entities"},
-		{name: "events", uri: "viking://user/memories/events/decision-1.md", want: "events"},
-		{name: "cases", uri: "viking://agent/memories/cases/oauth-login.md", want: "cases"},
-		{name: "patterns", uri: "viking://agent/memories/patterns/debug-flow.md", want: "patterns"},
+		{name: "profile overview", uri: "viking://user/default/memories/.overview.md", want: "profile"},
+		{name: "profile file", uri: "viking://user/default/memories/profile.md", want: "profile"},
+		{name: "preferences", uri: "viking://user/default/memories/preferences/coding/style.md", want: "preferences"},
+		{name: "entities", uri: "viking://user/default/memories/entities/project/openintern.md", want: "entities"},
+		{name: "events", uri: "viking://user/default/memories/events/decision-1.md", want: "events"},
+		{name: "cases", uri: "viking://agent/default/memories/cases/oauth-login.md", want: "cases"},
+		{name: "patterns", uri: "viking://agent/default/memories/patterns/debug-flow.md", want: "patterns"},
 		{name: "unknown", uri: "viking://resources/docs/auth.md", want: ""},
 	}
 
@@ -29,32 +29,59 @@ func TestDeriveMemoryTypeFromURI(t *testing.T) {
 // TestPickMemoryContextsFallsBackToResources verifies older payloads still produce retrievable matches.
 func TestPickMemoryContextsFallsBackToResources(t *testing.T) {
 	result := openVikingMemoryFindResult{
-		Resources: []openVikingMatchedContext{{URI: "viking://user/memories/preferences/coding.md"}},
+		Resources: []openVikingMatchedContext{{URI: "viking://user/default/memories/preferences/coding.md"}},
 	}
 
 	got := pickMemoryContexts(result)
 	if len(got) != 1 {
 		t.Fatalf("expected one fallback item, got %d", len(got))
 	}
-	if got[0].URI != "viking://user/memories/preferences/coding.md" {
+	if got[0].URI != "viking://user/default/memories/preferences/coding.md" {
 		t.Fatalf("unexpected fallback uri: %s", got[0].URI)
 	}
 }
 
-// TestIsMemoryURIUnderTargetAcceptsTenantUserMemory verifies tenant-scoped user memory URIs still match the logical user memory root.
-func TestIsMemoryURIUnderTargetAcceptsTenantUserMemory(t *testing.T) {
+// TestIsMemoryURIUnderTargetAcceptsDefaultUserMemory verifies default user memory URIs match the default root.
+func TestIsMemoryURIUnderTargetAcceptsDefaultUserMemory(t *testing.T) {
 	candidate := "viking://user/default/memories/preferences/style.md"
-	target := "viking://user/memories/"
+	target := "viking://user/default/memories/"
 	if !isMemoryURIUnderTarget(candidate, target) {
 		t.Fatalf("expected candidate %s to match target %s", candidate, target)
 	}
 }
 
-// TestIsMemoryURIUnderTargetAcceptsTenantAgentMemory verifies tenant-scoped agent memory URIs still match the logical agent memory root.
-func TestIsMemoryURIUnderTargetAcceptsTenantAgentMemory(t *testing.T) {
+// TestIsMemoryURIUnderTargetRejectsLegacyUserMemoryRoot verifies legacy roots are no longer accepted.
+func TestIsMemoryURIUnderTargetRejectsLegacyUserMemoryRoot(t *testing.T) {
+	candidate := "viking://user/default/memories/preferences/style.md"
+	target := "viking://user/memories/"
+	if isMemoryURIUnderTarget(candidate, target) {
+		t.Fatalf("expected candidate %s not to match target %s", candidate, target)
+	}
+}
+
+// TestIsMemoryURIUnderTargetRejectsDifferentUserSpace verifies default root does not match other user spaces.
+func TestIsMemoryURIUnderTargetRejectsDifferentUserSpace(t *testing.T) {
+	candidate := "viking://user/another-space/memories/preferences/style.md"
+	target := "viking://user/default/memories/"
+	if isMemoryURIUnderTarget(candidate, target) {
+		t.Fatalf("expected candidate %s not to match target %s", candidate, target)
+	}
+}
+
+// TestIsMemoryURIUnderTargetAcceptsDefaultAgentMemory verifies default agent memory URIs match the default root.
+func TestIsMemoryURIUnderTargetAcceptsDefaultAgentMemory(t *testing.T) {
 	candidate := "viking://agent/default/memories/patterns/debug.md"
-	target := "viking://agent/memories/"
+	target := "viking://agent/default/memories/"
 	if !isMemoryURIUnderTarget(candidate, target) {
 		t.Fatalf("expected candidate %s to match target %s", candidate, target)
+	}
+}
+
+// TestIsMemoryURIUnderTargetRejectsLegacyAgentMemoryRoot verifies legacy agent roots are no longer accepted.
+func TestIsMemoryURIUnderTargetRejectsLegacyAgentMemoryRoot(t *testing.T) {
+	candidate := "viking://agent/default/memories/patterns/debug.md"
+	target := "viking://agent/memories/"
+	if isMemoryURIUnderTarget(candidate, target) {
+		t.Fatalf("expected candidate %s not to match target %s", candidate, target)
 	}
 }

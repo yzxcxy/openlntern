@@ -48,6 +48,7 @@ func (d *MemorySyncStateDAO) UpsertPendingRun(item *models.MemorySyncState) erro
 		Columns: []clause.Column{{Name: "thread_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"last_committed_run_id",
+			"commit_status",
 			"status",
 			"retry_count",
 			"last_error",
@@ -68,21 +69,15 @@ func (d *MemorySyncStateDAO) MarkSyncing(threadID string) (bool, error) {
 	return result.RowsAffected > 0, result.Error
 }
 
-// UpdateSessionID stores the OpenViking session id as soon as it is known.
-func (d *MemorySyncStateDAO) UpdateSessionID(threadID, sessionID string) error {
-	return database.DB.Model(&models.MemorySyncState{}).
-		Where("thread_id = ?", threadID).
-		Update("openviking_session_id", sessionID).Error
-}
-
 // MarkReady records the latest synchronized cursor and clears failure metadata.
-func (d *MemorySyncStateDAO) MarkReady(threadID, sessionID, lastSyncedMsgID, runID string) error {
+func (d *MemorySyncStateDAO) MarkReady(threadID, lastSyncedMsgID, runID string) error {
 	return database.DB.Model(&models.MemorySyncState{}).
 		Where("thread_id = ?", threadID).
 		Updates(map[string]any{
-			"openviking_session_id": sessionID,
+			"last_added_msg_id":     lastSyncedMsgID,
 			"last_synced_msg_id":    lastSyncedMsgID,
 			"last_committed_run_id": runID,
+			"commit_status":         models.MemoryCommitStatusCommitted,
 			"status":                models.MemorySyncStatusReady,
 			"retry_count":           0,
 			"last_error":            "",
@@ -91,13 +86,25 @@ func (d *MemorySyncStateDAO) MarkReady(threadID, sessionID, lastSyncedMsgID, run
 }
 
 // MarkFailed stores the latest failure and increments retry counters.
-func (d *MemorySyncStateDAO) MarkFailed(threadID, lastError string, nextAttemptAt *time.Time) error {
+func (d *MemorySyncStateDAO) MarkFailed(threadID, lastError string, nextAttemptAt *time.Time, commitStatus string) error {
 	return database.DB.Model(&models.MemorySyncState{}).
 		Where("thread_id = ?", threadID).
 		Updates(map[string]any{
+			"commit_status":   commitStatus,
 			"status":          models.MemorySyncStatusFailed,
 			"retry_count":     gorm.Expr("retry_count + 1"),
 			"last_error":      lastError,
 			"next_attempt_at": nextAttemptAt,
+		}).Error
+}
+
+// MarkMessagesAdded stores the add-message cursor before commit starts.
+func (d *MemorySyncStateDAO) MarkMessagesAdded(threadID, lastAddedMsgID string) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"last_added_msg_id": lastAddedMsgID,
+			"commit_status":     models.MemoryCommitStatusPending,
+			"last_error":        "",
 		}).Error
 }
