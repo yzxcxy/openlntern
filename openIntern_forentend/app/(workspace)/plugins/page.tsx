@@ -868,8 +868,7 @@ const validateDraft = (draft: PluginDraft) => {
     const tools = ensureRuntimeTools(draft.tools, draft.runtimeType);
     if (tools.length === 0) return "请至少添加一个工具";
     const toolNameSet = new Set<string>();
-    for (let index = 0; index < tools.length; index += 1) {
-      const tool = tools[index];
+    for (const [index, tool] of tools.entries()) {
       const label = `工具 ${index + 1}`;
       const toolName = tool.toolName.trim();
       if (!toolName) return `${label}：请输入工具名称`;
@@ -906,8 +905,7 @@ const validateDraft = (draft: PluginDraft) => {
     const tools = ensureRuntimeTools(draft.tools, draft.runtimeType);
     if (tools.length === 0) return "请至少添加一个工具";
     const toolNameSet = new Set<string>();
-    for (let index = 0; index < tools.length; index += 1) {
-      const tool = tools[index];
+    for (const [index, tool] of tools.entries()) {
       const label = `工具 ${index + 1}`;
       const toolName = tool.toolName.trim();
       if (!toolName) return `${label}：请输入工具名称`;
@@ -1696,7 +1694,7 @@ export default function PluginsPage() {
 
   const fillDraftFromPlugin = (plugin: PluginRecord) => {
     const runtimeType = plugin.runtime_type ?? "";
-    const draftTools = (plugin.tools ?? []).map((tool) => ({
+    const draftTools: ToolDraft[] = (plugin.tools ?? []).map((tool): ToolDraft => ({
       toolId: tool.tool_id,
       toolName: tool.tool_name ?? "",
       description: tool.description ?? "",
@@ -1878,7 +1876,7 @@ export default function PluginsPage() {
   );
 
   const addDraftTool = useCallback(() => {
-    const nextIndex = draft.tools.length;
+    const nextIndex = ensureRuntimeTools(draft.tools, draft.runtimeType).length;
     setDraft((current) => {
       const currentTools = ensureRuntimeTools(current.tools, current.runtimeType);
       const nextTool =
@@ -1889,7 +1887,7 @@ export default function PluginsPage() {
       };
     });
     setWizardToolIndex(nextIndex);
-  }, [draft.tools.length]);
+  }, [draft.runtimeType, draft.tools]);
 
   const removeDraftToolAt = useCallback((index: number) => {
     setDraft((current) => {
@@ -1902,7 +1900,10 @@ export default function PluginsPage() {
       };
     });
     setWizardToolIndex((current) => {
-      if (current <= index) {
+      if (current < index) {
+        return current;
+      }
+      if (current === index) {
         return Math.max(0, current - 1);
       }
       return current - 1;
@@ -2753,17 +2754,27 @@ export default function PluginsPage() {
                       第三步：填写运行配置
                     </div>
 
-                    {draft.runtimeType === "api" && (
+                    {requiresRuntimeTools(draft.runtimeType) && (
+                      <ToolDraftSwitcher
+                        tools={ensureRuntimeTools(draft.tools, draft.runtimeType)}
+                        activeIndex={wizardToolIndex}
+                        onSelect={setWizardToolIndex}
+                        onAdd={addDraftTool}
+                        onRemove={removeDraftToolAt}
+                      />
+                    )}
+
+                    {draft.runtimeType === "api" && activeDraftTool && (
                       <>
                         <div className="space-y-4">
                           <FormFieldRow label="工具名称" required>
                             <UiInput
                               placeholder="请输入工具名称"
-                              value={draft.tool.toolName}
+                              value={activeDraftTool.toolName}
                               onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: { ...current.tool, toolName: event.target.value },
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  toolName: event.target.value,
                                 }))
                               }
                             />
@@ -2771,29 +2782,23 @@ export default function PluginsPage() {
                           <FormFieldRow label="工具描述">
                             <UiInput
                               placeholder="请输入工具描述"
-                              value={draft.tool.description}
+                              value={activeDraftTool.description}
                               onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: { ...current.tool, description: event.target.value },
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  description: event.target.value,
                                 }))
                               }
                             />
                           </FormFieldRow>
                           <FormFieldRow label="请求方式" required>
                             <UiSelect
-                              value={draft.tool.apiRequestType}
+                              value={activeDraftTool.apiRequestType}
                               onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: {
-                                    ...current.tool,
-                                    apiRequestType: event.target.value as RequestType,
-                                    bodyFields:
-                                      event.target.value === "GET"
-                                        ? []
-                                        : current.tool.bodyFields,
-                                  },
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  apiRequestType: event.target.value as RequestType,
+                                  bodyFields: event.target.value === "GET" ? [] : tool.bodyFields,
                                 }))
                               }
                             >
@@ -2803,14 +2808,11 @@ export default function PluginsPage() {
                           </FormFieldRow>
                           <FormFieldRow label="响应模式" required>
                             <UiSelect
-                              value={draft.tool.toolResponseMode}
+                              value={activeDraftTool.toolResponseMode}
                               onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: {
-                                    ...current.tool,
-                                    toolResponseMode: event.target.value as ResponseMode,
-                                  },
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  toolResponseMode: event.target.value as ResponseMode,
                                 }))
                               }
                             >
@@ -2821,11 +2823,11 @@ export default function PluginsPage() {
                           <FormFieldRow label="调用地址" required>
                             <UiInput
                               placeholder="请输入 RequestURL"
-                              value={draft.tool.requestURL}
+                              value={activeDraftTool.requestURL}
                               onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  tool: { ...current.tool, requestURL: event.target.value },
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  requestURL: event.target.value,
                                 }))
                               }
                             />
@@ -2836,22 +2838,15 @@ export default function PluginsPage() {
                                 type="number"
                                 min={1}
                                 step={1}
-                                value={String(draft.tool.timeoutMS)}
-                                onChange={(event) =>
-                                  setDraft((current) => {
-                                    const nextValue = Number(event.target.value);
-                                    return {
-                                      ...current,
-                                      tool: {
-                                        ...current.tool,
-                                        timeoutMS:
-                                          Number.isFinite(nextValue) && nextValue >= 1
-                                            ? nextValue
-                                            : 1,
-                                      },
-                                    };
-                                  })
-                                }
+                                value={String(activeDraftTool.timeoutMS)}
+                                onChange={(event) => {
+                                  const nextValue = Number(event.target.value);
+                                  updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                    ...tool,
+                                    timeoutMS:
+                                      Number.isFinite(nextValue) && nextValue >= 1 ? nextValue : 1,
+                                  }));
+                                }}
                               />
                               <span className="shrink-0 text-sm text-[var(--color-text-secondary)]">
                                 毫秒
@@ -2862,33 +2857,33 @@ export default function PluginsPage() {
                         <div className="space-y-4">
                           <FieldListEditor
                             label="Query 字段"
-                            fields={draft.tool.queryFields}
+                            fields={activeDraftTool.queryFields}
                             onChange={(nextFields) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, queryFields: nextFields },
+                              updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                ...tool,
+                                queryFields: nextFields,
                               }))
                             }
                           />
                           <FieldListEditor
                             label="Header 字段"
-                            fields={draft.tool.headerFields}
+                            fields={activeDraftTool.headerFields}
                             onChange={(nextFields) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, headerFields: nextFields },
+                              updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                ...tool,
+                                headerFields: nextFields,
                               }))
                             }
                           />
                         </div>
-                        {draft.tool.apiRequestType === "POST" ? (
+                        {activeDraftTool.apiRequestType === "POST" ? (
                           <FieldListEditor
                             label="Body 字段"
-                            fields={draft.tool.bodyFields}
+                            fields={activeDraftTool.bodyFields}
                             onChange={(nextFields) =>
-                              setDraft((current) => ({
-                                ...current,
-                                tool: { ...current.tool, bodyFields: nextFields },
+                              updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                ...tool,
+                                bodyFields: nextFields,
                               }))
                             }
                           />
@@ -2926,15 +2921,12 @@ export default function PluginsPage() {
                       </div>
                     )}
 
-                    {draft.runtimeType === "code" && (
+                    {draft.runtimeType === "code" && activeDraftTool && (
                       <CodeToolEditor
-                        tool={draft.tool}
+                        tool={activeDraftTool}
                         onDebugRun={debugCodeTool}
                         onChange={(nextTool) =>
-                          setDraft((current) => ({
-                            ...current,
-                            tool: nextTool,
-                          }))
+                          updateDraftToolAt(wizardToolIndex, () => nextTool)
                         }
                       />
                     )}
