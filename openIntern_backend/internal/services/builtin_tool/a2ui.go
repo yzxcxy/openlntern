@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"openIntern/internal/a2ui"
-	"openIntern/internal/agui"
 	"openIntern/internal/models"
+	"openIntern/internal/services/a2ui"
+	"openIntern/internal/services/agent/agui"
 	"strings"
 
 	einoTool "github.com/cloudwego/eino/components/tool"

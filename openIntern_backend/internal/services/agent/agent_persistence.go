@@ -3,8 +3,8 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"openIntern/internal/agui"
 	"openIntern/internal/models"
+	"openIntern/internal/services/agent/agui"
 	"strings"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"

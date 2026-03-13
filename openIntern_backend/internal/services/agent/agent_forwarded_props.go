@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"openIntern/internal/dao"
 	"openIntern/internal/models"
+	kbsvc "openIntern/internal/services/kb"
 	"openIntern/internal/util"
 	"sort"
 	"strconv"
@@ -105,7 +105,6 @@ const (
 
 const (
 	skillInstructionPrefix = "请优先参考并执行以下技能约束："
-	kbContextPrefix        = "以下是当前问题在所选知识库中的检索结果，请优先参考这些信息后再回答："
 )
 
 type AgentRuntimeConfig struct {
@@ -297,7 +296,7 @@ func (h contextSelectionsForwardedPropsHandler) Handle(ctx *forwardedPropsChainC
 
 	userText, userIndex := findLastUserMessageTextAndIndex(ctx.input.Messages)
 	if len(selection.KnowledgeBases) > 0 && userText != "" {
-		matches, err := dao.KnowledgeBase.SearchInKnowledgeBases(
+		content, err := kbsvc.KnowledgeBase.BuildContextMessage(
 			ctx.requestCtx,
 			userText,
 			collectKnowledgeBaseNames(selection.KnowledgeBases),
@@ -306,11 +305,11 @@ func (h contextSelectionsForwardedPropsHandler) Handle(ctx *forwardedPropsChainC
 		if err != nil {
 			return fmt.Errorf("search knowledge bases: %w", err)
 		}
-		if len(matches) > 0 {
+		if strings.TrimSpace(content) != "" {
 			injectMessageBeforeUserAt(ctx.input, userIndex, types.Message{
 				ID:      events.GenerateMessageID(),
 				Role:    types.RoleSystem,
-				Content: buildKnowledgeBaseContextMessage(matches),
+				Content: content,
 			})
 			_, userIndex = findLastUserMessageTextAndIndex(ctx.input.Messages)
 		}
@@ -755,29 +754,6 @@ func collectKnowledgeBaseNames(items []forwardedContextTarget) []string {
 		}
 	}
 	return util.NormalizeUniqueStringList(result)
-}
-
-// buildKnowledgeBaseContextMessage 构建注入模型上下文的知识库检索消息文本。
-func buildKnowledgeBaseContextMessage(matches []dao.KnowledgeBaseSearchMatch) string {
-	if len(matches) == 0 {
-		return ""
-	}
-	lines := make([]string, 0, len(matches)*3+1)
-	lines = append(lines, kbContextPrefix)
-	for i, item := range matches {
-		kbName := strings.TrimSpace(item.KnowledgeBaseName)
-		if kbName == "" {
-			kbName = "未命名知识库"
-		}
-		abstract := strings.TrimSpace(item.Abstract)
-		if abstract == "" {
-			abstract = "(无摘要)"
-		}
-		lines = append(lines, fmt.Sprintf("%d. [知识库:%s]", i+1, kbName))
-		lines = append(lines, "uri: "+strings.TrimSpace(item.URI))
-		lines = append(lines, "摘要: "+abstract)
-	}
-	return strings.Join(lines, "\n")
 }
 
 // buildSkillInstructionMessage 构建技能约束消息文本。

@@ -30,8 +30,7 @@ const (
 	mcpSyncQueueRedisKey        = "openintern:plugin:mcp:sync"
 	defaultMCPSyncDelay         = 3 * time.Second
 	defaultMCPSyncPollInterval  = 3 * time.Second
-	defaultMCPSyncScanInterval  = time.Minute
-	defaultMCPSyncRefreshWindow = 15 * time.Minute
+	defaultMCPSyncRefreshWindow = 10 * time.Minute
 	defaultMCPSyncTimeout       = 30 * time.Second
 	defaultMCPSyncRetryDelay    = time.Minute
 	defaultMCPSyncWorkerBatch   = 5
@@ -40,7 +39,6 @@ const (
 var (
 	mcpSyncDelay         = defaultMCPSyncDelay
 	mcpSyncPollInterval  = defaultMCPSyncPollInterval
-	mcpSyncScanInterval  = defaultMCPSyncScanInterval
 	mcpSyncRefreshWindow = defaultMCPSyncRefreshWindow
 	mcpSyncTimeout       = defaultMCPSyncTimeout
 	mcpSyncRetryDelay    = defaultMCPSyncRetryDelay
@@ -51,13 +49,16 @@ var (
 func initPluginMCPSync(cfg config.PluginConfig) {
 	mcpSyncDelay = durationFromSeconds(cfg.MCPSyncDelaySeconds, defaultMCPSyncDelay)
 	mcpSyncPollInterval = durationFromSeconds(cfg.MCPSyncPollSeconds, defaultMCPSyncPollInterval)
-	mcpSyncScanInterval = durationFromSeconds(cfg.MCPSyncScanSeconds, defaultMCPSyncScanInterval)
 	mcpSyncRefreshWindow = durationFromSeconds(cfg.MCPSyncIntervalSeconds, defaultMCPSyncRefreshWindow)
 	mcpSyncTimeout = durationFromSeconds(cfg.MCPSyncTimeoutSeconds, defaultMCPSyncTimeout)
 	mcpSyncRetryDelay = durationFromSeconds(cfg.MCPSyncRetrySeconds, defaultMCPSyncRetryDelay)
 
 	mcpSyncStartOnce.Do(func() {
-		go Plugin.runMCPSyncScheduler()
+		go func() {
+			if err := Plugin.scheduleAllEnabledMCPSyncs(context.Background()); err != nil {
+				log.Printf("initial full mcp sync scheduling failed err=%v", err)
+			}
+		}()
 		go Plugin.runMCPSyncQueueWorker()
 	})
 }
@@ -160,35 +161,17 @@ func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int
 	return nil
 }
 
-func (s *PluginService) runMCPSyncScheduler() {
-	if mcpSyncScanInterval <= 0 {
-		return
-	}
-
-	if err := s.scheduleDueMCPSyncs(context.Background()); err != nil {
-		log.Printf("initial mcp sync scheduling failed err=%v", err)
-	}
-
-	ticker := time.NewTicker(mcpSyncScanInterval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if err := s.scheduleDueMCPSyncs(context.Background()); err != nil {
-			log.Printf("periodic mcp sync scheduling failed err=%v", err)
-		}
-	}
-}
-
-func (s *PluginService) scheduleDueMCPSyncs(ctx context.Context) error {
-	cutoff := time.Now().Add(-mcpSyncRefreshWindow)
-	plugins, err := dao.Plugin.ListByRuntimeStatusNeedingSync(pluginRuntimeMCP, pluginStatusEnabled, cutoff)
+// scheduleAllEnabledMCPSyncs 在进程启动时将全部启用中的 MCP 插件放入延时队列，
+// 确保队列具备完整初始集，后续由 worker 在成功/失败后自行续期。
+func (s *PluginService) scheduleAllEnabledMCPSyncs(ctx context.Context) error {
+	plugins, err := dao.Plugin.ListByRuntimeStatus(pluginRuntimeMCP, pluginStatusEnabled)
 	if err != nil {
 		return err
 	}
 
 	for _, plugin := range plugins {
 		if err := s.queueMCPPluginSync(plugin.PluginID, 0); err != nil {
-			log.Printf("enqueue scheduled mcp sync failed plugin_id=%s err=%v", plugin.PluginID, err)
+			log.Printf("enqueue initial mcp sync failed plugin_id=%s err=%v", plugin.PluginID, err)
 		}
 	}
 
@@ -196,22 +179,43 @@ func (s *PluginService) scheduleDueMCPSyncs(ctx context.Context) error {
 }
 
 func (s *PluginService) triggerScheduledMCPSync(pluginID string) {
-	if err := s.syncMCPPluginNow(context.Background(), pluginID, true); err != nil {
+	if err := s.syncMCPPluginNow(context.Background(), pluginID, false); err != nil {
 		log.Printf("scheduled mcp sync failed plugin_id=%s err=%v", pluginID, err)
-		if mcpSyncRetryDelay > 0 && s.shouldRetryMCPPluginSync(pluginID) {
-			if queueErr := s.queueMCPPluginSync(pluginID, mcpSyncRetryDelay); queueErr != nil {
+		if delay, ok := s.nextMCPSyncDelay(pluginID, true); ok {
+			if queueErr := s.queueMCPPluginSync(pluginID, delay); queueErr != nil {
 				log.Printf("requeue mcp sync failed plugin_id=%s err=%v", pluginID, queueErr)
 			}
+		}
+		return
+	}
+	if delay, ok := s.nextMCPSyncDelay(pluginID, false); ok {
+		if queueErr := s.queueMCPPluginSync(pluginID, delay); queueErr != nil {
+			log.Printf("schedule next mcp sync failed plugin_id=%s err=%v", pluginID, queueErr)
 		}
 	}
 }
 
-func (s *PluginService) shouldRetryMCPPluginSync(pluginID string) bool {
+func (s *PluginService) nextMCPSyncDelay(pluginID string, failed bool) (time.Duration, bool) {
 	plugin, err := s.getPluginRecord(pluginID)
 	if err != nil {
-		return false
+		return 0, false
 	}
-	return plugin.RuntimeType == pluginRuntimeMCP && plugin.Status == pluginStatusEnabled
+	if plugin.RuntimeType != pluginRuntimeMCP || plugin.Status != pluginStatusEnabled {
+		return 0, false
+	}
+
+	if failed {
+		delay := mcpSyncRefreshWindow
+		if mcpSyncRetryDelay > 0 {
+			delay += mcpSyncRetryDelay
+		}
+		return delay, true
+	}
+
+	if mcpSyncRefreshWindow <= 0 {
+		return 0, false
+	}
+	return mcpSyncRefreshWindow, true
 }
 
 func (s *PluginService) syncMCPPluginNow(ctx context.Context, pluginID string, allowDisabled bool) error {

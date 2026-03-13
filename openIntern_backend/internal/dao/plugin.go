@@ -187,6 +187,21 @@ func (d *PluginDAO) ListByIDsAndRuntimeStatus(pluginIDs []string, runtimeType, s
 	return plugins, nil
 }
 
+// ListByRuntimeStatus 返回指定运行时和状态的全部插件。
+func (d *PluginDAO) ListByRuntimeStatus(runtimeType, status string) ([]models.Plugin, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+
+	var plugins []models.Plugin
+	if err := database.DB.
+		Where("runtime_type = ? AND status = ?", runtimeType, status).
+		Find(&plugins).Error; err != nil {
+		return nil, err
+	}
+	return plugins, nil
+}
+
 func (d *PluginDAO) ListByRuntimeStatusNeedingSync(runtimeType, status string, cutoff time.Time) ([]models.Plugin, error) {
 	if database.DB == nil {
 		return nil, nil

@@ -22,14 +22,14 @@ type AccumulatedMessage struct {
 }
 
 type Accumulator struct {
-	threadID           string
-	runID              string
-	messages           map[string]*AccumulatedMessage
-	order              []string
-	state              any
-	customEvents       []AccumulatedMessage
-	rawEvents          []AccumulatedMessage
-	errorEvents        []AccumulatedMessage
+	threadID     string
+	runID        string
+	messages     map[string]*AccumulatedMessage
+	order        []string
+	state        any
+	customEvents []AccumulatedMessage
+	rawEvents    []AccumulatedMessage
+	errorEvents  []AccumulatedMessage
 }
 
 func NewAccumulator(threadID string) *Accumulator {

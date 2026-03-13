@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"openIntern/internal/agui"
+	"openIntern/internal/services/agent/agui"
 	builtinTool "openIntern/internal/services/builtin_tool"
 	"strings"
 
