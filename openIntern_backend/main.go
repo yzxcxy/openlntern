@@ -7,9 +7,7 @@ import (
 	"openIntern/internal/database"
 	"openIntern/internal/routers"
 	"openIntern/internal/services"
-	"openIntern/internal/services/embedding"
 	pluginsvc "openIntern/internal/services/plugin"
-	"openIntern/internal/services/rag"
 )
 
 func main() {
@@ -25,12 +23,6 @@ func main() {
 		log.Fatalf("failed to init file service: %v", err)
 	}
 	pluginsvc.InitPlugin(cfg.Plugin)
-	if err := embedding.InitEmbedding(cfg.EmbeddingLLM); err != nil {
-		log.Fatalf("failed to init embedding service: %v", err)
-	}
-	if err := rag.InitRAG(cfg.Milvus); err != nil {
-		log.Fatalf("failed to init rag service: %v", err)
-	}
 	database.InitContextStore(cfg.Tools.OpenViking)
 	services.InitMemoryRetriever(cfg.Tools.OpenViking)
 	services.InitMemorySync(cfg.Tools.OpenViking)

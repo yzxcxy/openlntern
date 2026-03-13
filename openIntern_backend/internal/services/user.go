@@ -1,11 +1,9 @@
 package services
 
 import (
-	"context"
 	"errors"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
-	"openIntern/internal/services/rag"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -33,7 +31,7 @@ func (s *UserService) CreateUser(user *models.User) error {
 	if err := dao.User.Create(user); err != nil {
 		return err
 	}
-	return rag.RAG.EnsureUserDatabase(context.Background(), user.UserID)
+	return nil
 }
 
 // GetUserByUserID 根据 UserID 获取用户

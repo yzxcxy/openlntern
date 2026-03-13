@@ -31,6 +31,11 @@ func (s *MemorySyncStateService) ListRunnable(limit int) ([]models.MemorySyncSta
 	return dao.MemorySyncState.ListRunnable(limit)
 }
 
+// ResetLegacySyncing converts legacy pre-Redis syncing rows back to pending so the new worker can resume them.
+func (s *MemorySyncStateService) ResetLegacySyncing() error {
+	return dao.MemorySyncState.ResetLegacySyncing()
+}
+
 // ScheduleThreadSync marks the thread as pending long-term memory synchronization.
 func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) error {
 	if !dao.OpenVikingSession.Configured() {
@@ -66,15 +71,6 @@ func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) erro
 		NextAttemptAt:      nextAttemptAt,
 	}
 	return dao.MemorySyncState.UpsertPendingRun(item)
-}
-
-// MarkSyncing transitions the specified thread to syncing when it is runnable.
-func (s *MemorySyncStateService) MarkSyncing(threadID string) (bool, error) {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return false, errors.New("thread_id is required")
-	}
-	return dao.MemorySyncState.MarkSyncing(threadID)
 }
 
 // MarkReady marks the thread as fully synchronized and updates the cursor.

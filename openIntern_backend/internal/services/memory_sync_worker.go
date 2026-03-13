@@ -11,6 +11,7 @@ import (
 
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
+	"openIntern/internal/database"
 	"openIntern/internal/models"
 
 	agtypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
@@ -49,7 +50,14 @@ func InitMemorySync(cfg config.OpenVikingConfig) {
 	if !dao.OpenVikingSession.Configured() {
 		return
 	}
+	if database.GetRedis() == nil {
+		log.Printf("memory sync disabled: redis is not configured")
+		return
+	}
 	applyMemorySyncConfig(cfg)
+	if err := MemorySyncState.ResetLegacySyncing(); err != nil {
+		log.Printf("memory sync reset legacy syncing states failed err=%v", err)
+	}
 	memorySyncWorkerOnce.Do(func() {
 		go runMemorySyncWorker()
 	})
@@ -77,28 +85,36 @@ func ProcessPendingMemorySyncStates(ctx context.Context, limit int) error {
 		return err
 	}
 	for _, item := range items {
-		claimed, err := MemorySyncState.MarkSyncing(item.ThreadID)
+		lock, claimed, err := tryAcquireMemorySyncLock(item.ThreadID)
 		if err != nil {
-			log.Printf("memory sync mark syncing failed thread_id=%s err=%v", item.ThreadID, err)
+			log.Printf("memory sync acquire lock failed thread_id=%s err=%v", item.ThreadID, err)
 			continue
 		}
 		if !claimed {
 			continue
 		}
-		if err := syncThreadMemoryState(ctx, item); err != nil {
-			log.Printf("memory sync process failed thread_id=%s err=%v", item.ThreadID, err)
-			nextAttemptAt := nextMemorySyncAttemptAt(time.Now())
-			commitStatus := strings.TrimSpace(item.CommitStatus)
-			if commitStatus == "" {
-				commitStatus = models.MemoryCommitStatusPending
+		func() {
+			defer func() {
+				if releaseErr := lock.Release(); releaseErr != nil {
+					log.Printf("memory sync release lock failed thread_id=%s err=%v", item.ThreadID, releaseErr)
+				}
+			}()
+
+			if err := syncThreadMemoryState(ctx, item); err != nil {
+				log.Printf("memory sync process failed thread_id=%s err=%v", item.ThreadID, err)
+				nextAttemptAt := nextMemorySyncAttemptAt(time.Now())
+				commitStatus := strings.TrimSpace(item.CommitStatus)
+				if commitStatus == "" {
+					commitStatus = models.MemoryCommitStatusPending
+				}
+				if isMemorySyncCommitFatalError(err) {
+					commitStatus = models.MemoryCommitStatusFailed
+				}
+				if markErr := MemorySyncState.MarkFailed(item.ThreadID, err.Error(), nextAttemptAt, commitStatus); markErr != nil {
+					log.Printf("memory sync mark failed failed thread_id=%s err=%v", item.ThreadID, markErr)
+				}
 			}
-			if isMemorySyncCommitFatalError(err) {
-				commitStatus = models.MemoryCommitStatusFailed
-			}
-			if markErr := MemorySyncState.MarkFailed(item.ThreadID, err.Error(), nextAttemptAt, commitStatus); markErr != nil {
-				log.Printf("memory sync mark failed failed thread_id=%s err=%v", item.ThreadID, markErr)
-			}
-		}
+		}()
 	}
 	return nil
 }

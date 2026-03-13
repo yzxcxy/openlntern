@@ -42,6 +42,15 @@ func (d *MemorySyncStateDAO) ListRunnable(limit int) ([]models.MemorySyncState, 
 	return items, nil
 }
 
+// ResetLegacySyncing converts old syncing states into pending so Redis-based workers can resume them.
+func (d *MemorySyncStateDAO) ResetLegacySyncing() error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("status = ?", "syncing").
+		Updates(map[string]any{
+			"status": models.MemorySyncStatusPending,
+		}).Error
+}
+
 // UpsertPendingRun records that a completed chat run needs long-term memory synchronization.
 func (d *MemorySyncStateDAO) UpsertPendingRun(item *models.MemorySyncState) error {
 	return database.DB.Clauses(clause.OnConflict{
@@ -54,18 +63,6 @@ func (d *MemorySyncStateDAO) UpsertPendingRun(item *models.MemorySyncState) erro
 			"next_attempt_at",
 		}),
 	}).Create(item).Error
-}
-
-// MarkSyncing transitions the state into syncing when it is runnable.
-func (d *MemorySyncStateDAO) MarkSyncing(threadID string) (bool, error) {
-	result := database.DB.Model(&models.MemorySyncState{}).
-		Where("thread_id = ?", threadID).
-		Where("status IN ?", []string{models.MemorySyncStatusPending, models.MemorySyncStatusFailed}).
-		Where("next_attempt_at IS NULL OR next_attempt_at <= ?", time.Now()).
-		Updates(map[string]any{
-			"status": models.MemorySyncStatusSyncing,
-		})
-	return result.RowsAffected > 0, result.Error
 }
 
 // MarkReady records the latest synchronized cursor and clears failure metadata.

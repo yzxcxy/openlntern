@@ -9,8 +9,6 @@ import (
 const (
 	// MemorySyncStatusPending indicates the thread has new data waiting for memory sync.
 	MemorySyncStatusPending = "pending"
-	// MemorySyncStatusSyncing indicates the thread is currently being synced to long-term memory.
-	MemorySyncStatusSyncing = "syncing"
 	// MemorySyncStatusReady indicates the thread state is fully synchronized.
 	MemorySyncStatusReady = "ready"
 	// MemorySyncStatusFailed indicates the latest sync attempt failed and needs retry.
