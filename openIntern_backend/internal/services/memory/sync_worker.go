@@ -1,4 +1,4 @@
-package services
+package memory
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
+	chatsvc "openIntern/internal/services/chat"
 
 	agtypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 )
@@ -134,7 +135,7 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 		return pollSubmittedCommitTask(runCtx, state)
 	}
 
-	threadMessages, err := Message.ListThreadMessages(state.ThreadID)
+	threadMessages, err := chatsvc.Message.ListThreadMessages(state.ThreadID)
 	if err != nil {
 		return err
 	}

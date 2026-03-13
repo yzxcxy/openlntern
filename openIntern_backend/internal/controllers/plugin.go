@@ -3,8 +3,8 @@ package controllers
 import (
 	"net/http"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
 	pluginsvc "openIntern/internal/services/plugin"
+	storagesvc "openIntern/internal/services/storage"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -84,7 +84,7 @@ func UploadPluginIcon(c *gin.Context) {
 
 	ext := filepath.Ext(fileHeader.Filename)
 	key := path.Join("plugin", "icon", uuid.NewString()+ext)
-	url, err := services.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
+	url, err := storagesvc.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
 	if err != nil {
 		response.InternalError(c)
 		return

@@ -1,4 +1,4 @@
-package services
+package chat
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	storagesvc "openIntern/internal/services/storage"
 )
 
 const (
@@ -73,7 +75,7 @@ func (s *ChatUploadService) Upload(ctx context.Context, ownerID string, threadID
 	}
 
 	objectKey := buildChatUploadObjectKey(ownerID, threadID, fileHeader.Filename, mimeType)
-	url, err := File.UploadWithKey(ctx, objectKey, file, fileHeader)
+	url, err := storagesvc.File.UploadWithKey(ctx, objectKey, file, fileHeader)
 	if err != nil {
 		return nil, err
 	}

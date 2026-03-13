@@ -544,11 +544,7 @@ export default function WorkspaceLayout({
                     : "justify-between"
                 )}
               >
-                <img
-                  src="/openIntern_logo_concept_3_dialogue_flow.svg"
-                  alt="openIntern"
-                  className="h-8 w-8"
-                />
+                <img src="/OpenIntern.png" alt="openIntern" className="h-8 w-8 rounded-full" />
                 {!isSidebarCollapsed && (
                   <button
                     onClick={() => setIsSidebarCollapsed(true)}

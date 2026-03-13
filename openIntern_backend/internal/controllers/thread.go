@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	chatsvc "openIntern/internal/services/chat"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,7 +16,7 @@ func ListThreads(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
-	threads, total, err := services.Thread.ListThreads(page, pageSize)
+	threads, total, err := chatsvc.Thread.ListThreads(page, pageSize)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -31,7 +31,7 @@ func ListThreads(c *gin.Context) {
 
 func GetThread(c *gin.Context) {
 	threadID := c.Param("thread_id")
-	thread, err := services.Thread.GetThread(threadID)
+	thread, err := chatsvc.Thread.GetThread(threadID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
@@ -52,7 +52,7 @@ func UpdateThread(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if err := services.Thread.UpdateThreadTitle(threadID, req.Title); err != nil {
+	if err := chatsvc.Thread.UpdateThreadTitle(threadID, req.Title); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
 			return
@@ -65,7 +65,7 @@ func UpdateThread(c *gin.Context) {
 
 func DeleteThread(c *gin.Context) {
 	threadID := c.Param("thread_id")
-	if err := services.Thread.DeleteThread(threadID); err != nil {
+	if err := chatsvc.Thread.DeleteThread(threadID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
 			return

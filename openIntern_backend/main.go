@@ -6,8 +6,11 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/database"
 	"openIntern/internal/routers"
-	"openIntern/internal/services"
+	accountsvc "openIntern/internal/services/account"
+	agentsvc "openIntern/internal/services/agent"
+	memorysvc "openIntern/internal/services/memory"
 	pluginsvc "openIntern/internal/services/plugin"
+	storagesvc "openIntern/internal/services/storage"
 )
 
 func main() {
@@ -18,15 +21,15 @@ func main() {
 	if err := database.InitRedis(cfg.Redis); err != nil {
 		log.Fatalf("failed to init redis: %v", err)
 	}
-	services.InitAuth(cfg.JWT.Secret, cfg.JWT.ExpireMinutes)
-	if err := services.InitFile(cfg.COS); err != nil {
+	accountsvc.InitAuth(cfg.JWT.Secret, cfg.JWT.ExpireMinutes)
+	if err := storagesvc.InitFile(cfg.COS); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
 	pluginsvc.InitPlugin(cfg.Plugin)
 	database.InitContextStore(cfg.Tools.OpenViking)
-	services.InitMemoryRetriever(cfg.Tools.OpenViking)
-	services.InitMemorySync(cfg.Tools.OpenViking)
-	shutdown, err := services.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.ContextCompression, cfg.APMPlus)
+	memorysvc.InitMemoryRetriever(cfg.Tools.OpenViking)
+	memorysvc.InitMemorySync(cfg.Tools.OpenViking)
+	shutdown, err := agentsvc.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.ContextCompression, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)
 	}

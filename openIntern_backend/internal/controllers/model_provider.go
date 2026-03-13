@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	modelsvc "openIntern/internal/services/model"
 	"strconv"
 	"strings"
 
@@ -13,24 +13,24 @@ import (
 )
 
 func CreateModelProvider(c *gin.Context) {
-	var input services.CreateModelProviderInput
+	var input modelsvc.CreateModelProviderInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	item, err := services.ModelProvider.Create(input)
+	item, err := modelsvc.ModelProvider.Create(input)
 	if err != nil {
 		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
 		return
 	}
-	response.JSONSuccess(c, http.StatusCreated, services.ModelProvider.ToView(item))
+	response.JSONSuccess(c, http.StatusCreated, modelsvc.ModelProvider.ToView(item))
 }
 
 func ListModelProviders(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
-	items, total, err := services.ModelProvider.List(page, pageSize, keyword)
+	items, total, err := modelsvc.ModelProvider.List(page, pageSize, keyword)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -44,7 +44,7 @@ func ListModelProviders(c *gin.Context) {
 }
 
 func GetModelProvider(c *gin.Context) {
-	item, err := services.ModelProvider.GetByProviderID(c.Param("id"))
+	item, err := modelsvc.ModelProvider.GetByProviderID(c.Param("id"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "model provider not found")
@@ -53,16 +53,16 @@ func GetModelProvider(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	response.JSONSuccess(c, http.StatusOK, services.ModelProvider.ToView(item))
+	response.JSONSuccess(c, http.StatusOK, modelsvc.ModelProvider.ToView(item))
 }
 
 func UpdateModelProvider(c *gin.Context) {
-	var input services.UpdateModelProviderInput
+	var input modelsvc.UpdateModelProviderInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	err := services.ModelProvider.Update(c.Param("id"), input)
+	err := modelsvc.ModelProvider.Update(c.Param("id"), input)
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest
@@ -77,7 +77,7 @@ func UpdateModelProvider(c *gin.Context) {
 }
 
 func DeleteModelProvider(c *gin.Context) {
-	err := services.ModelProvider.Delete(c.Param("id"))
+	err := modelsvc.ModelProvider.Delete(c.Param("id"))
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest

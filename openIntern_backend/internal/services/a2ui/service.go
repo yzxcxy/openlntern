@@ -1,4 +1,4 @@
-package services
+package a2ui
 
 import (
 	"errors"

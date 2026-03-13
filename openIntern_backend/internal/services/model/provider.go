@@ -1,4 +1,4 @@
-package services
+package model
 
 import (
 	"crypto/aes"
@@ -10,6 +10,7 @@ import (
 	"io"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
+	accountsvc "openIntern/internal/services/account"
 	"strings"
 )
 
@@ -267,8 +268,8 @@ func decryptModelSecret(value string) (string, error) {
 }
 
 func modelCryptoSecret() string {
-	if strings.TrimSpace(authSecret) != "" {
-		return authSecret
+	if secret := strings.TrimSpace(accountsvc.CurrentTokenSecret()); secret != "" {
+		return secret
 	}
 	return fallbackModelCryptoSecret
 }

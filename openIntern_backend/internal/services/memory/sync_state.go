@@ -1,4 +1,4 @@
-package services
+package memory
 
 import (
 	"errors"

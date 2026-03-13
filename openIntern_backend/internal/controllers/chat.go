@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	agentsvc "openIntern/internal/services/agent"
+	chatsvc "openIntern/internal/services/chat"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
@@ -31,7 +32,7 @@ func ChatSSE(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	if _, err := services.Thread.EnsureThread(input.ThreadID, ""); err != nil {
+	if _, err := chatsvc.Thread.EnsureThread(input.ThreadID, ""); err != nil {
 		log.Printf("ChatSSE ensure thread failed thread_id=%s client_ip=%s err=%v", input.ThreadID, c.ClientIP(), err)
 		response.InternalError(c)
 		return
@@ -46,7 +47,7 @@ func ChatSSE(c *gin.Context) {
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	c.Stream(func(w io.Writer) bool {
-		if err := services.RunAgent(c.Request.Context(), w, &input); err != nil {
+		if err := agentsvc.RunAgent(c.Request.Context(), w, &input); err != nil {
 			log.Printf("ChatSSE run failed thread_id=%s run_id=%s client_ip=%s err=%v", input.ThreadID, input.RunID, c.ClientIP(), err)
 		} else {
 			log.Printf("ChatSSE run success thread_id=%s run_id=%s client_ip=%s", input.ThreadID, input.RunID, c.ClientIP())
@@ -70,10 +71,10 @@ func UploadChatAsset(c *gin.Context) {
 	}
 	threadID := strings.TrimSpace(c.PostForm("thread_id"))
 
-	asset, err := services.ChatUpload.Upload(c.Request.Context(), ownerID, threadID, fileHeader)
+	asset, err := chatsvc.ChatUpload.Upload(c.Request.Context(), ownerID, threadID, fileHeader)
 	if err != nil {
-		if errors.Is(err, services.ErrChatUploadValidation) {
-			message := strings.TrimPrefix(err.Error(), services.ErrChatUploadValidation.Error()+": ")
+		if errors.Is(err, chatsvc.ErrChatUploadValidation) {
+			message := strings.TrimPrefix(err.Error(), chatsvc.ErrChatUploadValidation.Error()+": ")
 			response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, strings.TrimSpace(message))
 			return
 		}

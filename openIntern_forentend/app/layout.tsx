@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   title: "让你专注更美好的事",
   description: "让你专注更美好的事",
   icons: {
-    icon: "/openIntern_logo_concept_1_open_connection.svg",
+    icon: "/OpenIntern.png",
   },
 };
 

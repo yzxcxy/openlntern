@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	modelsvc "openIntern/internal/services/model"
 	"strconv"
 	"strings"
 
@@ -13,17 +13,17 @@ import (
 )
 
 func CreateModel(c *gin.Context) {
-	var input services.CreateModelCatalogInput
+	var input modelsvc.CreateModelCatalogInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	item, err := services.ModelCatalog.Create(input)
+	item, err := modelsvc.ModelCatalog.Create(input)
 	if err != nil {
 		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
 		return
 	}
-	view, err := services.ModelCatalog.GetView(item.ModelID)
+	view, err := modelsvc.ModelCatalog.GetView(item.ModelID)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -36,7 +36,7 @@ func ListModels(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
 	providerID := c.Query("provider_id")
-	items, total, err := services.ModelCatalog.List(page, pageSize, keyword, providerID)
+	items, total, err := modelsvc.ModelCatalog.List(page, pageSize, keyword, providerID)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -50,7 +50,7 @@ func ListModels(c *gin.Context) {
 }
 
 func GetModel(c *gin.Context) {
-	view, err := services.ModelCatalog.GetView(c.Param("id"))
+	view, err := modelsvc.ModelCatalog.GetView(c.Param("id"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "model not found")
@@ -63,12 +63,12 @@ func GetModel(c *gin.Context) {
 }
 
 func UpdateModel(c *gin.Context) {
-	var input services.UpdateModelCatalogInput
+	var input modelsvc.UpdateModelCatalogInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	err := services.ModelCatalog.Update(c.Param("id"), input)
+	err := modelsvc.ModelCatalog.Update(c.Param("id"), input)
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest
@@ -83,7 +83,7 @@ func UpdateModel(c *gin.Context) {
 }
 
 func DeleteModel(c *gin.Context) {
-	err := services.ModelCatalog.Delete(c.Param("id"))
+	err := modelsvc.ModelCatalog.Delete(c.Param("id"))
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest
@@ -98,7 +98,7 @@ func DeleteModel(c *gin.Context) {
 }
 
 func ListModelCatalog(c *gin.Context) {
-	items, err := services.ModelCatalog.ListCatalogOptions()
+	items, err := modelsvc.ModelCatalog.ListCatalogOptions()
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -107,14 +107,14 @@ func ListModelCatalog(c *gin.Context) {
 }
 
 func GetDefaultModel(c *gin.Context) {
-	item, err := services.DefaultModel.Get()
+	item, err := modelsvc.DefaultModel.Get()
 	if err != nil {
 		response.InternalError(c)
 		return
 	}
 	if item == nil {
 		response.JSONSuccess(c, http.StatusOK, gin.H{
-			"config_key": services.SystemDefaultChatModelConfigKey,
+			"config_key": modelsvc.SystemDefaultChatModelConfigKey,
 			"model_id":   "",
 		})
 		return
@@ -130,7 +130,7 @@ func UpdateDefaultModel(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	item, err := services.DefaultModel.Set(req.ModelID)
+	item, err := modelsvc.DefaultModel.Set(req.ModelID)
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest

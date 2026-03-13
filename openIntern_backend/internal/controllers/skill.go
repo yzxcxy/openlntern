@@ -17,7 +17,8 @@ import (
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	accountsvc "openIntern/internal/services/account"
+	skillsvc "openIntern/internal/services/skill"
 
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-yaml"
@@ -209,7 +210,7 @@ func ImportSkill(c *gin.Context) {
 		SkillName: frontmatter.Name,
 		Raw:       frontmatter.Raw,
 	}
-	if err := services.SkillFrontmatter.CreateOrReplaceByName(&entry); err != nil {
+	if err := skillsvc.SkillFrontmatter.CreateOrReplaceByName(&entry); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -244,7 +245,7 @@ func DeleteSkill(c *gin.Context) {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	if err := services.SkillFrontmatter.DeleteByName(name); err != nil {
+	if err := skillsvc.SkillFrontmatter.DeleteByName(name); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -269,7 +270,7 @@ func GetSkillMetaByName(c *gin.Context) {
 		return
 	}
 
-	entry, err := services.SkillFrontmatter.GetByName(name)
+	entry, err := skillsvc.SkillFrontmatter.GetByName(name)
 	if err != nil {
 		response.NotFound(c, "skill not found")
 		return
@@ -382,7 +383,7 @@ func applySkillFrontmatter(skills []models.Skill) {
 	if len(names) == 0 {
 		return
 	}
-	frontmatters, err := services.SkillFrontmatter.ListByNames(names)
+	frontmatters, err := skillsvc.SkillFrontmatter.ListByNames(names)
 	if err != nil || len(frontmatters) == 0 {
 		return
 	}
@@ -617,11 +618,11 @@ func getAuthUser(c *gin.Context) (string, string, bool) {
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return "", "", false
 	}
-	claims, err := services.ParseToken(parts[1])
+	claims, err := accountsvc.ParseToken(parts[1])
 	if err != nil {
 		return "", "", false
 	}
-	refreshedToken, expiresAt, err := services.GenerateToken(claims.UserID, claims.Role)
+	refreshedToken, expiresAt, err := accountsvc.GenerateToken(claims.UserID, claims.Role)
 	if err == nil {
 		c.Header("X-Access-Token", refreshedToken)
 		c.Header("X-Token-Expires", strconv.FormatInt(expiresAt, 10))

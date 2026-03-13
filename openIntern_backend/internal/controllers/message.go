@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	chatsvc "openIntern/internal/services/chat"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,7 +17,7 @@ func ListMessages(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	messages, total, err := services.Message.ListMessages(threadID, page, pageSize)
+	messages, total, err := chatsvc.Message.ListMessages(threadID, page, pageSize)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")

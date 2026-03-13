@@ -2,11 +2,12 @@ package controllers
 
 import (
 	"net/http"
-	"path"
-	"path/filepath"
 	"openIntern/internal/models"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	accountsvc "openIntern/internal/services/account"
+	storagesvc "openIntern/internal/services/storage"
+	"path"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +22,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	if err := services.User.CreateUser(&user); err != nil {
+	if err := accountsvc.User.CreateUser(&user); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -46,7 +47,7 @@ func Register(c *gin.Context) {
 		Password: req.Password,
 		Phone:    req.Phone,
 	}
-	if err := services.User.CreateUser(&user); err != nil {
+	if err := accountsvc.User.CreateUser(&user); err != nil {
 		response.BadRequest(c)
 		return
 	}
@@ -62,12 +63,12 @@ func Login(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	user, err := services.User.Authenticate(req.Identifier, req.Password)
+	user, err := accountsvc.User.Authenticate(req.Identifier, req.Password)
 	if err != nil {
 		response.Unauthorized(c)
 		return
 	}
-	token, expiresAt, err := services.GenerateToken(user.UserID, user.Role)
+	token, expiresAt, err := accountsvc.GenerateToken(user.UserID, user.Role)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -82,7 +83,7 @@ func Login(c *gin.Context) {
 // GetUser 获取用户
 func GetUser(c *gin.Context) {
 	userID := c.Param("id")
-	user, err := services.User.GetUserByUserID(userID)
+	user, err := accountsvc.User.GetUserByUserID(userID)
 	if err != nil {
 		response.NotFound(c, "user not found")
 		return
@@ -99,7 +100,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if err := services.User.UpdateUser(userID, updates); err != nil {
+	if err := accountsvc.User.UpdateUser(userID, updates); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -123,12 +124,12 @@ func UploadAvatar(c *gin.Context) {
 
 	ext := filepath.Ext(fileHeader.Filename)
 	key := path.Join("avatar", userID, uuid.NewString()+ext)
-	url, err := services.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
+	url, err := storagesvc.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
 	if err != nil {
 		response.InternalError(c)
 		return
 	}
-	if err := services.User.UpdateUser(userID, map[string]interface{}{"avatar": url}); err != nil {
+	if err := accountsvc.User.UpdateUser(userID, map[string]interface{}{"avatar": url}); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -141,7 +142,7 @@ func UploadAvatar(c *gin.Context) {
 // DeleteUser 删除用户
 func DeleteUser(c *gin.Context) {
 	userID := c.Param("id")
-	if err := services.User.DeleteUser(userID); err != nil {
+	if err := accountsvc.User.DeleteUser(userID); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -153,7 +154,7 @@ func ListUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
-	users, total, err := services.User.ListUsers(page, pageSize)
+	users, total, err := accountsvc.User.ListUsers(page, pageSize)
 	if err != nil {
 		response.InternalError(c)
 		return

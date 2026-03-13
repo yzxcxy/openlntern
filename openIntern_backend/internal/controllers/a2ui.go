@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"openIntern/internal/models"
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	a2uisvc "openIntern/internal/services/a2ui"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +18,7 @@ func CreateA2UI(c *gin.Context) {
 		return
 	}
 
-	if err := services.A2UI.CreateA2UI(&a2ui); err != nil {
+	if err := a2uisvc.A2UI.CreateA2UI(&a2ui); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -29,7 +29,7 @@ func CreateA2UI(c *gin.Context) {
 // GetA2UI 获取 A2UI
 func GetA2UI(c *gin.Context) {
 	id := c.Param("id")
-	a2ui, err := services.A2UI.GetA2UIByID(id)
+	a2ui, err := a2uisvc.A2UI.GetA2UIByID(id)
 	if err != nil {
 		response.NotFound(c, "a2ui not found")
 		return
@@ -45,7 +45,7 @@ func UpdateA2UI(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if err := services.A2UI.UpdateA2UI(id, updates); err != nil {
+	if err := a2uisvc.A2UI.UpdateA2UI(id, updates); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -56,7 +56,7 @@ func UpdateA2UI(c *gin.Context) {
 // DeleteA2UI 删除 A2UI
 func DeleteA2UI(c *gin.Context) {
 	id := c.Param("id")
-	if err := services.A2UI.DeleteA2UI(id); err != nil {
+	if err := a2uisvc.A2UI.DeleteA2UI(id); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -69,7 +69,7 @@ func ListA2UIs(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
 
-	a2uis, total, err := services.A2UI.ListA2UIs(page, pageSize, keyword)
+	a2uis, total, err := a2uisvc.A2UI.ListA2UIs(page, pageSize, keyword)
 	if err != nil {
 		response.InternalError(c)
 		return

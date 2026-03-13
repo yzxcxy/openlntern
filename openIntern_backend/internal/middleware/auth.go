@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"openIntern/internal/response"
-	"openIntern/internal/services"
+	accountsvc "openIntern/internal/services/account"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,13 +24,13 @@ func AuthRequired() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		claims, err := services.ParseToken(parts[1])
+		claims, err := accountsvc.ParseToken(parts[1])
 		if err != nil {
 			response.Unauthorized(c)
 			c.Abort()
 			return
 		}
-		refreshedToken, expiresAt, err := services.GenerateToken(claims.UserID, claims.Role)
+		refreshedToken, expiresAt, err := accountsvc.GenerateToken(claims.UserID, claims.Role)
 		if err == nil {
 			c.Header("X-Access-Token", refreshedToken)
 			c.Header("X-Token-Expires", strconv.FormatInt(expiresAt, 10))

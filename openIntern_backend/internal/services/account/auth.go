@@ -1,4 +1,4 @@
-package services
+package account
 
 import (
 	"errors"
@@ -64,4 +64,9 @@ func ParseToken(tokenString string) (*TokenClaims, error) {
 		return nil, errors.New("invalid token")
 	}
 	return claims, nil
+}
+
+// CurrentTokenSecret exposes the configured JWT secret to sibling business packages.
+func CurrentTokenSecret() string {
+	return authSecret
 }
