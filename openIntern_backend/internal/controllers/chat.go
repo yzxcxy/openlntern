@@ -1,11 +1,14 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 
 	"openIntern/internal/response"
 	agentsvc "openIntern/internal/services/agent"
@@ -48,12 +51,31 @@ func ChatSSE(c *gin.Context) {
 
 	c.Stream(func(w io.Writer) bool {
 		if err := agentsvc.RunAgent(c.Request.Context(), w, &input); err != nil {
-			log.Printf("ChatSSE run failed thread_id=%s run_id=%s client_ip=%s err=%v", input.ThreadID, input.RunID, c.ClientIP(), err)
+			if isBenignSSECloseError(err) {
+				log.Printf("ChatSSE client disconnected thread_id=%s run_id=%s client_ip=%s err=%v", input.ThreadID, input.RunID, c.ClientIP(), err)
+			} else {
+				log.Printf("ChatSSE run failed thread_id=%s run_id=%s client_ip=%s err=%v", input.ThreadID, input.RunID, c.ClientIP(), err)
+			}
 		} else {
 			log.Printf("ChatSSE run success thread_id=%s run_id=%s client_ip=%s", input.ThreadID, input.RunID, c.ClientIP())
 		}
 		return false
 	})
+}
+
+// isBenignSSECloseError identifies client-side stream termination that should not be treated as a server failure.
+func isBenignSSECloseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "broken pipe") || strings.Contains(lower, "reset by peer")
 }
 
 // UploadChatAsset handles chat attachment uploads and returns uploaded URL metadata.

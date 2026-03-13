@@ -1,12 +1,8 @@
 package dao
 
 import (
-	"errors"
-
 	"openIntern/internal/database"
 	"openIntern/internal/models"
-
-	"gorm.io/gorm"
 )
 
 // ThreadContextSnapshotDAO provides persistence methods for thread compression snapshots.
@@ -23,16 +19,17 @@ func (d *ThreadContextSnapshotDAO) Create(item *models.ThreadContextSnapshot) er
 // GetLatestByThreadID returns the latest snapshot ordered by compression index.
 func (d *ThreadContextSnapshotDAO) GetLatestByThreadID(threadID string) (*models.ThreadContextSnapshot, error) {
 	var item models.ThreadContextSnapshot
-	err := database.DB.
+	result := database.DB.
 		Where("thread_id = ?", threadID).
 		Order("compression_index DESC").
 		Order("created_at DESC").
-		First(&item).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
+		Limit(1).
+		Find(&item)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, nil
 	}
 	return &item, nil
 }

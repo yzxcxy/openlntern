@@ -3,12 +3,15 @@ package sse
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
@@ -55,16 +58,20 @@ func (w *SSEWriter) WriteBytes(ctx context.Context, writer io.Writer, event []by
 	// Write the SSE frame
 	_, err = writer.Write([]byte(sseFrame))
 	if err != nil {
-		w.logger.ErrorContext(ctx, "Failed to write SSE frame",
-			"error", err)
+		if !isBenignStreamCloseError(err) {
+			w.logger.ErrorContext(ctx, "Failed to write SSE frame",
+				"error", err)
+		}
 		return fmt.Errorf("SSE write failed: %w", err)
 	}
 
 	// Flush if the writer supports it
 	if flusher, ok := writer.(flusher); ok {
 		if err := flusher.Flush(); err != nil {
-			w.logger.ErrorContext(ctx, "Failed to flush SSE frame",
-				"error", err)
+			if !isBenignStreamCloseError(err) {
+				w.logger.ErrorContext(ctx, "Failed to flush SSE frame",
+					"error", err)
+			}
 			return fmt.Errorf("SSE flush failed: %w", err)
 		}
 	}
@@ -105,18 +112,22 @@ func (w *SSEWriter) WriteEventWithType(ctx context.Context, writer io.Writer, ev
 	// Write the SSE frame
 	_, err = writer.Write([]byte(sseFrame))
 	if err != nil {
-		w.logger.ErrorContext(ctx, "Failed to write SSE frame",
-			"error", err,
-			"event_type", event.Type())
+		if !isBenignStreamCloseError(err) {
+			w.logger.ErrorContext(ctx, "Failed to write SSE frame",
+				"error", err,
+				"event_type", event.Type())
+		}
 		return fmt.Errorf("SSE write failed: %w", err)
 	}
 
 	// Flush if the writer supports it
 	if flusher, ok := writer.(flusher); ok {
 		if err := flusher.Flush(); err != nil {
-			w.logger.ErrorContext(ctx, "Failed to flush SSE frame",
-				"error", err,
-				"event_type", event.Type())
+			if !isBenignStreamCloseError(err) {
+				w.logger.ErrorContext(ctx, "Failed to flush SSE frame",
+					"error", err,
+					"event_type", event.Type())
+			}
 			return fmt.Errorf("SSE flush failed: %w", err)
 		}
 	}
@@ -197,6 +208,21 @@ type flusher interface {
 // flusherWithoutError is a type alias for http.Flusher.
 // It is used to flush the writer without returning an error.
 type flusherWithoutError = http.Flusher
+
+// isBenignStreamCloseError filters expected client disconnects from error-level SSE logs.
+func isBenignStreamCloseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "broken pipe") || strings.Contains(lower, "reset by peer")
+}
 
 // CustomEvent is a simple implementation of events.Event for error and custom events
 type CustomEvent struct {
