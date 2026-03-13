@@ -83,6 +83,7 @@ type ModelFormState = {
   name: string;
   avatar: string;
   capabilities_json: string;
+  context_window: string;
   enabled: boolean;
   sort: string;
 };
@@ -105,6 +106,7 @@ const EMPTY_MODEL_FORM: ModelFormState = {
   name: "",
   avatar: "",
   capabilities_json: "",
+  context_window: "",
   enabled: true,
   sort: "0",
 };
@@ -158,6 +160,113 @@ const parseCapabilityTokens = (raw?: string) => {
       )
     );
   }
+};
+
+const parsePositiveInteger = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 0;
+};
+
+const formatNumberLabel = (value: number) =>
+  new Intl.NumberFormat("zh-CN").format(value);
+
+// 将旧的纯标签写法提升为 JSON，便于和上下文窗口配置共存。
+const buildCapabilitiesDraft = (raw?: string): Record<string, unknown> | null => {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ...(parsed as Record<string, unknown>) };
+    }
+    const tokens = Array.from(new Set(collectCapabilityTokens(parsed)));
+    return tokens.length > 0 ? { capabilities: tokens } : {};
+  } catch {
+    const tokens = Array.from(new Set(collectCapabilityTokens(trimmed)));
+    if (tokens.length > 0) {
+      return { capabilities: tokens };
+    }
+    return null;
+  }
+};
+
+const extractContextWindow = (raw?: string) => {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return "";
+    }
+    const record = parsed as Record<string, unknown>;
+    for (const key of ["context_window", "contextWindow", "max_input_tokens", "maxInputTokens"]) {
+      const tokens = parsePositiveInteger(record[key]);
+      if (tokens > 0) {
+        return String(tokens);
+      }
+    }
+    const contextValue = record.context;
+    if (contextValue && typeof contextValue === "object" && !Array.isArray(contextValue)) {
+      const contextRecord = contextValue as Record<string, unknown>;
+      for (const key of ["window", "context_window", "max_input_tokens"]) {
+        const tokens = parsePositiveInteger(contextRecord[key]);
+        if (tokens > 0) {
+          return String(tokens);
+        }
+      }
+    }
+  } catch {
+    return "";
+  }
+  return "";
+};
+
+const mergeCapabilitiesWithContextWindow = (raw: string, contextWindow: string) => {
+  const trimmedContextWindow = contextWindow.trim();
+  const draft = buildCapabilitiesDraft(raw);
+  if (draft === null) {
+    throw new Error("capabilities_json 不是有效 JSON 或能力标签列表，无法合并上下文大小");
+  }
+
+  delete draft.context_window;
+  delete draft.contextWindow;
+  delete draft.max_input_tokens;
+  delete draft.maxInputTokens;
+
+  const contextValue = draft.context;
+  if (contextValue && typeof contextValue === "object" && !Array.isArray(contextValue)) {
+    const nextContext = { ...(contextValue as Record<string, unknown>) };
+    delete nextContext.window;
+    delete nextContext.context_window;
+    delete nextContext.max_input_tokens;
+    if (Object.keys(nextContext).length > 0) {
+      draft.context = nextContext;
+    } else {
+      delete draft.context;
+    }
+  }
+
+  if (trimmedContextWindow) {
+    const tokens = parsePositiveInteger(trimmedContextWindow);
+    if (tokens <= 0) {
+      throw new Error("上下文大小必须是正整数");
+    }
+    draft.context_window = tokens;
+  }
+
+  return Object.keys(draft).length > 0 ? JSON.stringify(draft, null, 2) : "";
 };
 
 const getModelGroupLabel = (model: ModelItem) => {
@@ -451,6 +560,7 @@ export default function ModelsPage() {
       name: item.name || "",
       avatar: item.avatar || "",
       capabilities_json: item.capabilities_json || "",
+      context_window: extractContextWindow(item.capabilities_json),
       enabled: !!item.enabled,
       sort: String(item.sort ?? 0),
     });
@@ -532,12 +642,20 @@ export default function ModelsPage() {
     setError("");
     try {
       const sortValue = Number.parseInt(modelForm.sort, 10);
+      const hasEmbeddedContextWindow = extractContextWindow(modelForm.capabilities_json) !== "";
+      const capabilitiesJSON =
+        modelForm.context_window.trim() || hasEmbeddedContextWindow
+          ? mergeCapabilitiesWithContextWindow(
+              modelForm.capabilities_json,
+              modelForm.context_window
+            )
+          : modelForm.capabilities_json.trim();
       const payload = {
         provider_id: modelForm.provider_id,
         model_key: modelForm.model_key.trim(),
         name: modelForm.name.trim(),
         avatar: modelForm.avatar.trim(),
-        capabilities_json: modelForm.capabilities_json.trim(),
+        capabilities_json: capabilitiesJSON,
         enabled: modelForm.enabled,
         sort: Number.isNaN(sortValue) ? 0 : sortValue,
       };
@@ -903,6 +1021,7 @@ export default function ModelsPage() {
                           <div className="divide-y divide-[var(--color-border-default)]">
                             {group.items.map((item) => {
                               const capabilityTokens = parseCapabilityTokens(item.capabilities_json);
+                              const contextWindow = extractContextWindow(item.capabilities_json);
                               return (
                                 <div
                                   key={item.model_id}
@@ -949,6 +1068,11 @@ export default function ModelsPage() {
                                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-muted)]">
                                       <span>排序 {item.sort}</span>
                                       <span>API 类型 {item.api_type || selectedProvider.api_type}</span>
+                                      {contextWindow && (
+                                        <span className="rounded-full border border-[var(--color-border-default)] px-2 py-0.5">
+                                          上下文 {formatNumberLabel(Number.parseInt(contextWindow, 10))}
+                                        </span>
+                                      )}
                                       {capabilityTokens.length > 0 ? (
                                         capabilityTokens.slice(0, 4).map((token) => (
                                           <span
@@ -1166,6 +1290,19 @@ export default function ModelsPage() {
               value={modelForm.sort}
               onChange={(e) => setModelForm((prev) => ({ ...prev, sort: e.target.value }))}
             />
+            <UiInput
+              type="number"
+              min="1"
+              step="1"
+              placeholder="上下文大小，例如 128000"
+              value={modelForm.context_window}
+              onChange={(e) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  context_window: e.target.value,
+                }))
+              }
+            />
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-panel)] px-3 py-2 text-sm text-[var(--color-text-secondary)]">
               <span>模型状态</span>
               <UiButton
@@ -1181,6 +1318,9 @@ export default function ModelsPage() {
               >
                 {modelForm.enabled ? "已启用" : "已停用"}
               </UiButton>
+            </div>
+            <div className="sm:col-span-2 text-xs leading-5 text-[var(--color-text-muted)]">
+              上下文大小会写入 <code>capabilities_json.context_window</code>。如果这里留空，会移除已有的上下文窗口配置。
             </div>
             <UiTextarea
               className="sm:col-span-2 min-h-24"
