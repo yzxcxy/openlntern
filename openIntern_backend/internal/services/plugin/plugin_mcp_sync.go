@@ -37,6 +37,8 @@ const (
 )
 
 var (
+	errMCPPluginSyncBusy = errors.New("mcp plugin sync is already running")
+
 	mcpSyncDelay         = defaultMCPSyncDelay
 	mcpSyncPollInterval  = defaultMCPSyncPollInterval
 	mcpSyncRefreshWindow = defaultMCPSyncRefreshWindow
@@ -45,6 +47,55 @@ var (
 
 	mcpSyncStartOnce sync.Once
 )
+
+var enqueueMCPPluginSyncScript = `
+local key = KEYS[1]
+local member = ARGV[1]
+local score = tonumber(ARGV[2])
+local existing = redis.call("ZSCORE", key, member)
+if not existing then
+	redis.call("ZADD", key, score, member)
+	return 1
+end
+if score < tonumber(existing) then
+	redis.call("ZADD", key, score, member)
+	return 1
+end
+return 0
+`
+
+var seedMCPPluginSyncScript = `
+local key = KEYS[1]
+local member = ARGV[1]
+local score = tonumber(ARGV[2])
+local existing = redis.call("ZSCORE", key, member)
+if existing then
+	return 0
+end
+redis.call("ZADD", key, score, member)
+return 1
+`
+
+var finalizeMCPPluginSyncScript = `
+local key = KEYS[1]
+local member = ARGV[1]
+local processing = tonumber(ARGV[2])
+local next_score = tonumber(ARGV[3])
+local current = redis.call("ZSCORE", key, member)
+if not current then
+	return 0
+end
+current = tonumber(current)
+if current == processing then
+	redis.call("ZADD", key, next_score, member)
+	return 1
+end
+if current > next_score then
+	redis.call("ZADD", key, next_score, member)
+	return 1
+end
+return 0
+`
 
 func initPluginMCPSync(cfg config.PluginConfig) {
 	mcpSyncDelay = durationFromSeconds(cfg.MCPSyncDelaySeconds, defaultMCPSyncDelay)
@@ -55,7 +106,7 @@ func initPluginMCPSync(cfg config.PluginConfig) {
 
 	mcpSyncStartOnce.Do(func() {
 		go func() {
-			if err := Plugin.scheduleAllEnabledMCPSyncs(context.Background()); err != nil {
+			if err := Plugin.scheduleAllEnabledMCPSyncs(); err != nil {
 				log.Printf("initial full mcp sync scheduling failed err=%v", err)
 			}
 		}()
@@ -84,13 +135,24 @@ func (s *PluginService) queueMCPPluginSync(pluginID string, delay time.Duration)
 		return errors.New("mcp sync queue requires redis")
 	}
 
-	runAt := time.Now().Add(delay).UnixMilli()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	return redisClient.ZAdd(ctx, mcpSyncQueueRedisKey, redis.Z{
-		Score:  float64(runAt),
-		Member: pluginID,
-	}).Err()
+	return runMCPPluginSyncQueueScript(redisClient, enqueueMCPPluginSyncScript, pluginID, time.Now().Add(delay).UnixMilli())
+}
+
+func (s *PluginService) seedMCPPluginSync(pluginID string, delay time.Duration) error {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return nil
+	}
+	if delay < 0 {
+		delay = 0
+	}
+
+	redisClient := database.GetRedis()
+	if redisClient == nil {
+		return errors.New("mcp sync queue requires redis")
+	}
+
+	return runMCPPluginSyncQueueScript(redisClient, seedMCPPluginSyncScript, pluginID, time.Now().Add(delay).UnixMilli())
 }
 
 func (s *PluginService) clearMCPPluginSync(pluginID string) {
@@ -107,6 +169,74 @@ func (s *PluginService) clearMCPPluginSync(pluginID string) {
 	if err := redisClient.ZRem(ctx, mcpSyncQueueRedisKey, pluginID).Err(); err != nil {
 		log.Printf("clear mcp sync queue failed plugin_id=%s err=%v", pluginID, err)
 	}
+}
+
+func runMCPPluginSyncQueueScript(redisClient *redis.Client, script string, pluginID string, runAt int64) error {
+	if redisClient == nil {
+		return errors.New("mcp sync queue requires redis")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	return redisClient.Eval(
+		ctx,
+		script,
+		[]string{mcpSyncQueueRedisKey},
+		pluginID,
+		strconv.FormatInt(runAt, 10),
+	).Err()
+}
+
+func (s *PluginService) setMCPPluginSyncRunAt(pluginID string, runAt int64) error {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return nil
+	}
+
+	redisClient := database.GetRedis()
+	if redisClient == nil {
+		return errors.New("mcp sync queue requires redis")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	return redisClient.ZAdd(ctx, mcpSyncQueueRedisKey, redis.Z{
+		Score:  float64(runAt),
+		Member: pluginID,
+	}).Err()
+}
+
+func (s *PluginService) markMCPPluginSyncInProgress(pluginID string) (int64, error) {
+	runAt := time.Now().Add(currentMCPSyncLockTTL()).UnixMilli()
+	return runAt, s.setMCPPluginSyncRunAt(pluginID, runAt)
+}
+
+func (s *PluginService) finalizeMCPPluginSync(pluginID string, processingRunAt int64, failed bool) error {
+	delay, ok := s.nextMCPSyncDelay(pluginID, failed)
+	if !ok {
+		s.clearMCPPluginSync(pluginID)
+		return nil
+	}
+
+	redisClient := database.GetRedis()
+	if redisClient == nil {
+		return errors.New("mcp sync queue requires redis")
+	}
+
+	nextRunAt := time.Now().Add(delay).UnixMilli()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	return redisClient.Eval(
+		ctx,
+		finalizeMCPPluginSyncScript,
+		[]string{mcpSyncQueueRedisKey},
+		pluginID,
+		strconv.FormatInt(processingRunAt, 10),
+		strconv.FormatInt(nextRunAt, 10),
+	).Err()
 }
 
 func (s *PluginService) runMCPSyncQueueWorker() {
@@ -145,16 +275,6 @@ func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int
 	}
 
 	for _, pluginID := range ids {
-		removeCtx, removeCancel := context.WithTimeout(context.Background(), 2*time.Second)
-		removed, removeErr := redisClient.ZRem(removeCtx, mcpSyncQueueRedisKey, pluginID).Result()
-		removeCancel()
-		if removeErr != nil {
-			log.Printf("remove queued mcp sync task failed plugin_id=%s err=%v", pluginID, removeErr)
-			continue
-		}
-		if removed == 0 {
-			continue
-		}
 		s.triggerScheduledMCPSync(pluginID)
 	}
 
@@ -163,14 +283,14 @@ func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int
 
 // scheduleAllEnabledMCPSyncs 在进程启动时将全部启用中的 MCP 插件放入延时队列，
 // 确保队列具备完整初始集，后续由 worker 在成功/失败后自行续期。
-func (s *PluginService) scheduleAllEnabledMCPSyncs(ctx context.Context) error {
+func (s *PluginService) scheduleAllEnabledMCPSyncs() error {
 	plugins, err := dao.Plugin.ListByRuntimeStatus(pluginRuntimeMCP, pluginStatusEnabled)
 	if err != nil {
 		return err
 	}
 
 	for _, plugin := range plugins {
-		if err := s.queueMCPPluginSync(plugin.PluginID, 0); err != nil {
+		if err := s.seedMCPPluginSync(plugin.PluginID, 0); err != nil {
 			log.Printf("enqueue initial mcp sync failed plugin_id=%s err=%v", plugin.PluginID, err)
 		}
 	}
@@ -179,19 +299,49 @@ func (s *PluginService) scheduleAllEnabledMCPSyncs(ctx context.Context) error {
 }
 
 func (s *PluginService) triggerScheduledMCPSync(pluginID string) {
-	if err := s.syncMCPPluginNow(context.Background(), pluginID, false); err != nil {
-		log.Printf("scheduled mcp sync failed plugin_id=%s err=%v", pluginID, err)
-		if delay, ok := s.nextMCPSyncDelay(pluginID, true); ok {
-			if queueErr := s.queueMCPPluginSync(pluginID, delay); queueErr != nil {
-				log.Printf("requeue mcp sync failed plugin_id=%s err=%v", pluginID, queueErr)
-			}
-		}
+	lock, acquired, err := tryAcquireMCPPluginSyncLock(pluginID)
+	if err != nil {
+		log.Printf("acquire mcp sync lock failed plugin_id=%s err=%v", pluginID, err)
 		return
 	}
-	if delay, ok := s.nextMCPSyncDelay(pluginID, false); ok {
-		if queueErr := s.queueMCPPluginSync(pluginID, delay); queueErr != nil {
-			log.Printf("schedule next mcp sync failed plugin_id=%s err=%v", pluginID, queueErr)
+	if !acquired {
+		return
+	}
+	defer func() {
+		if releaseErr := lock.Release(); releaseErr != nil {
+			log.Printf("release mcp sync lock failed plugin_id=%s err=%v", pluginID, releaseErr)
 		}
+	}()
+
+	plugin, err := s.getPluginRecord(pluginID)
+	if err != nil {
+		if errors.Is(err, dao.ErrPluginNotFound) {
+			s.clearMCPPluginSync(pluginID)
+			return
+		}
+		log.Printf("load mcp plugin failed plugin_id=%s err=%v", pluginID, err)
+		return
+	}
+	if plugin.RuntimeType != pluginRuntimeMCP || plugin.Status != pluginStatusEnabled {
+		s.clearMCPPluginSync(pluginID)
+		return
+	}
+
+	processingRunAt, err := s.markMCPPluginSyncInProgress(pluginID)
+	if err != nil {
+		log.Printf("mark mcp sync in progress failed plugin_id=%s err=%v", pluginID, err)
+		return
+	}
+
+	syncCtx, cancel := buildMCPSyncContext(context.Background())
+	defer cancel()
+
+	syncErr := s.syncMCPPluginRecord(syncCtx, plugin, true)
+	if syncErr != nil {
+		log.Printf("scheduled mcp sync failed plugin_id=%s err=%v", pluginID, syncErr)
+	}
+	if finalizeErr := s.finalizeMCPPluginSync(pluginID, processingRunAt, syncErr != nil); finalizeErr != nil {
+		log.Printf("finalize mcp sync schedule failed plugin_id=%s err=%v", pluginID, finalizeErr)
 	}
 }
 
@@ -219,6 +369,35 @@ func (s *PluginService) nextMCPSyncDelay(pluginID string, failed bool) (time.Dur
 }
 
 func (s *PluginService) syncMCPPluginNow(ctx context.Context, pluginID string, allowDisabled bool) error {
+	lock, acquired, err := tryAcquireMCPPluginSyncLock(pluginID)
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		return errMCPPluginSyncBusy
+	}
+	defer func() {
+		if releaseErr := lock.Release(); releaseErr != nil {
+			log.Printf("release mcp sync lock failed plugin_id=%s err=%v", pluginID, releaseErr)
+		}
+	}()
+
+	return s.syncMCPPluginNowLocked(ctx, pluginID, allowDisabled)
+}
+
+func buildMCPSyncContext(ctx context.Context) (context.Context, func()) {
+	syncCtx := ctx
+	if syncCtx == nil {
+		syncCtx = context.Background()
+	}
+	if _, hasDeadline := syncCtx.Deadline(); hasDeadline || mcpSyncTimeout <= 0 {
+		return syncCtx, func() {}
+	}
+
+	return context.WithTimeout(syncCtx, mcpSyncTimeout)
+}
+
+func (s *PluginService) syncMCPPluginNowLocked(ctx context.Context, pluginID string, allowDisabled bool) error {
 	plugin, err := s.getPluginRecord(pluginID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -233,14 +412,7 @@ func (s *PluginService) syncMCPPluginNow(ctx context.Context, pluginID string, a
 		return nil
 	}
 
-	syncCtx := ctx
-	cancel := func() {}
-	if syncCtx == nil {
-		syncCtx = context.Background()
-	}
-	if _, hasDeadline := syncCtx.Deadline(); !hasDeadline && mcpSyncTimeout > 0 {
-		syncCtx, cancel = context.WithTimeout(syncCtx, mcpSyncTimeout)
-	}
+	syncCtx, cancel := buildMCPSyncContext(ctx)
 	defer cancel()
 
 	return s.syncMCPPluginRecord(syncCtx, plugin, true)
@@ -264,11 +436,20 @@ func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, pluginID 
 		return errors.New("only mcp plugins support sync")
 	}
 
-	syncCtx := ctx
-	cancel := func() {}
-	if _, hasDeadline := syncCtx.Deadline(); !hasDeadline && mcpSyncTimeout > 0 {
-		syncCtx, cancel = context.WithTimeout(syncCtx, mcpSyncTimeout)
+	lock, acquired, err := tryAcquireMCPPluginSyncLock(pluginID)
+	if err != nil {
+		return err
 	}
+	if !acquired {
+		return errMCPPluginSyncBusy
+	}
+	defer func() {
+		if releaseErr := lock.Release(); releaseErr != nil {
+			log.Printf("release mcp sync lock failed plugin_id=%s err=%v", pluginID, releaseErr)
+		}
+	}()
+
+	syncCtx, cancel := buildMCPSyncContext(ctx)
 	defer cancel()
 
 	return s.syncMCPPluginRecord(syncCtx, plugin, false)

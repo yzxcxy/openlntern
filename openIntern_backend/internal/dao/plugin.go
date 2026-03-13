@@ -202,21 +202,6 @@ func (d *PluginDAO) ListByRuntimeStatus(runtimeType, status string) ([]models.Pl
 	return plugins, nil
 }
 
-func (d *PluginDAO) ListByRuntimeStatusNeedingSync(runtimeType, status string, cutoff time.Time) ([]models.Plugin, error) {
-	if database.DB == nil {
-		return nil, nil
-	}
-
-	var plugins []models.Plugin
-	if err := database.DB.
-		Where("runtime_type = ? AND status = ?", runtimeType, status).
-		Where("last_sync_at IS NULL OR last_sync_at <= ?", cutoff).
-		Find(&plugins).Error; err != nil {
-		return nil, err
-	}
-	return plugins, nil
-}
-
 func (d *PluginDAO) ListRuntimeTools(runtimeType, status string, toolIDs []string) ([]models.Tool, error) {
 	query := database.DB.Model(&models.Tool{}).
 		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
