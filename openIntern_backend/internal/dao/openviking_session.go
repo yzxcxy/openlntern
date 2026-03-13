@@ -12,6 +12,24 @@ import (
 // OpenVikingSessionDAO provides persistence methods for OpenViking sessions.
 type OpenVikingSessionDAO struct{}
 
+// OpenVikingCommitSubmitResult captures the async commit acceptance payload.
+type OpenVikingCommitSubmitResult struct {
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+	TaskID    string `json:"task_id"`
+	Message   string `json:"message"`
+}
+
+// OpenVikingTaskResult captures a background task status snapshot from /api/v1/tasks/{task_id}.
+type OpenVikingTaskResult struct {
+	TaskID     string         `json:"task_id"`
+	TaskType   string         `json:"task_type"`
+	Status     string         `json:"status"`
+	ResourceID string         `json:"resource_id"`
+	Result     map[string]any `json:"result"`
+	Error      string         `json:"error"`
+}
+
 // OpenVikingSession is the shared DAO singleton.
 var OpenVikingSession = new(OpenVikingSessionDAO)
 
@@ -46,16 +64,47 @@ func (d *OpenVikingSessionDAO) AddMessage(ctx context.Context, sessionID, role, 
 }
 
 // Commit triggers OpenViking memory extraction for the specified session.
-// It runs in asynchronous mode (`wait=false`) to avoid blocking backend worker loops.
-func (d *OpenVikingSessionDAO) Commit(ctx context.Context, sessionID string) error {
+// It always runs in asynchronous mode (`wait=false`) and returns a task_id for status polling.
+func (d *OpenVikingSessionDAO) Commit(ctx context.Context, sessionID string) (*OpenVikingCommitSubmitResult, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return fmt.Errorf("session_id is required")
+		return nil, fmt.Errorf("session_id is required")
 	}
 	path := "/api/v1/sessions/" + url.PathEscape(sessionID) + "/commit?wait=false"
 	body, err := database.Context.Post(ctx, path, map[string]any{})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return decodeStoreResult(body, nil)
+	var result OpenVikingCommitSubmitResult
+	if err := decodeStoreResult(body, &result); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(result.TaskID) == "" {
+		return nil, fmt.Errorf("openviking commit response missing task_id")
+	}
+	if strings.TrimSpace(result.SessionID) == "" {
+		result.SessionID = sessionID
+	}
+	return &result, nil
+}
+
+// GetTask reads one background task state produced by async session commit.
+func (d *OpenVikingSessionDAO) GetTask(ctx context.Context, taskID string) (*OpenVikingTaskResult, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil, fmt.Errorf("task_id is required")
+	}
+	path := "/api/v1/tasks/" + url.PathEscape(taskID)
+	body, err := database.Context.Get(ctx, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var result OpenVikingTaskResult
+	if err := decodeStoreResult(body, &result); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(result.TaskID) == "" {
+		result.TaskID = taskID
+	}
+	return &result, nil
 }

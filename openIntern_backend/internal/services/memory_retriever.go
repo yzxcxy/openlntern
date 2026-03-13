@@ -17,12 +17,10 @@ import (
 const (
 	defaultUserMemoryFindLimit   = 4
 	defaultAgentMemoryFindLimit  = 2
-	defaultPreferenceFindLimit   = 2
 	defaultMemoryContextMaxItems = 5
 	// defaultMemoryScoreThreshold filters low-relevance long-term memory hits before prompt injection.
 	defaultMemoryScoreThreshold = 0.4
 	defaultMemorySearchTimeout  = 2 * time.Second
-	defaultPreferenceQuery      = "用户偏好 回答风格 语气 风格偏好 写作风格"
 	memoryContextPrefix         = "以下是与当前请求相关的长期记忆，仅在确实相关时参考；若与用户当前明确要求冲突，以当前要求为准："
 )
 
@@ -88,18 +86,6 @@ func (s *MemoryRetrieverService) findRelevantMemoryMatches(ctx context.Context, 
 		return nil, err
 	}
 
-	if !containsPreferenceMemory(userMatches) {
-		preferenceMatches, preferenceErr := dao.MemorySearch.FindMemoryMatches(ctx, dao.MemorySearchFilter{
-			Query:          defaultPreferenceQuery,
-			TargetURI:      dao.MemorySearch.UserRootURI(),
-			Limit:          defaultPreferenceFindLimit,
-			ScoreThreshold: defaultMemoryScoreThreshold,
-		})
-		if preferenceErr == nil {
-			userMatches = append(userMatches, preferenceMatches...)
-		}
-	}
-
 	agentMatches, err := dao.MemorySearch.FindMemoryMatches(ctx, dao.MemorySearchFilter{
 		Query:          query,
 		TargetURI:      dao.MemorySearch.AgentRootURI(),
@@ -111,17 +97,6 @@ func (s *MemoryRetrieverService) findRelevantMemoryMatches(ctx context.Context, 
 	}
 
 	return mergeMemoryMatches(userMatches, agentMatches, defaultMemoryContextMaxItems), nil
-}
-
-// containsPreferenceMemory reports whether the current match set already includes stable user-level style or preference guidance.
-func containsPreferenceMemory(matches []dao.MemorySearchMatch) bool {
-	for _, item := range matches {
-		switch strings.ToLower(strings.TrimSpace(item.MemoryType)) {
-		case "preferences", "profile":
-			return true
-		}
-	}
-	return false
 }
 
 // extractMemoryQuery reuses the latest user text as the retrieval query for long-term memory.

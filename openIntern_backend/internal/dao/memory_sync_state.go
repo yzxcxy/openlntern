@@ -48,7 +48,6 @@ func (d *MemorySyncStateDAO) UpsertPendingRun(item *models.MemorySyncState) erro
 		Columns: []clause.Column{{Name: "thread_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"last_committed_run_id",
-			"commit_status",
 			"status",
 			"retry_count",
 			"last_error",
@@ -77,6 +76,8 @@ func (d *MemorySyncStateDAO) MarkReady(threadID, lastSyncedMsgID, runID string) 
 			"last_added_msg_id":     lastSyncedMsgID,
 			"last_synced_msg_id":    lastSyncedMsgID,
 			"last_committed_run_id": runID,
+			"commit_task_id":        "",
+			"commit_task_status":    "",
 			"commit_status":         models.MemoryCommitStatusCommitted,
 			"status":                models.MemorySyncStatusReady,
 			"retry_count":           0,
@@ -98,13 +99,52 @@ func (d *MemorySyncStateDAO) MarkFailed(threadID, lastError string, nextAttemptA
 		}).Error
 }
 
+// MarkCommitSubmitted records the accepted async task id after commit(wait=false) submission.
+func (d *MemorySyncStateDAO) MarkCommitSubmitted(threadID, taskID string, nextAttemptAt *time.Time) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"commit_task_id":     taskID,
+			"commit_task_status": models.MemorySyncStatusPending,
+			"commit_status":      models.MemoryCommitStatusProcessing,
+			"status":             models.MemorySyncStatusPending,
+			"last_error":         "",
+			"next_attempt_at":    nextAttemptAt,
+		}).Error
+}
+
+// MarkCommitPolling stores the latest polled task status and re-queues the thread for next poll.
+func (d *MemorySyncStateDAO) MarkCommitPolling(threadID, taskStatus string, nextAttemptAt *time.Time) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"commit_task_status": taskStatus,
+			"commit_status":      models.MemoryCommitStatusProcessing,
+			"status":             models.MemorySyncStatusPending,
+			"last_error":         "",
+			"next_attempt_at":    nextAttemptAt,
+		}).Error
+}
+
+// ClearCommitTask removes stale async task metadata so commit can be re-submitted safely.
+func (d *MemorySyncStateDAO) ClearCommitTask(threadID string) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"commit_task_id":     "",
+			"commit_task_status": "",
+		}).Error
+}
+
 // MarkMessagesAdded stores the add-message cursor before commit starts.
 func (d *MemorySyncStateDAO) MarkMessagesAdded(threadID, lastAddedMsgID string) error {
 	return database.DB.Model(&models.MemorySyncState{}).
 		Where("thread_id = ?", threadID).
 		Updates(map[string]any{
-			"last_added_msg_id": lastAddedMsgID,
-			"commit_status":     models.MemoryCommitStatusPending,
-			"last_error":        "",
+			"last_added_msg_id":  lastAddedMsgID,
+			"commit_task_id":     "",
+			"commit_task_status": "",
+			"commit_status":      models.MemoryCommitStatusPending,
+			"last_error":         "",
 		}).Error
 }

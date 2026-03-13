@@ -20,10 +20,12 @@ const (
 const (
 	// MemoryCommitStatusPending indicates add-message has advanced but commit request is not accepted yet.
 	MemoryCommitStatusPending = "pending"
+	// MemoryCommitStatusProcessing indicates commit request is accepted and task polling is in progress.
+	MemoryCommitStatusProcessing = "processing"
 	// MemoryCommitStatusCommitted indicates commit request has been accepted by OpenViking (wait=false).
-	// It does not guarantee asynchronous extraction has fully completed.
+	// It means async task reached completed status.
 	MemoryCommitStatusCommitted = "committed"
-	// MemoryCommitStatusFailed indicates commit request submission failed.
+	// MemoryCommitStatusFailed indicates commit submission failed, or async task finished with failed/invalid status.
 	MemoryCommitStatusFailed = "failed"
 )
 
@@ -34,6 +36,8 @@ type MemorySyncState struct {
 	LastAddedMsgID     string     `gorm:"column:last_added_msg_id;size:64" json:"last_added_msg_id"`
 	LastSyncedMsgID    string     `gorm:"column:last_synced_msg_id;size:64" json:"last_synced_msg_id"`
 	LastCommittedRunID string     `gorm:"column:last_committed_run_id;size:64" json:"last_committed_run_id"`
+	CommitTaskID       string     `gorm:"column:commit_task_id;size:64" json:"commit_task_id"`
+	CommitTaskStatus   string     `gorm:"column:commit_task_status;size:32" json:"commit_task_status"`
 	CommitStatus       string     `gorm:"column:commit_status;size:32;not null;default:'pending'" json:"commit_status"`
 	Status             string     `gorm:"column:status;size:32;not null;default:'pending'" json:"status"`
 	RetryCount         int        `gorm:"column:retry_count;not null;default:0" json:"retry_count"`

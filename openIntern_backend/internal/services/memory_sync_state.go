@@ -47,6 +47,15 @@ func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) erro
 	if _, err := dao.Thread.GetByThreadID(threadID); err != nil {
 		return err
 	}
+	nextAttemptAt := nextMemorySyncScheduledAt(time.Now())
+	if existing, err := dao.MemorySyncState.GetByThreadID(threadID); err == nil {
+		// Keep fast polling cadence when an async commit task is already in-flight.
+		if strings.TrimSpace(existing.CommitTaskID) != "" {
+			nextAttemptAt = nextMemorySyncPollAt(time.Now())
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
 	item := &models.MemorySyncState{
 		ThreadID:           threadID,
 		LastCommittedRunID: runID,
@@ -54,7 +63,7 @@ func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) erro
 		Status:             models.MemorySyncStatusPending,
 		RetryCount:         0,
 		LastError:          "",
-		NextAttemptAt:      nextMemorySyncScheduledAt(time.Now()),
+		NextAttemptAt:      nextAttemptAt,
 	}
 	return dao.MemorySyncState.UpsertPendingRun(item)
 }
@@ -97,6 +106,41 @@ func (s *MemorySyncStateService) MarkFailed(threadID, lastError string, nextAtte
 		nextAttemptAt,
 		commitStatus,
 	)
+}
+
+// MarkCommitSubmitted stores the accepted async commit task id and schedules next polling.
+func (s *MemorySyncStateService) MarkCommitSubmitted(threadID, taskID string, nextAttemptAt *time.Time) error {
+	threadID = strings.TrimSpace(threadID)
+	taskID = strings.TrimSpace(taskID)
+	if threadID == "" {
+		return errors.New("thread_id is required")
+	}
+	if taskID == "" {
+		return errors.New("task_id is required")
+	}
+	return dao.MemorySyncState.MarkCommitSubmitted(threadID, taskID, nextAttemptAt)
+}
+
+// MarkCommitPolling records the latest async task status and re-queues polling.
+func (s *MemorySyncStateService) MarkCommitPolling(threadID, taskStatus string, nextAttemptAt *time.Time) error {
+	threadID = strings.TrimSpace(threadID)
+	taskStatus = strings.TrimSpace(taskStatus)
+	if threadID == "" {
+		return errors.New("thread_id is required")
+	}
+	if taskStatus == "" {
+		return errors.New("task_status is required")
+	}
+	return dao.MemorySyncState.MarkCommitPolling(threadID, taskStatus, nextAttemptAt)
+}
+
+// ClearCommitTask clears stale async commit task metadata.
+func (s *MemorySyncStateService) ClearCommitTask(threadID string) error {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return errors.New("thread_id is required")
+	}
+	return dao.MemorySyncState.ClearCommitTask(threadID)
 }
 
 // MarkMessagesAdded records that add-message phase has completed up to the provided cursor.

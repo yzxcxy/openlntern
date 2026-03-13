@@ -26,6 +26,8 @@ const (
 
 const (
 	memorySyncErrCommitSubmitFailedPrefix = "memory_sync_commit_submit_failed: "
+	memorySyncErrCommitTaskFailedPrefix   = "memory_sync_commit_task_failed: "
+	memorySyncErrCommitTaskStatusPrefix   = "memory_sync_commit_task_status_invalid: "
 )
 
 type sessionSyncMessage struct {
@@ -86,8 +88,11 @@ func ProcessPendingMemorySyncStates(ctx context.Context, limit int) error {
 		if err := syncThreadMemoryState(ctx, item); err != nil {
 			log.Printf("memory sync process failed thread_id=%s err=%v", item.ThreadID, err)
 			nextAttemptAt := nextMemorySyncAttemptAt(time.Now())
-			commitStatus := models.MemoryCommitStatusPending
-			if strings.HasPrefix(strings.TrimSpace(err.Error()), memorySyncErrCommitSubmitFailedPrefix) {
+			commitStatus := strings.TrimSpace(item.CommitStatus)
+			if commitStatus == "" {
+				commitStatus = models.MemoryCommitStatusPending
+			}
+			if isMemorySyncCommitFatalError(err) {
 				commitStatus = models.MemoryCommitStatusFailed
 			}
 			if markErr := MemorySyncState.MarkFailed(item.ThreadID, err.Error(), nextAttemptAt, commitStatus); markErr != nil {
@@ -108,6 +113,9 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 		var cancel context.CancelFunc
 		runCtx, cancel = context.WithTimeout(runCtx, memorySyncTimeout)
 		defer cancel()
+	}
+	if strings.TrimSpace(state.CommitTaskID) != "" {
+		return pollSubmittedCommitTask(runCtx, state)
 	}
 
 	threadMessages, err := Message.ListThreadMessages(state.ThreadID)
@@ -158,21 +166,61 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 			}
 		}
 	}
-	if err := dao.OpenVikingSession.Commit(runCtx, sessionID); err != nil {
+	commitResult, err := dao.OpenVikingSession.Commit(runCtx, sessionID)
+	if err != nil {
 		return fmt.Errorf("%s%w", memorySyncErrCommitSubmitFailedPrefix, err)
+	}
+	taskID := ""
+	if commitResult != nil {
+		taskID = strings.TrimSpace(commitResult.TaskID)
+	}
+	if taskID == "" {
+		return fmt.Errorf("%sopenviking returned empty task_id", memorySyncErrCommitSubmitFailedPrefix)
 	}
 	if err := MemoryUsageLog.MarkReportedByIDs(usageLogIDs); err != nil {
 		return err
 	}
-
-	finalCursor := strings.TrimSpace(addCursor)
-	if finalCursor == "" {
-		finalCursor = strings.TrimSpace(state.LastSyncedMsgID)
-	}
-	if err := MemorySyncState.MarkReady(state.ThreadID, finalCursor, state.LastCommittedRunID); err != nil {
+	if err := MemorySyncState.MarkCommitSubmitted(state.ThreadID, taskID, nextMemorySyncPollAt(time.Now())); err != nil {
 		return err
 	}
 	return nil
+}
+
+// pollSubmittedCommitTask checks one async commit task state and advances thread sync cursor only after completion.
+func pollSubmittedCommitTask(ctx context.Context, state models.MemorySyncState) error {
+	taskID := strings.TrimSpace(state.CommitTaskID)
+	if taskID == "" {
+		return nil
+	}
+	task, err := dao.OpenVikingSession.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	taskStatus := strings.ToLower(strings.TrimSpace(task.Status))
+	switch taskStatus {
+	case models.MemorySyncStatusPending, "running":
+		return MemorySyncState.MarkCommitPolling(state.ThreadID, taskStatus, nextMemorySyncPollAt(time.Now()))
+	case "completed":
+		finalCursor := strings.TrimSpace(state.LastAddedMsgID)
+		if finalCursor == "" {
+			finalCursor = strings.TrimSpace(state.LastSyncedMsgID)
+		}
+		return MemorySyncState.MarkReady(state.ThreadID, finalCursor, state.LastCommittedRunID)
+	case models.MemorySyncStatusFailed:
+		if err := MemorySyncState.ClearCommitTask(state.ThreadID); err != nil {
+			return err
+		}
+		taskErr := strings.TrimSpace(task.Error)
+		if taskErr == "" {
+			taskErr = "openviking async commit task failed"
+		}
+		return fmt.Errorf("%s%s", memorySyncErrCommitTaskFailedPrefix, taskErr)
+	default:
+		if err := MemorySyncState.ClearCommitTask(state.ThreadID); err != nil {
+			return err
+		}
+		return fmt.Errorf("%s%s", memorySyncErrCommitTaskStatusPrefix, taskStatus)
+	}
 }
 
 // ensureOpenVikingSession returns the deterministic session id used for OpenViking session APIs.
@@ -213,6 +261,15 @@ func nextMemorySyncAttemptAt(now time.Time) *time.Time {
 	return &next
 }
 
+// nextMemorySyncPollAt computes the next task-status polling time after async commit submission.
+func nextMemorySyncPollAt(now time.Time) *time.Time {
+	if memorySyncPollInterval <= 0 {
+		return nil
+	}
+	next := now.Add(memorySyncPollInterval)
+	return &next
+}
+
 // nextMemorySyncScheduledAt computes the first sync attempt time after a chat run finishes.
 func nextMemorySyncScheduledAt(now time.Time) *time.Time {
 	if memorySyncDelay <= 0 {
@@ -220,6 +277,16 @@ func nextMemorySyncScheduledAt(now time.Time) *time.Time {
 	}
 	next := now.Add(memorySyncDelay)
 	return &next
+}
+
+func isMemorySyncCommitFatalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	normalized := strings.TrimSpace(err.Error())
+	return strings.HasPrefix(normalized, memorySyncErrCommitSubmitFailedPrefix) ||
+		strings.HasPrefix(normalized, memorySyncErrCommitTaskFailedPrefix) ||
+		strings.HasPrefix(normalized, memorySyncErrCommitTaskStatusPrefix)
 }
 
 // collectPendingMemoryUsageContextURIs converts pending usage rows into unique URIs and the row ids to acknowledge later.
