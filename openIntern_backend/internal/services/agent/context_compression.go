@@ -111,41 +111,138 @@ func (s *Service) compressInputContext(ctx context.Context, input *types.RunAgen
 	if !settings.Enabled || len(input.Messages) == 0 {
 		return input, stats, nil
 	}
-
-	messageTokens := estimateMessageTokens(input.Messages, settings.EstimatedCharsPerToken)
-	originalTokens := sumIntSlice(messageTokens)
-	stats.OriginalTokens = originalTokens
-	if originalTokens <= budget.SoftLimitTokens {
-		stats.CompressedTokens = originalTokens
-		return input, stats, nil
-	}
-	stats.Triggered = true
 	latestSnapshot := s.loadLatestThreadContextSnapshot(input.ThreadID)
-	coveredIndex := -1
-	if latestSnapshot != nil && strings.TrimSpace(latestSnapshot.CoveredUntilMsgID) != "" {
-		coveredIndex = findMessageIndexByID(input.Messages, latestSnapshot.CoveredUntilMsgID)
+
+	workingMessages, summaryText, currentSnapshot := buildCompressionWorkingSet(input.Messages, latestSnapshot)
+	if currentSnapshot != nil {
+		stats.SnapshotIndex = currentSnapshot.CompressionIndex
 	}
 
-	n := len(input.Messages)
+	effectiveMessages := buildEffectiveCompressionMessages(workingMessages, summaryText)
+	effectiveTokens := sumIntSlice(estimateMessageTokens(effectiveMessages, settings.EstimatedCharsPerToken))
+	stats.OriginalTokens = effectiveTokens
+	stats.CompressedTokens = effectiveTokens
+	stats.SummaryUsed = strings.TrimSpace(summaryText) != ""
+	if effectiveTokens <= budget.SoftLimitTokens {
+		return cloneRunAgentInputWithMessages(input, effectiveMessages), stats, nil
+	}
+
+	stats.Triggered = true
+	for {
+		summaryReserveTokens := estimateSummaryTokens(summaryText)
+		keptMessages, removedMessagesForSummary := selectMessagesForCompression(workingMessages, settings, budget, summaryReserveTokens)
+		if len(removedMessagesForSummary) == 0 {
+			effectiveMessages = buildEffectiveCompressionMessages(workingMessages, summaryText)
+			effectiveTokens = sumIntSlice(estimateMessageTokens(effectiveMessages, settings.EstimatedCharsPerToken))
+			if effectiveTokens > budget.HardLimitTokens {
+				return nil, stats, fmt.Errorf("context exceeds hard limit after compression: estimated_tokens=%d hard_limit=%d", effectiveTokens, budget.HardLimitTokens)
+			}
+			stats.CompressedTokens = effectiveTokens
+			stats.SummaryUsed = strings.TrimSpace(summaryText) != ""
+			return cloneRunAgentInputWithMessages(input, effectiveMessages), stats, nil
+		}
+
+		snapshot, mergedSummary, err := s.buildAndPersistThreadSummary(ctx, input.ThreadID, removedMessagesForSummary, currentSnapshot, state.summaryModel)
+		if err != nil {
+			return nil, stats, err
+		}
+
+		workingMessages = keptMessages
+		currentSnapshot = snapshot
+		summaryText = strings.TrimSpace(mergedSummary)
+		stats.RemovedMessages += len(removedMessagesForSummary)
+		stats.SummaryUpdated = true
+		stats.SummaryUsed = summaryText != ""
+		if currentSnapshot != nil {
+			stats.SnapshotIndex = currentSnapshot.CompressionIndex
+		}
+
+		effectiveMessages = buildEffectiveCompressionMessages(workingMessages, summaryText)
+		effectiveTokens = sumIntSlice(estimateMessageTokens(effectiveMessages, settings.EstimatedCharsPerToken))
+		stats.CompressedTokens = effectiveTokens
+		if effectiveTokens <= budget.SoftLimitTokens {
+			return cloneRunAgentInputWithMessages(input, effectiveMessages), stats, nil
+		}
+		if !hasCompressibleMessages(workingMessages) {
+			if effectiveTokens > budget.HardLimitTokens {
+				return nil, stats, fmt.Errorf("context exceeds hard limit after compression: estimated_tokens=%d hard_limit=%d", effectiveTokens, budget.HardLimitTokens)
+			}
+			return cloneRunAgentInputWithMessages(input, effectiveMessages), stats, nil
+		}
+	}
+}
+
+// buildCompressionWorkingSet folds already-covered history out of the active window and reuses the stored summary as the new baseline.
+func buildCompressionWorkingSet(messages []types.Message, latestSnapshot *models.ThreadContextSnapshot) ([]types.Message, string, *models.ThreadContextSnapshot) {
+	if len(messages) == 0 || latestSnapshot == nil {
+		return append([]types.Message(nil), messages...), "", latestSnapshot
+	}
+	summaryText := strings.TrimSpace(latestSnapshot.SummaryText)
+	coveredUntilMsgID := strings.TrimSpace(latestSnapshot.CoveredUntilMsgID)
+	if summaryText == "" || coveredUntilMsgID == "" {
+		return append([]types.Message(nil), messages...), "", nil
+	}
+	coveredIndex := findMessageIndexByID(messages, coveredUntilMsgID)
+	if coveredIndex < 0 {
+		return append([]types.Message(nil), messages...), "", nil
+	}
+	working := make([]types.Message, 0, len(messages))
+	for index, message := range messages {
+		if index <= coveredIndex && message.Role != types.RoleSystem {
+			continue
+		}
+		working = append(working, message)
+	}
+	return working, summaryText, latestSnapshot
+}
+
+// buildEffectiveCompressionMessages composes the active context window from live messages plus the stored rolling summary.
+func buildEffectiveCompressionMessages(messages []types.Message, summaryText string) []types.Message {
+	effective := append([]types.Message(nil), messages...)
+	summaryContent := buildContextSummaryMessageContent(summaryText)
+	if summaryContent == "" {
+		return effective
+	}
+	return prependSystemSummaryMessage(effective, types.Message{
+		ID:      events.GenerateMessageID(),
+		Role:    types.RoleSystem,
+		Content: summaryContent,
+	})
+}
+
+// selectMessagesForCompression keeps pinned instructions and the recent window, then peels off the oldest compressible messages until the active window has room for the summary.
+func selectMessagesForCompression(messages []types.Message, settings contextCompressionSettings, budget contextCompressionBudget, summaryReserveTokens int) ([]types.Message, []types.Message) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	messageTokens := estimateMessageTokens(messages, settings.EstimatedCharsPerToken)
+	targetKeptTokens := budget.SoftLimitTokens - summaryReserveTokens
+	hardTargetTokens := budget.HardLimitTokens - summaryReserveTokens
+	if hardTargetTokens < 1 {
+		hardTargetTokens = 1
+	}
+	if targetKeptTokens < 1 {
+		targetKeptTokens = 1
+	}
+	if targetKeptTokens > hardTargetTokens {
+		targetKeptTokens = hardTargetTokens
+	}
+
+	n := len(messages)
 	pinned := make([]bool, n)
-	for i, msg := range input.Messages {
+	for i, msg := range messages {
 		if msg.Role == types.RoleSystem {
 			pinned[i] = true
 		}
 	}
-	if lastUserIndex := findLastUserMessageIndex(input.Messages); lastUserIndex >= 0 {
+	if lastUserIndex := findLastUserMessageIndex(messages); lastUserIndex >= 0 {
 		pinned[lastUserIndex] = true
 	}
 
 	kept := make([]bool, n)
-	for i := range kept {
-		kept[i] = pinned[i]
-	}
+	copy(kept, pinned)
 	recentCount := 0
 	for i := n - 1; i >= 0 && recentCount < settings.MaxRecentMessages; i-- {
-		if coveredIndex >= 0 && i <= coveredIndex {
-			continue
-		}
 		if kept[i] {
 			continue
 		}
@@ -154,76 +251,39 @@ func (s *Service) compressInputContext(ctx context.Context, input *types.RunAgen
 	}
 
 	keptTokens := sumSelectedTokens(messageTokens, kept)
-	for i := 0; i < n && keptTokens > budget.HardLimitTokens; i++ {
+	for i := 0; i < n && keptTokens > targetKeptTokens; i++ {
 		if !kept[i] || pinned[i] {
 			continue
 		}
 		kept[i] = false
 		keptTokens -= messageTokens[i]
 	}
-	if keptTokens > budget.HardLimitTokens {
-		return nil, stats, fmt.Errorf("context exceeds hard limit after compression: estimated_tokens=%d hard_limit=%d", keptTokens, budget.HardLimitTokens)
-	}
 
-	compressedMessages := make([]types.Message, 0, n)
-	removedMessagesForSummary := make([]types.Message, 0, n)
-	for i, msg := range input.Messages {
+	keptMessages := make([]types.Message, 0, n)
+	removedMessages := make([]types.Message, 0, n)
+	for i, msg := range messages {
 		if kept[i] {
-			compressedMessages = append(compressedMessages, msg)
+			keptMessages = append(keptMessages, msg)
 			continue
 		}
-		if i > coveredIndex {
-			removedMessagesForSummary = append(removedMessagesForSummary, msg)
-		}
+		removedMessages = append(removedMessages, msg)
 	}
+	return keptMessages, removedMessages
+}
 
-	summaryText := ""
-	if latestSnapshot != nil {
-		summaryText = latestSnapshot.SummaryText
-		stats.SnapshotIndex = latestSnapshot.CompressionIndex
-	}
-	if len(removedMessagesForSummary) > 0 || summaryText != "" {
-		snapshot, mergedSummary, err := s.buildAndPersistThreadSummary(ctx, input.ThreadID, removedMessagesForSummary, latestSnapshot, state.titleModel)
-		if err == nil {
-			if strings.TrimSpace(mergedSummary) != "" {
-				summaryText = mergedSummary
-			}
-			if snapshot != nil {
-				stats.SnapshotIndex = snapshot.CompressionIndex
-				if len(removedMessagesForSummary) > 0 {
-					stats.SummaryUpdated = true
-				}
-			}
+// hasCompressibleMessages reports whether another compression pass can still move older non-pinned messages into the summary.
+func hasCompressibleMessages(messages []types.Message) bool {
+	lastUserIndex := findLastUserMessageIndex(messages)
+	for index, message := range messages {
+		if message.Role == types.RoleSystem {
+			continue
 		}
-	}
-	summaryContent := buildContextSummaryMessageContent(summaryText)
-	if summaryContent != "" {
-		summaryMessage := types.Message{
-			ID:      events.GenerateMessageID(),
-			Role:    types.RoleSystem,
-			Content: summaryContent,
+		if index == lastUserIndex {
+			continue
 		}
-		summaryTokens := estimateMessageTokens([]types.Message{summaryMessage}, settings.EstimatedCharsPerToken)
-		summaryCost := sumIntSlice(summaryTokens)
-		if summaryCost > 0 && keptTokens+summaryCost <= budget.HardLimitTokens {
-			compressedMessages = prependSystemSummaryMessage(compressedMessages, summaryMessage)
-			keptTokens += summaryCost
-			stats.SummaryUsed = true
-		}
+		return true
 	}
-
-	stats.CompressedTokens = keptTokens
-	removedCount := 0
-	for _, keep := range kept {
-		if !keep {
-			removedCount++
-		}
-	}
-	stats.RemovedMessages = removedCount
-	if stats.RemovedMessages <= 0 && !stats.SummaryUsed {
-		return input, stats, nil
-	}
-	return cloneRunAgentInputWithMessages(input, compressedMessages), stats, nil
+	return false
 }
 
 // buildContextCompressionBudget 结合基础配置和模型能力，计算本轮有效上下文预算。

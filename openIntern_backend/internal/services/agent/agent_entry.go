@@ -133,7 +133,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	if err := scheduleThreadMemorySync(s.deps.MemorySyncStateStore, threadID, runID); err != nil {
 		log.Printf("RunAgent schedule memory sync failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 	}
-	if err := ensureThreadTitle(ctx, s.deps.ThreadStore, threadID, input.Messages, state.titleModel); err != nil {
+	if err := ensureThreadTitle(ctx, s.deps.ThreadStore, threadID, input.Messages, state.summaryModel); err != nil {
 		log.Printf("RunAgent generate title failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 	}
 

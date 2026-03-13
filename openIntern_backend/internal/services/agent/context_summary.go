@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,8 @@ const (
 	contextSummarySourceMaxChars   = 6000
 	contextSummaryPreviousMaxChars = 2000
 )
+
+var errSummaryModelRequired = errors.New("context compression requires summary_llm")
 
 // contextSummaryPayload defines the structured summary schema used for storage and prompt replay.
 type contextSummaryPayload struct {
@@ -50,12 +53,7 @@ func summarizeContextHistory(ctx context.Context, summaryModel *deepseek.ChatMod
 		return "", "", 0, nil
 	}
 	if summaryModel == nil {
-		fallback := buildFallbackSummary(previous, source)
-		payload := contextSummaryPayload{
-			UserIntent: firstNonEmptyLine(fallback),
-			Facts:      []string{fallback},
-		}
-		return fallback, marshalSummaryPayload(payload), estimateSummaryTokens(fallback), nil
+		return "", "", 0, errSummaryModelRequired
 	}
 
 	userPrompt := buildSummaryUserPrompt(previous, source)
@@ -73,10 +71,13 @@ func summarizeContextHistory(ctx context.Context, summaryModel *deepseek.ChatMod
 	if err != nil {
 		return "", "", 0, err
 	}
-	payload := parseSummaryPayloadFromText(resp.Content)
+	payload, err := parseSummaryPayloadFromText(resp.Content)
+	if err != nil {
+		return "", "", 0, err
+	}
 	summaryText := renderSummaryText(payload)
 	if summaryText == "" {
-		summaryText = buildFallbackSummary(previous, source)
+		return "", "", 0, errors.New("summary_llm returned empty structured summary")
 	}
 	return summaryText, marshalSummaryPayload(payload), estimateSummaryTokens(summaryText), nil
 }
@@ -122,11 +123,11 @@ func buildSummarySourceFromMessages(messages []types.Message) string {
 	return truncateByRunes(joined, contextSummarySourceMaxChars)
 }
 
-// parseSummaryPayloadFromText extracts structured payload from model output and applies defensive normalization.
-func parseSummaryPayloadFromText(raw string) contextSummaryPayload {
+// parseSummaryPayloadFromText extracts structured payload from model output and rejects malformed responses.
+func parseSummaryPayloadFromText(raw string) (contextSummaryPayload, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return contextSummaryPayload{}
+		return contextSummaryPayload{}, errors.New("summary_llm returned empty content")
 	}
 	trimmed = strings.TrimPrefix(trimmed, "```json")
 	trimmed = strings.TrimPrefix(trimmed, "```")
@@ -140,10 +141,7 @@ func parseSummaryPayloadFromText(raw string) contextSummaryPayload {
 	}
 	var payload contextSummaryPayload
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
-		return contextSummaryPayload{
-			UserIntent: firstNonEmptyLine(raw),
-			Facts:      []string{truncateByRunes(strings.TrimSpace(raw), 240)},
-		}
+		return contextSummaryPayload{}, fmt.Errorf("summary_llm returned invalid json: %w", err)
 	}
 	payload.UserIntent = truncateByRunes(strings.TrimSpace(payload.UserIntent), 120)
 	payload.Decisions = sanitizeSummaryItems(payload.Decisions, 6)
@@ -151,7 +149,10 @@ func parseSummaryPayloadFromText(raw string) contextSummaryPayload {
 	payload.OpenTasks = sanitizeSummaryItems(payload.OpenTasks, 6)
 	payload.Facts = sanitizeSummaryItems(payload.Facts, 6)
 	payload.DoNotRepeat = sanitizeSummaryItems(payload.DoNotRepeat, 6)
-	return payload
+	if payload.UserIntent == "" && len(payload.Decisions) == 0 && len(payload.Constraints) == 0 && len(payload.OpenTasks) == 0 && len(payload.Facts) == 0 && len(payload.DoNotRepeat) == 0 {
+		return contextSummaryPayload{}, errors.New("summary_llm returned empty summary payload")
+	}
+	return payload, nil
 }
 
 // sanitizeSummaryItems normalizes summary arrays by trimming blanks and enforcing max item count.
@@ -216,31 +217,6 @@ func estimateSummaryTokens(summaryText string) int {
 	return (chars + defaultEstimatedCharsPerToken - 1) / defaultEstimatedCharsPerToken
 }
 
-// buildFallbackSummary provides a deterministic fallback when model output is unavailable.
-func buildFallbackSummary(previousSummary string, source string) string {
-	previous := strings.TrimSpace(previousSummary)
-	incremental := strings.TrimSpace(source)
-	switch {
-	case previous != "" && incremental != "":
-		return truncateByRunes(previous+"\n\n增量事实:\n- "+firstNonEmptyLine(incremental), contextSummaryMessageMaxChars)
-	case previous != "":
-		return truncateByRunes(previous, contextSummaryMessageMaxChars)
-	default:
-		return truncateByRunes("UserIntent: "+firstNonEmptyLine(incremental), contextSummaryMessageMaxChars)
-	}
-}
-
-// firstNonEmptyLine returns the first non-empty line from text.
-func firstNonEmptyLine(raw string) string {
-	for _, line := range strings.Split(raw, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			return truncateByRunes(trimmed, 120)
-		}
-	}
-	return ""
-}
-
 // truncateByRunes truncates UTF-8 text by rune length and keeps original text when short enough.
 func truncateByRunes(raw string, maxRunes int) string {
 	if maxRunes <= 0 {
@@ -265,6 +241,9 @@ func (s *Service) buildAndPersistThreadSummary(ctx context.Context, threadID str
 	if previousSnapshot != nil {
 		previousSummary = previousSnapshot.SummaryText
 	}
+	if len(removedMessages) == 0 {
+		return previousSnapshot, strings.TrimSpace(previousSummary), nil
+	}
 	summaryText, summaryStructJSON, approxTokens, err := summarizeContextHistory(ctx, summaryModel, previousSummary, removedMessages)
 	if err != nil {
 		return nil, "", err
@@ -272,9 +251,6 @@ func (s *Service) buildAndPersistThreadSummary(ctx context.Context, threadID str
 	summaryText = strings.TrimSpace(summaryText)
 	if summaryText == "" {
 		return nil, "", nil
-	}
-	if previousSnapshot != nil && len(removedMessages) == 0 {
-		return previousSnapshot, summaryText, nil
 	}
 
 	nextIndex := 1

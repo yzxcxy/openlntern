@@ -71,7 +71,7 @@ type Dependencies struct {
 
 type runtimeState struct {
 	apmplusShutdown     func(context.Context) error
-	titleModel          *deepseek.ChatModel
+	summaryModel        *deepseek.ChatModel
 	sandboxBaseURL      string
 	agentTools          []einoTool.BaseTool
 	agentMiddlewares    []adk.AgentMiddleware

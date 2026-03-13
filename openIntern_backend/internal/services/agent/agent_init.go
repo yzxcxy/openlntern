@@ -21,6 +21,7 @@ import (
 // InitEino 初始化模型、工具、中间件、运行时依赖和上下文压缩参数。
 func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
+	compressionSettings := newContextCompressionSettings(compressionCfg)
 
 	shutdown := func(context.Context) error { return nil }
 	if apmCfg.Host != "" && apmCfg.AppKey != "" && apmCfg.ServiceName != "" {
@@ -37,10 +38,13 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 		shutdown = apmShutdown
 	}
 
-	var runtimeTitleModel *deepseek.ChatModel
+	var runtimeSummaryModel *deepseek.ChatModel
 	var err error
-	if summaryCfg.APIKey != "" && summaryCfg.Model != "" {
-		runtimeTitleModel, err = deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+	if compressionSettings.Enabled && (strings.TrimSpace(summaryCfg.APIKey) == "" || strings.TrimSpace(summaryCfg.Model) == "") {
+		return nil, fmt.Errorf("summary_llm is required when context compression is enabled")
+	}
+	if strings.TrimSpace(summaryCfg.APIKey) != "" && strings.TrimSpace(summaryCfg.Model) != "" {
+		runtimeSummaryModel, err = deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
 			APIKey: summaryCfg.APIKey,
 			Model:  summaryCfg.Model,
 		})
@@ -85,12 +89,12 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 
 	s.setState(runtimeState{
 		apmplusShutdown:     shutdown,
-		titleModel:          runtimeTitleModel,
+		summaryModel:        runtimeSummaryModel,
 		sandboxBaseURL:      sandboxBaseURL,
 		agentTools:          allTools,
 		agentMiddlewares:    []adk.AgentMiddleware{skillMiddleware},
 		bootstrapChatConfig: cfg,
-		contextCompression:  newContextCompressionSettings(compressionCfg),
+		contextCompression:  compressionSettings,
 	})
 
 	return shutdown, nil
