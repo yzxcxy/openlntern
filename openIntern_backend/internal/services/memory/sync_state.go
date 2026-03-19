@@ -38,7 +38,7 @@ func (s *MemorySyncStateService) ResetLegacySyncing() error {
 
 // ScheduleThreadSync marks the thread as pending long-term memory synchronization.
 func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) error {
-	if !dao.OpenVikingSession.Configured() {
+	if !memorySyncConfigured() {
 		return nil
 	}
 	threadID = strings.TrimSpace(threadID)

@@ -38,7 +38,6 @@ var defaultService = NewService(Dependencies{
 	MessageStore:               chatsvc.Message,
 	MemoryRetriever:            memorysvc.MemoryRetriever,
 	MemorySyncStateStore:       memorysvc.MemorySyncState,
-	MemoryUsageLogStore:        memorysvc.MemoryUsageLog,
 	ThreadContextSnapshotStore: chatsvc.ThreadContextSnapshot,
 	ThreadStore:                chatsvc.Thread,
 	ModelCatalogResolver:       modelCatalogResolverAdapter{},

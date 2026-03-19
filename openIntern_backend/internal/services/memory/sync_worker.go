@@ -9,11 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"openIntern/internal/config"
-	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
 	chatsvc "openIntern/internal/services/chat"
+	"openIntern/internal/services/memory/contracts"
 
 	agtypes "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 )
@@ -32,12 +31,6 @@ const (
 	memorySyncErrCommitTaskStatusPrefix   = "memory_sync_commit_task_status_invalid: "
 )
 
-type sessionSyncMessage struct {
-	MsgID   string
-	Role    string
-	Content string
-}
-
 var memorySyncWorkerOnce sync.Once
 var (
 	memorySyncPollInterval = defaultMemorySyncPollInterval
@@ -46,16 +39,17 @@ var (
 	memorySyncRetryDelay   = defaultMemorySyncRetryDelay
 )
 
-// InitMemorySync configures and starts the in-process worker that forwards completed thread deltas to OpenViking.
-func InitMemorySync(cfg config.OpenVikingConfig) {
-	if !dao.OpenVikingSession.Configured() {
+// InitMemorySync starts the in-process worker that forwards completed thread deltas to the active memory backend.
+func InitMemorySync() {
+	syncBackend := currentSyncBackend()
+	if !syncBackend.Configured() {
 		return
 	}
 	if database.GetRedis() == nil {
 		log.Printf("memory sync disabled: redis is not configured")
 		return
 	}
-	applyMemorySyncConfig(cfg)
+	applyMemorySyncBackendConfig(syncBackend)
 	if err := MemorySyncState.ResetLegacySyncing(); err != nil {
 		log.Printf("memory sync reset legacy syncing states failed err=%v", err)
 	}
@@ -120,8 +114,13 @@ func ProcessPendingMemorySyncStates(ctx context.Context, limit int) error {
 	return nil
 }
 
-// syncThreadMemoryState synchronizes the unsent thread message delta into an OpenViking session.
+// syncThreadMemoryState synchronizes the unsent thread message delta into the active memory backend.
 func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) error {
+	syncBackend := currentSyncBackend()
+	if !syncBackend.Configured() {
+		return nil
+	}
+
 	runCtx := ctx
 	if runCtx == nil {
 		runCtx = context.Background()
@@ -139,11 +138,6 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 	if err != nil {
 		return err
 	}
-	pendingUsageLogs, err := MemoryUsageLog.ListPendingByThreadID(state.ThreadID)
-	if err != nil {
-		return err
-	}
-	usedContextURIs, usageLogIDs := collectPendingMemoryUsageContextURIs(pendingUsageLogs)
 	addCursor := strings.TrimSpace(state.LastAddedMsgID)
 	if addCursor == "" {
 		addCursor = strings.TrimSpace(state.LastSyncedMsgID)
@@ -153,29 +147,15 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 		return err
 	}
 	hasPendingCommit := strings.TrimSpace(state.LastAddedMsgID) != "" && strings.TrimSpace(state.LastAddedMsgID) != strings.TrimSpace(state.LastSyncedMsgID)
-	if lastMsgID == "" && len(usedContextURIs) == 0 {
+	if lastMsgID == "" {
 		if !hasPendingCommit {
 			return MemorySyncState.MarkReady(state.ThreadID, state.LastSyncedMsgID, state.LastCommittedRunID)
 		}
 	}
-	if len(sessionMessages) == 0 && len(usedContextURIs) == 0 && !hasPendingCommit {
+	if len(sessionMessages) == 0 && !hasPendingCommit {
 		return MemorySyncState.MarkReady(state.ThreadID, lastMsgID, state.LastCommittedRunID)
 	}
-	if len(sessionMessages) == 0 && !hasPendingCommit {
-		if err := MemoryUsageLog.MarkReportedByIDs(usageLogIDs); err != nil {
-			return err
-		}
-		return MemorySyncState.MarkReady(state.ThreadID, state.LastSyncedMsgID, state.LastCommittedRunID)
-	}
-
-	sessionID, err := ensureOpenVikingSession(state)
-	if err != nil {
-		return err
-	}
 	for _, item := range sessionMessages {
-		if err := dao.OpenVikingSession.AddMessage(runCtx, sessionID, item.Role, item.Content); err != nil {
-			return err
-		}
 		if msgID := strings.TrimSpace(item.MsgID); msgID != "" {
 			addCursor = msgID
 			if err := MemorySyncState.MarkMessagesAdded(state.ThreadID, addCursor); err != nil {
@@ -183,19 +163,13 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 			}
 		}
 	}
-	commitResult, err := dao.OpenVikingSession.Commit(runCtx, sessionID)
+	taskID, err := syncBackend.SubmitMessages(runCtx, state, sessionMessages)
 	if err != nil {
 		return fmt.Errorf("%s%w", memorySyncErrCommitSubmitFailedPrefix, err)
 	}
-	taskID := ""
-	if commitResult != nil {
-		taskID = strings.TrimSpace(commitResult.TaskID)
-	}
+	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
-		return fmt.Errorf("%sopenviking returned empty task_id", memorySyncErrCommitSubmitFailedPrefix)
-	}
-	if err := MemoryUsageLog.MarkReportedByIDs(usageLogIDs); err != nil {
-		return err
+		return fmt.Errorf("%smemory backend returned empty task_id", memorySyncErrCommitSubmitFailedPrefix)
 	}
 	if err := MemorySyncState.MarkCommitSubmitted(state.ThreadID, taskID, nextMemorySyncPollAt(time.Now())); err != nil {
 		return err
@@ -205,15 +179,20 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 
 // pollSubmittedCommitTask checks one async commit task state and advances thread sync cursor only after completion.
 func pollSubmittedCommitTask(ctx context.Context, state models.MemorySyncState) error {
+	syncBackend := currentSyncBackend()
+	if !syncBackend.Configured() {
+		return nil
+	}
+
 	taskID := strings.TrimSpace(state.CommitTaskID)
 	if taskID == "" {
 		return nil
 	}
-	task, err := dao.OpenVikingSession.GetTask(ctx, taskID)
+	taskStatus, taskErr, err := syncBackend.PollOperation(ctx, taskID)
 	if err != nil {
 		return err
 	}
-	taskStatus := strings.ToLower(strings.TrimSpace(task.Status))
+	taskStatus = strings.ToLower(strings.TrimSpace(taskStatus))
 	switch taskStatus {
 	case models.MemorySyncStatusPending, "running":
 		return MemorySyncState.MarkCommitPolling(state.ThreadID, taskStatus, nextMemorySyncPollAt(time.Now()))
@@ -227,9 +206,9 @@ func pollSubmittedCommitTask(ctx context.Context, state models.MemorySyncState) 
 		if err := MemorySyncState.ClearCommitTask(state.ThreadID); err != nil {
 			return err
 		}
-		taskErr := strings.TrimSpace(task.Error)
+		taskErr = strings.TrimSpace(taskErr)
 		if taskErr == "" {
-			taskErr = "openviking async commit task failed"
+			taskErr = "memory backend async commit task failed"
 		}
 		return fmt.Errorf("%s%s", memorySyncErrCommitTaskFailedPrefix, taskErr)
 	default:
@@ -240,33 +219,30 @@ func pollSubmittedCommitTask(ctx context.Context, state models.MemorySyncState) 
 	}
 }
 
-// ensureOpenVikingSession returns the deterministic session id used for OpenViking session APIs.
-func ensureOpenVikingSession(state models.MemorySyncState) (string, error) {
-	threadID := strings.TrimSpace(state.ThreadID)
-	if threadID == "" {
-		return "", fmt.Errorf("thread_id is required")
+// applyMemorySyncBackendConfig loads the runtime worker settings from the active memory backend.
+func applyMemorySyncBackendConfig(syncBackend SyncBackend) {
+	if syncBackend == nil {
+		syncBackend = noopSyncBackend{}
 	}
-	// Follow thread-scoped deterministic session id: use thread_id as session_id in all /sessions/{id}/... calls.
-	return threadID, nil
-}
-
-// memorySyncDurationFromSeconds converts a positive seconds value into a duration or returns the fallback.
-func memorySyncDurationFromSeconds(seconds int, fallback time.Duration) time.Duration {
-	if seconds <= 0 {
-		return fallback
+	memorySyncDelay = syncBackend.SyncDelay()
+	if memorySyncDelay <= 0 {
+		memorySyncDelay = defaultMemorySyncDelay
 	}
-	return time.Duration(seconds) * time.Second
-}
-
-// applyMemorySyncConfig loads the runtime worker settings from OpenViking configuration.
-func applyMemorySyncConfig(cfg config.OpenVikingConfig) {
-	memorySyncDelay = memorySyncDurationFromSeconds(cfg.MemorySyncDelaySeconds, defaultMemorySyncDelay)
-	memorySyncPollInterval = memorySyncDurationFromSeconds(cfg.MemorySyncPollSeconds, defaultMemorySyncPollInterval)
-	memorySyncTimeout = memorySyncDurationFromSeconds(cfg.MemorySyncTimeoutSeconds, defaultMemorySyncTimeout)
+	memorySyncPollInterval = syncBackend.SyncPollInterval()
+	if memorySyncPollInterval <= 0 {
+		memorySyncPollInterval = defaultMemorySyncPollInterval
+	}
+	memorySyncTimeout = syncBackend.SyncTimeout()
+	if memorySyncTimeout <= 0 {
+		memorySyncTimeout = defaultMemorySyncTimeout
+	}
 	if memorySyncTimeout < 10*time.Minute {
 		memorySyncTimeout = 10 * time.Minute
 	}
-	memorySyncRetryDelay = memorySyncDurationFromSeconds(cfg.MemorySyncRetrySeconds, defaultMemorySyncRetryDelay)
+	memorySyncRetryDelay = syncBackend.SyncRetryDelay()
+	if memorySyncRetryDelay <= 0 {
+		memorySyncRetryDelay = defaultMemorySyncRetryDelay
+	}
 }
 
 // nextMemorySyncAttemptAt computes the next retry time for a failed memory sync attempt.
@@ -306,37 +282,17 @@ func isMemorySyncCommitFatalError(err error) bool {
 		strings.HasPrefix(normalized, memorySyncErrCommitTaskStatusPrefix)
 }
 
-// collectPendingMemoryUsageContextURIs converts pending usage rows into unique URIs and the row ids to acknowledge later.
-func collectPendingMemoryUsageContextURIs(items []models.MemoryUsageLog) ([]string, []uint) {
-	uris := make([]string, 0, len(items))
-	ids := make([]uint, 0, len(items))
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		ids = append(ids, item.ID)
-		uri := normalizeMemoryMatchURI(item.MemoryURI)
-		if uri == "" {
-			continue
-		}
-		if _, exists := seen[uri]; exists {
-			continue
-		}
-		seen[uri] = struct{}{}
-		uris = append(uris, uri)
-	}
-	return uris, ids
-}
-
 // buildSessionSyncMessages converts the unsynced tail of a thread into plain-text session messages.
-func buildSessionSyncMessages(messages []models.Message, lastSyncedMsgID string) ([]sessionSyncMessage, string, error) {
+func buildSessionSyncMessages(messages []models.Message, lastSyncedMsgID string) ([]contracts.SyncMessage, string, error) {
 	startIndex, err := resolveSyncStartIndex(messages, lastSyncedMsgID)
 	if err != nil {
 		return nil, "", err
 	}
 	if startIndex >= len(messages) {
-		return []sessionSyncMessage{}, "", nil
+		return []contracts.SyncMessage{}, "", nil
 	}
 
-	synced := make([]sessionSyncMessage, 0, len(messages)-startIndex)
+	synced := make([]contracts.SyncMessage, 0, len(messages)-startIndex)
 	lastMsgID := ""
 	for i := startIndex; i < len(messages); i++ {
 		modelMessage := messages[i]
@@ -366,28 +322,28 @@ func resolveSyncStartIndex(messages []models.Message, lastSyncedMsgID string) (i
 	return 0, fmt.Errorf("last_synced_msg_id not found: %s", cursor)
 }
 
-// buildSessionSyncMessage converts one stored AG-UI message row into an OpenViking plain-text message.
-func buildSessionSyncMessage(modelMessage models.Message) (sessionSyncMessage, bool, error) {
+// buildSessionSyncMessage converts one stored AG-UI message row into one provider-agnostic plain-text message.
+func buildSessionSyncMessage(modelMessage models.Message) (contracts.SyncMessage, bool, error) {
 	decoded, err := decodeStoredAGUIMessage(modelMessage)
 	if err != nil {
-		return sessionSyncMessage{}, false, err
+		return contracts.SyncMessage{}, false, err
 	}
 
 	switch decoded.Role {
 	case agtypes.RoleUser:
 		content := extractMessageText(*decoded)
 		if content == "" {
-			return sessionSyncMessage{}, false, nil
+			return contracts.SyncMessage{}, false, nil
 		}
-		return sessionSyncMessage{MsgID: strings.TrimSpace(modelMessage.MsgID), Role: "user", Content: content}, true, nil
+		return contracts.SyncMessage{MsgID: strings.TrimSpace(modelMessage.MsgID), Role: "user", Content: content}, true, nil
 	case agtypes.RoleAssistant:
 		content := extractMessageText(*decoded)
 		if content == "" {
-			return sessionSyncMessage{}, false, nil
+			return contracts.SyncMessage{}, false, nil
 		}
-		return sessionSyncMessage{MsgID: strings.TrimSpace(modelMessage.MsgID), Role: "assistant", Content: content}, true, nil
+		return contracts.SyncMessage{MsgID: strings.TrimSpace(modelMessage.MsgID), Role: "assistant", Content: content}, true, nil
 	default:
-		return sessionSyncMessage{}, false, nil
+		return contracts.SyncMessage{}, false, nil
 	}
 }
 
@@ -400,7 +356,7 @@ func decodeStoredAGUIMessage(modelMessage models.Message) (*agtypes.Message, err
 	return &decoded, nil
 }
 
-// extractMessageText normalizes an AG-UI message into the plain-text content accepted by OpenViking sessions.
+// extractMessageText normalizes an AG-UI message into the plain-text content accepted by session-based backends.
 func extractMessageText(message agtypes.Message) string {
 	if content, ok := message.ContentString(); ok {
 		return strings.TrimSpace(content)

@@ -17,7 +17,7 @@ var MemoryUsageLog = new(MemoryUsageLogService)
 
 // RecordRunMemoryUsage persists the memory URIs that were actually injected during one completed run.
 func (s *MemoryUsageLogService) RecordRunMemoryUsage(threadID, runID string, uris []string) error {
-	if !dao.OpenVikingSession.Configured() {
+	if !memorySyncConfigured() {
 		return nil
 	}
 	threadID = strings.TrimSpace(threadID)
@@ -70,7 +70,7 @@ func normalizeMemoryUsageURIs(uris []string) []string {
 	normalized := make([]string, 0, len(uris))
 	seen := make(map[string]struct{}, len(uris))
 	for _, uri := range uris {
-		candidate := normalizeMemoryMatchURI(uri)
+		candidate := normalizeMemoryUsageURI(uri)
 		if candidate == "" {
 			continue
 		}
@@ -81,4 +81,19 @@ func normalizeMemoryUsageURIs(uris []string) []string {
 		normalized = append(normalized, candidate)
 	}
 	return normalized
+}
+
+// normalizeMemoryUsageURI keeps legacy usage-log writes stable until that table is fully retired.
+func normalizeMemoryUsageURI(uri string) string {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return ""
+	}
+	if idx := strings.Index(uri, "?"); idx >= 0 {
+		uri = uri[:idx]
+	}
+	if idx := strings.Index(uri, "#"); idx >= 0 {
+		uri = uri[:idx]
+	}
+	return strings.TrimRight(strings.TrimSpace(uri), "/")
 }

@@ -61,11 +61,10 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		_ = sender.Error(err.Error(), "agent_mode_not_available")
 		return err
 	}
-	preparedInput, retrievedMemoryURIs, err := injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, mergedInput)
+	preparedInput, err := injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, mergedInput)
 	if err != nil {
 		log.Printf("RunAgent memory retrieval failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		preparedInput = mergedInput
-		retrievedMemoryURIs = nil
 	}
 	compressedInput, compressionStats, err := s.compressInputContext(ctx, preparedInput, runtimeConfig, state)
 	if err != nil {
@@ -126,9 +125,6 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	if err := s.deps.ThreadStore.TouchThread(threadID); err != nil {
 		log.Printf("RunAgent touch thread failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
-	}
-	if err := recordRetrievedMemoryUsage(s.deps.MemoryUsageLogStore, threadID, runID, retrievedMemoryURIs); err != nil {
-		log.Printf("RunAgent record memory usage failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 	}
 	if err := scheduleThreadMemorySync(s.deps.MemorySyncStateStore, threadID, runID); err != nil {
 		log.Printf("RunAgent schedule memory sync failed thread_id=%s run_id=%s err=%v", threadID, runID, err)

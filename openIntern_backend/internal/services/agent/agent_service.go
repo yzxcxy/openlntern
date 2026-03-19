@@ -5,10 +5,10 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/models"
 	builtinTool "openIntern/internal/services/builtin_tool"
+	memorycontracts "openIntern/internal/services/memory/contracts"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	"sync"
 
-	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/adk"
 	einoTool "github.com/cloudwego/eino/components/tool"
@@ -28,12 +28,8 @@ type MemorySyncStateStore interface {
 	ScheduleThreadSync(threadID, runID string) error
 }
 
-type MemoryUsageLogStore interface {
-	RecordRunMemoryUsage(threadID, runID string, uris []string) error
-}
-
 type MemoryRetriever interface {
-	BuildMemoryContext(ctx context.Context, input *types.RunAgentInput) (*types.Message, []string, error)
+	Retrieve(ctx context.Context, inputText string) ([]memorycontracts.RetrievedMemory, error)
 }
 
 type ThreadContextSnapshotStore interface {
@@ -61,7 +57,6 @@ type Dependencies struct {
 	MessageStore               MessageStore
 	MemoryRetriever            MemoryRetriever
 	MemorySyncStateStore       MemorySyncStateStore
-	MemoryUsageLogStore        MemoryUsageLogStore
 	ThreadContextSnapshotStore ThreadContextSnapshotStore
 	ThreadStore                ThreadStore
 	ModelCatalogResolver       ModelCatalogResolver

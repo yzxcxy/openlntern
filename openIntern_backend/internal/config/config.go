@@ -80,12 +80,18 @@ type MilvusConfig struct {
 }
 
 type ToolsConfig struct {
-	Sandbox    SandboxConfig    `yaml:"sandbox"`
-	OpenViking OpenVikingConfig `yaml:"openviking"`
+	Sandbox    SandboxConfig        `yaml:"sandbox"`
+	Memory     MemoryProviderConfig `yaml:"memory"`
+	OpenViking OpenVikingConfig     `yaml:"openviking"`
 }
 
 type SandboxConfig struct {
 	Url string `yaml:"url"`
+}
+
+// MemoryProviderConfig controls which long-term memory backend is active.
+type MemoryProviderConfig struct {
+	Provider string `yaml:"provider"`
 }
 
 type OpenVikingConfig struct {
