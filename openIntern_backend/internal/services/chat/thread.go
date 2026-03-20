@@ -1,17 +1,12 @@
 package chat
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"openIntern/internal/dao"
-	"openIntern/internal/database"
 	"openIntern/internal/models"
 
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -26,19 +21,10 @@ func (s *ThreadService) ListThreads(page, pageSize int) ([]models.Thread, int64,
 	if pageSize <= 0 {
 		pageSize = 10
 	}
-	key := fmt.Sprintf("threads:%d:%d", page, pageSize)
-	ctx := context.Background()
-	client := database.GetRedis()
-	if client != nil {
-		if cached, err := client.Get(ctx, key).Result(); err == nil {
-			var payload struct {
-				Items []models.Thread `json:"items"`
-				Total int64           `json:"total"`
-			}
-			if err := json.Unmarshal([]byte(cached), &payload); err == nil {
-				return payload.Items, payload.Total, nil
-			}
-		}
+	if items, total, hit, err := threadListCache.getThreadList(page, pageSize); err != nil {
+		return nil, 0, err
+	} else if hit {
+		return items, total, nil
 	}
 
 	threads, total, err := dao.Thread.List(page, pageSize)
@@ -46,18 +32,7 @@ func (s *ThreadService) ListThreads(page, pageSize int) ([]models.Thread, int64,
 		return nil, 0, err
 	}
 
-	if client != nil {
-		payload := struct {
-			Items []models.Thread `json:"items"`
-			Total int64           `json:"total"`
-		}{
-			Items: threads,
-			Total: total,
-		}
-		if b, err := json.Marshal(payload); err == nil {
-			client.Set(ctx, key, b, 60*time.Second)
-		}
-	}
+	threadListCache.setThreadList(page, pageSize, threads, total)
 
 	return threads, total, nil
 }
@@ -66,18 +41,10 @@ func (s *ThreadService) GetThread(threadID string) (*models.Thread, error) {
 	if threadID == "" {
 		return nil, errors.New("thread_id is required")
 	}
-	key := fmt.Sprintf("thread:%s", threadID)
-	ctx := context.Background()
-	client := database.GetRedis()
-	if client != nil {
-		if cached, err := client.Get(ctx, key).Result(); err == nil {
-			var thread models.Thread
-			if err := json.Unmarshal([]byte(cached), &thread); err == nil {
-				return &thread, nil
-			}
-		} else if err != redis.Nil {
-			return nil, err
-		}
+	if thread, hit, err := threadListCache.getThread(threadID); err != nil {
+		return nil, err
+	} else if hit {
+		return thread, nil
 	}
 
 	thread, err := dao.Thread.GetByThreadID(threadID)
@@ -88,11 +55,7 @@ func (s *ThreadService) GetThread(threadID string) (*models.Thread, error) {
 		return nil, err
 	}
 
-	if client != nil {
-		if b, err := json.Marshal(thread); err == nil {
-			client.Set(ctx, key, b, 60*time.Second)
-		}
-	}
+	threadListCache.setThread(thread)
 
 	return thread, nil
 }
@@ -119,7 +82,7 @@ func (s *ThreadService) EnsureThread(threadID, title string) (*models.Thread, er
 			if err := dao.Thread.UpdateFields(thread, updates); err != nil {
 				return nil, err
 			}
-			invalidateThreadCache(thread.ThreadID)
+			threadListCache.invalidate(thread.ThreadID)
 		}
 		return thread, nil
 	}
@@ -131,7 +94,7 @@ func (s *ThreadService) EnsureThread(threadID, title string) (*models.Thread, er
 		if err := dao.Thread.Create(thread); err != nil {
 			return nil, err
 		}
-		invalidateThreadCache(thread.ThreadID)
+		threadListCache.invalidate(thread.ThreadID)
 		return thread, nil
 	}
 	return nil, err
@@ -150,7 +113,7 @@ func (s *ThreadService) UpdateThreadTitle(threadID, title string) error {
 	if _, err := dao.Thread.UpdateTitle(threadID, title); err != nil {
 		return err
 	}
-	invalidateThreadCache(threadID)
+	threadListCache.invalidate(threadID)
 	return nil
 }
 
@@ -161,7 +124,7 @@ func (s *ThreadService) DeleteThread(threadID string) error {
 	if err := dao.Thread.DeleteWithMessages(threadID); err != nil {
 		return err
 	}
-	invalidateThreadCache(threadID)
+	threadListCache.invalidate(threadID)
 	return nil
 }
 
@@ -175,32 +138,6 @@ func (s *ThreadService) TouchThread(threadID string) error {
 	if _, err := dao.Thread.Touch(threadID, time.Now()); err != nil {
 		return err
 	}
-	invalidateThreadCache(threadID)
+	threadListCache.invalidate(threadID)
 	return nil
-}
-
-func invalidateThreadCache(threadID string) {
-	client := database.GetRedis()
-	if client == nil {
-		return
-	}
-	ctx := context.Background()
-	if threadID != "" {
-		client.Del(ctx, fmt.Sprintf("thread:%s", threadID))
-	}
-	pattern := "threads:*"
-	var cursor uint64
-	for {
-		keys, next, err := client.Scan(ctx, cursor, pattern, 50).Result()
-		if err != nil {
-			return
-		}
-		if len(keys) > 0 {
-			client.Del(ctx, keys...)
-		}
-		cursor = next
-		if cursor == 0 {
-			break
-		}
-	}
 }

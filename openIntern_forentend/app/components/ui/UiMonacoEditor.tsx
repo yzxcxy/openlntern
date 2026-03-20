@@ -98,7 +98,7 @@ const loadMonaco = async (): Promise<MonacoNamespace> => {
         `script[data-monaco-loader="${MONACO_VERSION}"]`
       );
       if (existingScript) {
-        if (window.require) {
+        if (typeof window.require === "function") {
           handleReady();
           return;
         }

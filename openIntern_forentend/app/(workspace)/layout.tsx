@@ -7,17 +7,16 @@ import { AppShell } from "../components/layout/AppShell";
 import { Sidebar } from "../components/layout/Sidebar";
 import { UiButton } from "../components/ui/UiButton";
 import { UiInput } from "../components/ui/UiInput";
-import { ConfirmDialog } from "./a2ui/components/ConfirmDialog";
-import { Modal } from "./a2ui/components/Modal";
+import { UiConfirmDialog as ConfirmDialog } from "../components/ui/UiConfirmDialog";
+import { UiModal as Modal } from "../components/ui/UiModal";
 import {
   THREAD_HISTORY_UPSERT_EVENT,
   type ThreadHistoryItem,
 } from "./thread-history-events";
 import {
-  buildAuthHeaders,
   readStoredUser,
   readValidToken,
-  updateTokenFromResponse,
+  requestBackend,
 } from "./auth";
 
 type UserInfo = {
@@ -180,8 +179,7 @@ export default function WorkspaceLayout({
   const getValidToken = useCallback(() => readValidToken(router), [router]);
   const fetchThreads = useCallback(
     async (options?: { page?: number; append?: boolean }) => {
-      const token = getValidToken();
-      if (!token) return;
+      if (!getValidToken()) return;
       const nextPage = options?.page ?? 1;
       const shouldAppend = options?.append ?? false;
       setHistoryLoading(true);
@@ -190,17 +188,15 @@ export default function WorkspaceLayout({
         const params = new URLSearchParams();
         params.set("page", String(nextPage));
         params.set("page_size", String(HISTORY_PAGE_SIZE));
-        const res = await fetch(`/api/backend/v1/threads?${params.toString()}`, {
-          headers: buildAuthHeaders(token),
-        });
-        updateTokenFromResponse(res);
-        const data = await res.json();
-        if (!res.ok || data.code !== 0) {
-          throw new Error(data.message || "获取历史会话失败");
-        }
-        const items = (Array.isArray(data.data?.data) ? data.data.data : []).map((item) =>
-          mergeThreadItem(undefined, item)
+        const data = await requestBackend<{ data: ThreadItem[]; total: number }>(
+          `/v1/threads?${params.toString()}`,
+          {
+            fallbackMessage: "获取历史会话失败",
+            router,
+          }
         );
+        const rawItems = Array.isArray(data.data?.data) ? (data.data.data as ThreadItem[]) : [];
+        const items = rawItems.map((item: ThreadItem) => mergeThreadItem(undefined, item));
         const total = typeof data.data?.total === "number" ? data.data.total : 0;
         setHistoryItems((prev) => {
           if (!shouldAppend) {
@@ -208,15 +204,15 @@ export default function WorkspaceLayout({
               (current) =>
                 current.thread_id &&
                 !normalizeThreadTitle(current.title) &&
-                !items.some((item) => item.thread_id === current.thread_id)
+                !items.some((item: ThreadItem) => item.thread_id === current.thread_id)
             );
             return [...pendingItems, ...items];
           }
-          return items.reduce<ThreadItem[]>((acc, item) => {
+          return items.reduce((acc: ThreadItem[], item: ThreadItem) => {
             if (!item.thread_id) {
               return acc;
             }
-            const index = acc.findIndex((current) => current.thread_id === item.thread_id);
+            const index = acc.findIndex((current: ThreadItem) => current.thread_id === item.thread_id);
             if (index === -1) {
               acc.push(item);
               return acc;
@@ -300,8 +296,7 @@ export default function WorkspaceLayout({
       if (disposed || syncing) {
         return;
       }
-      const token = getValidToken();
-      if (!token) {
+      if (!getValidToken()) {
         return;
       }
       syncing = true;
@@ -311,18 +306,15 @@ export default function WorkspaceLayout({
             try {
               const params = new URLSearchParams();
               params.set("_ts", String(Date.now()));
-              const response = await fetch(
-                `/api/backend/v1/threads/${threadID}?${params.toString()}`,
+              const data = await requestBackend<ThreadItem>(
+                `/v1/threads/${threadID}?${params.toString()}`,
                 {
-                  headers: buildAuthHeaders(token),
                   cache: "no-store",
+                  fallbackMessage: "获取会话失败",
+                  router,
                 }
               );
-              updateTokenFromResponse(response);
-              const data = (await response
-                .json()
-                .catch(() => null)) as { code?: number; data?: ThreadItem } | null;
-              if (!response.ok || data?.code !== 0 || disposed) {
+              if (disposed) {
                 return;
               }
               const thread = data.data ?? {};
@@ -426,20 +418,15 @@ export default function WorkspaceLayout({
 
   const handleDelete = async () => {
     if (!deleteTarget?.thread_id) return;
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setDeleting(true);
     setHistoryError("");
     try {
-      const res = await fetch(`/api/backend/v1/threads/${deleteTarget.thread_id}`, {
+      await requestBackend(`/v1/threads/${deleteTarget.thread_id}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token),
+        fallbackMessage: "删除会话失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "删除会话失败");
-      }
       setHistoryItems((items) =>
         items.filter((item) => item.thread_id !== deleteTarget.thread_id)
       );
@@ -477,24 +464,19 @@ export default function WorkspaceLayout({
       setRenameError("请输入会话名称");
       return;
     }
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setRenaming(true);
     setRenameError("");
     try {
-      const res = await fetch(`/api/backend/v1/threads/${renameTarget.thread_id}`, {
+      await requestBackend(`/v1/threads/${renameTarget.thread_id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...buildAuthHeaders(token),
         },
         body: JSON.stringify({ title }),
+        fallbackMessage: "重命名失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "重命名失败");
-      }
       setHistoryItems((items) =>
         items.map((item) =>
           item.thread_id === renameTarget.thread_id ? { ...item, title } : item

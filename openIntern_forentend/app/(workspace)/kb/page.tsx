@@ -10,9 +10,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
-  buildAuthHeaders,
   readValidToken,
-  updateTokenFromResponse,
+  requestBackend,
 } from "../auth";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
@@ -25,8 +24,8 @@ import {
   Typography,
   Upload,
 } from "@douyinfe/semi-ui-19";
-import { Modal } from "../a2ui/components/Modal";
-import { ConfirmDialog } from "../a2ui/components/ConfirmDialog";
+import { UiConfirmDialog as ConfirmDialog } from "../../components/ui/UiConfirmDialog";
+import { UiModal as Modal } from "../../components/ui/UiModal";
 import {
   IconDelete,
   IconFolder,
@@ -324,23 +323,18 @@ export default function KnowledgeBasePage() {
   const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   const fetchList = useCallback(async () => {
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setLoading(true);
     setErrorMessage("");
     try {
-      const res = await fetch(`${API_BASE}/v1/kbs`, {
-        headers: buildAuthHeaders(token),
+      const data = await requestBackend<KnowledgeBase[]>("/v1/kbs", {
+        fallbackMessage: "获取知识库列表失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "获取知识库列表失败");
-      }
       const list = data.data ?? [];
       setKbs(list);
       if (list.length && !list.find((item: KnowledgeBase) => item.name === selectedKb)) {
-        setSelectedKb(list[0].name ?? "");
+        setSelectedKb(list[0]?.name ?? "");
       }
       if (!list.length) {
         setSelectedKb("");
@@ -352,23 +346,21 @@ export default function KnowledgeBasePage() {
     } finally {
       setLoading(false);
     }
-  }, [getValidToken, selectedKb]);
+  }, [getValidToken, router, selectedKb]);
 
   const fetchTree = useCallback(
     async (kbName: string) => {
-      const token = getValidToken();
-      if (!token || !kbName) return;
+      if (!getValidToken() || !kbName) return;
       setTreeLoading(true);
       setErrorMessage("");
       try {
-        const res = await fetch(`${API_BASE}/v1/kbs/${encodeURIComponent(kbName)}/tree`, {
-          headers: buildAuthHeaders(token),
-        });
-        updateTokenFromResponse(res);
-        const data = await res.json();
-        if (!res.ok || data.code !== 0) {
-          throw new Error(data.message || "获取知识库文件失败");
-        }
+        const data = await requestBackend<unknown[]>(
+          `/v1/kbs/${encodeURIComponent(kbName)}/tree`,
+          {
+            fallbackMessage: "获取知识库文件失败",
+            router,
+          }
+        );
         setTreeEntries(normalizeTreeEntries(data.data, kbName));
       } catch (err) {
         const message = err instanceof Error ? err.message : "获取知识库文件失败";
@@ -377,7 +369,7 @@ export default function KnowledgeBasePage() {
         setTreeLoading(false);
       }
     },
-    [getValidToken]
+    [getValidToken, router]
   );
 
   useEffect(() => {
@@ -427,8 +419,7 @@ export default function KnowledgeBasePage() {
       showError("请输入知识库名称");
       return;
     }
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setCreating(true);
     setErrorMessage("");
     try {
@@ -437,16 +428,12 @@ export default function KnowledgeBasePage() {
       if (createFile) {
         formData.append("file", createFile);
       }
-      const res = await fetch(`${API_BASE}/v1/kbs/import`, {
+      await requestBackend("/v1/kbs/import", {
         method: "POST",
-        headers: buildAuthHeaders(token),
         body: formData,
+        fallbackMessage: "创建知识库失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "创建知识库失败");
-      }
       showSuccess("知识库创建请求已受理，后台处理中，请稍后刷新查看结果");
       resetCreateModal();
       await fetchList();
@@ -456,7 +443,7 @@ export default function KnowledgeBasePage() {
     } finally {
       setCreating(false);
     }
-  }, [createFile, createName, fetchList, getValidToken, resetCreateModal]);
+  }, [createFile, createName, fetchList, getValidToken, resetCreateModal, router]);
 
   const handleDeleteKb = () => {
     if (!selectedKb) return;
@@ -465,20 +452,15 @@ export default function KnowledgeBasePage() {
 
   const confirmDeleteKb = async () => {
     if (!selectedKb) return;
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setDeletingKb(true);
     setErrorMessage("");
     try {
-      const res = await fetch(`${API_BASE}/v1/kbs/${encodeURIComponent(selectedKb)}`, {
+      await requestBackend(`/v1/kbs/${encodeURIComponent(selectedKb)}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token),
+        fallbackMessage: "删除知识库失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "删除知识库失败");
-      }
       showSuccess("知识库已删除");
       setDeleteKbVisible(false);
       await fetchList();
@@ -497,8 +479,7 @@ export default function KnowledgeBasePage() {
 
   const confirmDeleteEntry = async () => {
     if (!selectedKb || !pendingEntry) return;
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setDeletingEntry(true);
     setErrorMessage("");
     try {
@@ -507,15 +488,11 @@ export default function KnowledgeBasePage() {
       if (pendingEntry.isDir) {
         params.set("recursive", "true");
       }
-      const res = await fetch(`${API_BASE}/v1/kbs/entry?${params.toString()}`, {
+      await requestBackend(`/v1/kbs/entry?${params.toString()}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token),
+        fallbackMessage: "删除失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "删除失败");
-      }
       showSuccess("删除成功");
       setDeleteEntryVisible(false);
       setPendingEntry(null);
@@ -534,8 +511,7 @@ export default function KnowledgeBasePage() {
     dropToGap: boolean
   ) => {
     if (!selectedKb) return;
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     const fromPath = draggingNode.path;
     const dragBase = getBaseName(fromPath);
     const targetDir = dropToGap
@@ -547,22 +523,18 @@ export default function KnowledgeBasePage() {
     if (fromPath === toPath) return;
     try {
       setErrorMessage("");
-      const res = await fetch(`${API_BASE}/v1/kbs/drag`, {
+      await requestBackend("/v1/kbs/drag", {
         method: "POST",
         headers: {
-          ...buildAuthHeaders(token),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           from_uri: buildUri(selectedKb, fromPath),
           to_uri: buildUri(selectedKb, toPath),
         }),
+        fallbackMessage: "移动失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "移动失败");
-      }
       showSuccess("移动成功");
       await fetchTree(selectedKb);
     } catch (err) {
@@ -573,8 +545,7 @@ export default function KnowledgeBasePage() {
 
   const handleUploadFile = async (file: File) => {
     if (!selectedKb) return;
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setUploading(true);
     setErrorMessage("");
     try {
@@ -587,16 +558,12 @@ export default function KnowledgeBasePage() {
       formData.append("kb_name", selectedKb);
       formData.append("file", file);
       formData.append("target", targetDir);
-      const res = await fetch(`${API_BASE}/v1/kbs/file`, {
+      await requestBackend("/v1/kbs/file", {
         method: "POST",
-        headers: buildAuthHeaders(token),
         body: formData,
+        fallbackMessage: "上传失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "上传失败");
-      }
       showSuccess("上传请求已受理，后台处理中，请稍后刷新查看结果");
     } catch (err) {
       const message = err instanceof Error ? err.message : "上传失败";

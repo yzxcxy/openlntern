@@ -4,12 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
-import {
-  buildAuthHeaders,
-  readStoredUser,
-  readValidToken,
-  updateTokenFromResponse,
-} from "../auth";
+import { readStoredUser, readValidToken, requestBackend } from "../auth";
 
 type UserInfo = {
   user_id?: string;
@@ -21,8 +16,6 @@ type UserInfo = {
   created_at?: string;
   updated_at?: string;
 };
-
-const API_BASE = "/api/backend";
 
 const formatDateLabel = (value?: string) => {
   if (!value) return "未记录";
@@ -76,22 +69,19 @@ export default function UserPage() {
   };
 
   const fetchUser = useCallback(
-    async (token: string, userId: string, showLoading: boolean) => {
+    async (userId: string, showLoading: boolean) => {
       if (showLoading) {
         setLoading(true);
       }
       setError("");
       try {
-        const res = await fetch(`${API_BASE}/v1/users/${userId}`, {
-          headers: buildAuthHeaders(token),
+        const data = await requestBackend<UserInfo>(`/v1/users/${userId}`, {
+          fallbackMessage: "获取用户信息失败",
+          router,
         });
-        updateTokenFromResponse(res);
-        const data = await res.json();
-        if (!res.ok || data.code !== 0) {
-          throw new Error(data.message || "获取用户信息失败");
-        }
-        applyUser(data.data);
-        localStorage.setItem("user", JSON.stringify(data.data));
+        const nextUser = data.data ?? null;
+        applyUser(nextUser);
+        localStorage.setItem("user", JSON.stringify(nextUser));
         window.dispatchEvent(new Event("user-updated"));
       } catch (err) {
         setError(getErrorMessage(err, "获取用户信息失败"));
@@ -101,7 +91,7 @@ export default function UserPage() {
         }
       }
     },
-    [applyUser]
+    [applyUser, router]
   );
 
   useEffect(() => {
@@ -113,7 +103,7 @@ export default function UserPage() {
         const parsed = JSON.parse(storedUser);
         applyUser(parsed);
         if (parsed?.user_id) {
-          fetchUser(token, parsed.user_id, true);
+          fetchUser(parsed.user_id, true);
           return;
         }
       } catch {
@@ -139,23 +129,18 @@ export default function UserPage() {
       setError("无法获取用户ID");
       return;
     }
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setError("");
     setSuccess("");
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/v1/users/${userInfo.user_id}/avatar`, {
+      const data = await requestBackend<{ url?: string }>(`/v1/users/${userInfo.user_id}/avatar`, {
         method: "POST",
-        headers: buildAuthHeaders(token),
         body: formData,
+        fallbackMessage: "头像上传失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "头像上传失败");
-      }
       const nextUser = {
         ...userInfo,
         avatar: data.data?.url || userInfo.avatar,
@@ -189,8 +174,7 @@ export default function UserPage() {
       setError("无法获取用户ID");
       return;
     }
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setSaving(true);
     setError("");
     setSuccess("");
@@ -214,20 +198,16 @@ export default function UserPage() {
         setPassword("");
         return;
       }
-      const res = await fetch(`${API_BASE}/v1/users/${userInfo.user_id}`, {
+      await requestBackend(`/v1/users/${userInfo.user_id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...buildAuthHeaders(token),
         },
         body: JSON.stringify(updates),
+        fallbackMessage: "更新失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "更新失败");
-      }
-      await fetchUser(token, userInfo.user_id, false);
+      await fetchUser(userInfo.user_id, false);
       setEditing(false);
       setPassword("");
       setSuccess("信息更新成功");

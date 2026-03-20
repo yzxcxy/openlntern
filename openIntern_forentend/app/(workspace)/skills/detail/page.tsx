@@ -12,11 +12,7 @@ import {
 import remarkGfm from "remark-gfm";
 import { useRouter, useSearchParams } from "next/navigation";
 import { UiButton } from "../../../components/ui/UiButton";
-import {
-  buildAuthHeaders,
-  readValidToken,
-  updateTokenFromResponse,
-} from "../../auth";
+import { fetchBackend, readValidToken, requestBackend } from "../../auth";
 
 type Skill = {
   name?: string;
@@ -32,7 +28,6 @@ type SkillFileItem = {
   date?: string;
 };
 
-const API_BASE = "/api/backend";
 const markdownComponents = {
   h1: (props: ComponentPropsWithoutRef<"h1">) => (
     <h1 className="mb-4 text-2xl font-semibold text-[var(--color-text-primary)]" {...props} />
@@ -223,20 +218,11 @@ export default function SkillDetailPage() {
     try {
       const params = new URLSearchParams();
       params.set("path", skillPath);
-      const res = await fetch(`${API_BASE}/v1/skills?${params.toString()}`, {
-        headers: buildAuthHeaders(token),
+      const data = await requestBackend<SkillFileItem[]>(`/v1/skills?${params.toString()}`, {
+        fallbackMessage: "获取技能文件失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        const text = (await res.text()).trim();
-        throw new Error(text || "响应格式错误");
-      }
-      const data = await res.json();
-      if (!res.ok || data?.code !== 0) {
-        throw new Error(data?.message || "获取技能文件失败");
-      }
-      setFileItems(Array.isArray(data?.data) ? data.data : []);
+      setFileItems(Array.isArray(data.data) ? data.data : []);
       setFileListLoaded(true);
     } catch (err) {
       if (err instanceof Error && err.message) {
@@ -264,11 +250,10 @@ export default function SkillDetailPage() {
     try {
       const nameParam = encodeURIComponent(normalizedName);
       const pathParam = encodeURIComponent(path);
-      const apiUrl = `${API_BASE}/v1/skills/content/${nameParam}?path=${pathParam}`;
-      const res = await fetch(apiUrl, {
-        headers: buildAuthHeaders(token),
+      const res = await fetchBackend(`/v1/skills/content/${nameParam}?path=${pathParam}`, {
+        fallbackMessage: "获取文件内容失败",
+        router,
       });
-      updateTokenFromResponse(res);
       const text = await readContent(res);
       setFileContent(text);
     } catch (err) {
@@ -292,18 +277,11 @@ export default function SkillDetailPage() {
     setDeleteError("");
     setDeleteSuccess("");
     try {
-      const res = await fetch(
-        `${API_BASE}/v1/skills/${encodeURIComponent(normalizedName)}`,
-        {
-          method: "DELETE",
-          headers: buildAuthHeaders(token),
-        }
-      );
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "删除失败");
-      }
+      await requestBackend(`/v1/skills/${encodeURIComponent(normalizedName)}`, {
+        method: "DELETE",
+        fallbackMessage: "删除失败",
+        router,
+      });
       setDeleteSuccess("删除成功");
       router.push("/skills");
     } catch (err) {
@@ -483,12 +461,11 @@ export default function SkillDetailPage() {
     }
     const nameParam = encodeURIComponent(normalizedName);
     const pathParam = encodeURIComponent(href);
-    const apiUrl = `${API_BASE}/v1/skills/content/${nameParam}?path=${pathParam}`;
     try {
-      const res = await fetch(apiUrl, {
-        headers: buildAuthHeaders(token),
+      const res = await fetchBackend(`/v1/skills/content/${nameParam}?path=${pathParam}`, {
+        fallbackMessage: "获取文档失败",
+        router,
       });
-      updateTokenFromResponse(res);
       const text = await readContent(res);
       setDocModalContent(text);
       setDocModalLoading(false);
@@ -554,42 +531,26 @@ export default function SkillDetailPage() {
       setLoading(false);
       return;
     }
-    const readJson = async (res: Response) => {
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        const text = (await res.text()).trim();
-        throw new Error(text || "响应格式错误");
-      }
-      return res.json();
-    };
     const fetchDetail = async () => {
       setLoading(true);
       setError("");
       try {
         const nameParam = encodeURIComponent(normalizedName);
-        const metaRes = await fetch(
-          `${API_BASE}/v1/skills/meta/${nameParam}`,
+        const metaData = await requestBackend<Skill>(
+          `/v1/skills/meta/${nameParam}`,
           {
-            headers: buildAuthHeaders(token),
+            fallbackMessage: "获取技能信息失败",
+            router,
           }
         );
-        updateTokenFromResponse(metaRes);
-        const metaData = await readJson(metaRes);
-        if (!metaRes.ok || metaData.code !== 0) {
-          throw new Error(metaData.message || "获取技能信息失败");
-        }
         setSkill(metaData.data ?? null);
-        const contentRes = await fetch(
-          `${API_BASE}/v1/skills/content/${nameParam}`,
+        const contentData = await requestBackend<{ content?: string }>(
+          `/v1/skills/content/${nameParam}`,
           {
-            headers: buildAuthHeaders(token),
+            fallbackMessage: "获取技能文档失败",
+            router,
           }
         );
-        updateTokenFromResponse(contentRes);
-        const contentData = await readJson(contentRes);
-        if (!contentRes.ok || contentData.code !== 0) {
-          throw new Error(contentData.message || "获取技能文档失败");
-        }
         setContent(contentData.data?.content ?? "");
       } catch (err) {
         if (err instanceof Error && err.message) {

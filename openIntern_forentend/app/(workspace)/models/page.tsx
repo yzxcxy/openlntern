@@ -6,23 +6,16 @@ import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
 import { UiSelect } from "../../components/ui/UiSelect";
 import { UiTextarea } from "../../components/ui/UiTextarea";
-import { Modal } from "../a2ui/components/Modal";
+import { UiModal as Modal } from "../../components/ui/UiModal";
 import {
-  buildAuthHeaders,
   getUserIdFromToken,
   readStoredUser,
   readValidToken,
-  updateTokenFromResponse,
+  requestBackend,
 } from "../auth";
 
 type UserInfo = {
   user_id?: string | number;
-};
-
-type BackendResult<T> = {
-  code: number;
-  message: string;
-  data?: T;
 };
 
 type BackendPage<T> = {
@@ -88,8 +81,6 @@ type ModelFormState = {
   sort: string;
 };
 
-const API_BASE = "/api/backend";
-
 const EMPTY_PROVIDER_FORM: ProviderFormState = {
   name: "",
   api_type: "openai",
@@ -109,11 +100,6 @@ const EMPTY_MODEL_FORM: ModelFormState = {
   context_window: "",
   enabled: true,
   sort: "0",
-};
-
-const parseErrorMessage = async (response: Response, fallback: string) => {
-  const data = (await response.json().catch(() => null)) as BackendResult<unknown> | null;
-  return data?.message || fallback;
 };
 
 const MODEL_GROUP_ORDER = ["对话", "向量", "视觉", "重排", "音频", "其他", "未分类"] as const;
@@ -371,35 +357,23 @@ export default function ModelsPage() {
     setLoading(true);
     setError("");
     try {
-      const [providerRes, modelRes, defaultRes] = await Promise.all([
-        fetch(`${API_BASE}/v1/model-providers?page=1&page_size=100`, {
-          headers: buildAuthHeaders(token, userId),
+      const [providerData, modelData, defaultData] = await Promise.all([
+        requestBackend<BackendPage<ModelProviderItem>>("/v1/model-providers?page=1&page_size=100", {
+          fallbackMessage: "获取模型提供商失败",
+          router,
+          userId,
         }),
-        fetch(`${API_BASE}/v1/models?page=1&page_size=200`, {
-          headers: buildAuthHeaders(token, userId),
+        requestBackend<BackendPage<ModelItem>>("/v1/models?page=1&page_size=200", {
+          fallbackMessage: "获取模型列表失败",
+          router,
+          userId,
         }),
-        fetch(`${API_BASE}/v1/models/default`, {
-          headers: buildAuthHeaders(token, userId),
+        requestBackend<DefaultModelResponse>("/v1/models/default", {
+          fallbackMessage: "获取默认模型失败",
+          router,
+          userId,
         }),
       ]);
-
-      updateTokenFromResponse(providerRes);
-      updateTokenFromResponse(modelRes);
-      updateTokenFromResponse(defaultRes);
-
-      const providerData = (await providerRes.json()) as BackendResult<BackendPage<ModelProviderItem>>;
-      const modelData = (await modelRes.json()) as BackendResult<BackendPage<ModelItem>>;
-      const defaultData = (await defaultRes.json()) as BackendResult<DefaultModelResponse>;
-
-      if (!providerRes.ok || providerData.code !== 0) {
-        throw new Error(providerData.message || "获取模型提供商失败");
-      }
-      if (!modelRes.ok || modelData.code !== 0) {
-        throw new Error(modelData.message || "获取模型列表失败");
-      }
-      if (!defaultRes.ok || defaultData.code !== 0) {
-        throw new Error(defaultData.message || "获取默认模型失败");
-      }
 
       const nextProviders = providerData.data?.data ?? [];
       const nextModels = modelData.data?.data ?? [];
@@ -423,7 +397,7 @@ export default function ModelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getUserId, getValidToken]);
+  }, [getUserId, getValidToken, router]);
 
   useEffect(() => {
     fetchAll();
@@ -591,27 +565,21 @@ export default function ModelsPage() {
         extra_config_json: providerForm.extra_config_json.trim(),
         enabled: providerForm.enabled,
       };
-      const response = await fetch(
+      await requestBackend(
         providerEditId
-          ? `${API_BASE}/v1/model-providers/${providerEditId}`
-          : `${API_BASE}/v1/model-providers`,
+          ? `/v1/model-providers/${providerEditId}`
+          : "/v1/model-providers",
         {
           method: providerEditId ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json",
-            ...buildAuthHeaders(token, userId),
           },
           body: JSON.stringify(payload),
+          fallbackMessage: "保存提供商失败",
+          router,
+          userId,
         }
       );
-      updateTokenFromResponse(response);
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response, "保存提供商失败"));
-      }
-      const data = (await response.json()) as BackendResult<unknown>;
-      if (data.code !== 0) {
-        throw new Error(data.message || "保存提供商失败");
-      }
       resetProviderForm();
       setIsProviderFormOpen(false);
       await fetchAll();
@@ -659,25 +627,19 @@ export default function ModelsPage() {
         enabled: modelForm.enabled,
         sort: Number.isNaN(sortValue) ? 0 : sortValue,
       };
-      const response = await fetch(
-        modelEditId ? `${API_BASE}/v1/models/${modelEditId}` : `${API_BASE}/v1/models`,
+      await requestBackend(
+        modelEditId ? `/v1/models/${modelEditId}` : "/v1/models",
         {
           method: modelEditId ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json",
-            ...buildAuthHeaders(token, userId),
           },
           body: JSON.stringify(payload),
+          fallbackMessage: "保存模型失败",
+          router,
+          userId,
         }
       );
-      updateTokenFromResponse(response);
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response, "保存模型失败"));
-      }
-      const data = (await response.json()) as BackendResult<unknown>;
-      if (data.code !== 0) {
-        throw new Error(data.message || "保存模型失败");
-      }
       resetModelForm();
       setIsModelFormOpen(false);
       await fetchAll();
@@ -701,20 +663,12 @@ export default function ModelsPage() {
     const userId = getUserId(token);
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/v1/model-providers/${providerId}`, {
+      await requestBackend(`/v1/model-providers/${providerId}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token, userId),
+        fallbackMessage: "删除提供商失败",
+        router,
+        userId,
       });
-      updateTokenFromResponse(response);
-      if (!response.ok) {
-        setError(await parseErrorMessage(response, "删除提供商失败"));
-        return;
-      }
-      const data = (await response.json()) as BackendResult<unknown>;
-      if (data.code !== 0) {
-        setError(data.message || "删除提供商失败");
-        return;
-      }
       if (providerEditId === providerId) {
         resetProviderForm();
         setIsProviderFormOpen(false);
@@ -734,20 +688,12 @@ export default function ModelsPage() {
     const userId = getUserId(token);
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/v1/models/${modelId}`, {
+      await requestBackend(`/v1/models/${modelId}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token, userId),
+        fallbackMessage: "删除模型失败",
+        router,
+        userId,
       });
-      updateTokenFromResponse(response);
-      if (!response.ok) {
-        setError(await parseErrorMessage(response, "删除模型失败"));
-        return;
-      }
-      const data = (await response.json()) as BackendResult<unknown>;
-      if (data.code !== 0) {
-        setError(data.message || "删除模型失败");
-        return;
-      }
       if (modelEditId === modelId) {
         resetModelForm();
         setIsModelFormOpen(false);
@@ -769,22 +715,16 @@ export default function ModelsPage() {
     setSavingDefault(true);
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/v1/models/default`, {
+      await requestBackend("/v1/models/default", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...buildAuthHeaders(token, userId),
         },
         body: JSON.stringify({ model_id: defaultModelId }),
+        fallbackMessage: "保存默认模型失败",
+        router,
+        userId,
       });
-      updateTokenFromResponse(response);
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response, "保存默认模型失败"));
-      }
-      const data = (await response.json()) as BackendResult<unknown>;
-      if (data.code !== 0) {
-        throw new Error(data.message || "保存默认模型失败");
-      }
       await fetchAll();
     } catch (err) {
       if (err instanceof Error && err.message) {

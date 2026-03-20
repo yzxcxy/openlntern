@@ -2,7 +2,7 @@ import { Collapsible } from "@douyinfe/semi-ui-19";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
 import { UiSelect } from "../../components/ui/UiSelect";
-import { Modal } from "../a2ui/components/Modal";
+import { UiModal as Modal } from "../../components/ui/UiModal";
 import {
   getChatPluginKey,
   uniqueStringList,

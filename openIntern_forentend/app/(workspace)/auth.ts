@@ -10,9 +10,24 @@ export type StoredUser = {
   [key: string]: unknown;
 };
 
-type RouterLike = {
+export type RouterLike = {
   push: (href: string) => void;
 };
+
+export type BackendEnvelope<T> = {
+  code: number;
+  message: string;
+  data?: T;
+};
+
+type BackendRequestOptions = Omit<RequestInit, "headers"> & {
+  fallbackMessage: string;
+  headers?: HeadersInit;
+  router?: RouterLike;
+  userId?: string;
+};
+
+const BACKEND_API_BASE = "/api/backend";
 
 export const parseTokenPayload = (token: string) => {
   if (!token) return null;
@@ -87,4 +102,52 @@ export const buildAuthHeaders = (token: string, userId?: string) => {
     headers["X-User-ID"] = userId;
   }
   return headers;
+};
+
+const resolveBackendPath = (path: string) => {
+  if (path.startsWith(BACKEND_API_BASE)) {
+    return path;
+  }
+  if (path.startsWith("/")) {
+    return `${BACKEND_API_BASE}${path}`;
+  }
+  return `${BACKEND_API_BASE}/${path}`;
+};
+
+// fetchBackend centralizes authenticated workspace fetch setup while preserving the raw response.
+export const fetchBackend = async (path: string, options: BackendRequestOptions) => {
+  const {
+    headers: rawHeaders,
+    router,
+    userId,
+    ...init
+  } = options;
+  const token = readValidToken(router);
+  if (!token) {
+    throw new Error("未登录");
+  }
+
+  const headers = new Headers(rawHeaders);
+  const authHeaders = buildAuthHeaders(token, userId);
+  Object.entries(authHeaders).forEach(([key, value]) => {
+    headers.set(key, value);
+  });
+
+  const response = await fetch(resolveBackendPath(path), {
+    ...init,
+    headers,
+  });
+  updateTokenFromResponse(response);
+  return response;
+};
+
+// requestBackend centralizes authenticated workspace requests and response envelope parsing.
+export const requestBackend = async <T>(path: string, options: BackendRequestOptions) => {
+  const { fallbackMessage } = options;
+  const response = await fetchBackend(path, options);
+  const payload = (await response.json().catch(() => null)) as BackendEnvelope<T> | null;
+  if (!response.ok || payload?.code !== 0) {
+    throw new Error(payload?.message || fallbackMessage);
+  }
+  return payload;
 };

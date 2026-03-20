@@ -14,11 +14,10 @@ import { UiInput } from "../../components/ui/UiInput";
 import { UiSelect } from "../../components/ui/UiSelect";
 import { UiTextarea } from "../../components/ui/UiTextarea";
 import {
-  buildAuthHeaders,
   getUserIdFromToken,
   readStoredUser,
   readValidToken,
-  updateTokenFromResponse,
+  requestBackend,
 } from "../auth";
 
 type A2UI = {
@@ -37,8 +36,6 @@ type UserInfo = {
   email?: string;
   role?: string;
 };
-
-const API_BASE = "/api/backend";
 
 export default function A2uiPage() {
   const [keyword, setKeyword] = useState("");
@@ -96,14 +93,14 @@ export default function A2uiPage() {
       if (searchKeyword.trim()) {
         params.set("keyword", searchKeyword.trim());
       }
-      const res = await fetch(`${API_BASE}/v1/a2uis?${params.toString()}`, {
-        headers: buildAuthHeaders(token, userId),
-      });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "获取 A2UI 列表失败");
-      }
+      const data = await requestBackend<{ data: A2UI[]; total: number }>(
+        `/v1/a2uis?${params.toString()}`,
+        {
+          fallbackMessage: "获取 A2UI 列表失败",
+          router,
+          userId,
+        }
+      );
       setItems(data.data?.data ?? []);
       setTotal(data.data?.total ?? 0);
     } catch (err) {
@@ -115,7 +112,7 @@ export default function A2uiPage() {
     } finally {
       setLoading(false);
     }
-  }, [getUserId, getValidToken, page, pageSize, searchKeyword]);
+  }, [getUserId, getValidToken, page, pageSize, router, searchKeyword]);
 
   useEffect(() => {
     fetchList();
@@ -173,35 +170,29 @@ export default function A2uiPage() {
         data_json: formValues.data_json,
       };
       if (editorMode === "create") {
-        const res = await fetch(`${API_BASE}/v1/a2uis`, {
+        await requestBackend("/v1/a2uis", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...buildAuthHeaders(token, userId),
           },
           body: JSON.stringify({
             ...payload,
           }),
+          fallbackMessage: "新增 A2UI 失败",
+          router,
+          userId,
         });
-        updateTokenFromResponse(res);
-        const data = await res.json();
-        if (!res.ok || data.code !== 0) {
-          throw new Error(data.message || "新增 A2UI 失败");
-        }
       } else if (activeId) {
-        const res = await fetch(`${API_BASE}/v1/a2uis/${activeId}`, {
+        await requestBackend(`/v1/a2uis/${activeId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            ...buildAuthHeaders(token, userId),
           },
           body: JSON.stringify(payload),
+          fallbackMessage: "更新 A2UI 失败",
+          router,
+          userId,
         });
-        updateTokenFromResponse(res);
-        const data = await res.json();
-        if (!res.ok || data.code !== 0) {
-          throw new Error(data.message || "更新 A2UI 失败");
-        }
       }
       closeEditor();
       fetchList();
@@ -233,22 +224,19 @@ export default function A2uiPage() {
     setError("");
     setDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/v1/a2uis/${deleteTarget.a2ui_id}`, {
+      await requestBackend(`/v1/a2uis/${deleteTarget.a2ui_id}`, {
         method: "DELETE",
-        headers: buildAuthHeaders(token, userId),
+        fallbackMessage: "删除 A2UI 失败",
+        router,
+        userId,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "删除 A2UI 失败");
-      }
       closeDelete();
       fetchList();
     } catch (err) {
       if (err instanceof Error && err.message) {
         setError(err.message);
       } else {
-        setError("删除失败");
+        setError("获取 A2UI 列表失败");
       }
     } finally {
       setDeleting(false);

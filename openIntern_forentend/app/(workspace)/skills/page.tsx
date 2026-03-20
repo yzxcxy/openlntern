@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
 import { UiSelect } from "../../components/ui/UiSelect";
-import {
-  buildAuthHeaders,
-  readValidToken,
-  updateTokenFromResponse,
-} from "../auth";
+import { readValidToken, requestBackend } from "../auth";
 
 type Skill = {
   skill_id?: string;
@@ -18,8 +14,6 @@ type Skill = {
   icon?: string;
   path?: string;
 };
-
-const API_BASE = "/api/backend";
 
 export default function SkillsPage() {
   const [keyword, setKeyword] = useState("");
@@ -39,8 +33,7 @@ export default function SkillsPage() {
   const getValidToken = useCallback(() => readValidToken(router), [router]);
 
   const fetchList = useCallback(async () => {
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setLoading(true);
     setError("");
     try {
@@ -50,15 +43,13 @@ export default function SkillsPage() {
       if (searchKeyword.trim()) {
         params.set("keyword", searchKeyword.trim());
       }
-      const url = `${API_BASE}/v1/skills/meta?${params.toString()}`;
-      const res = await fetch(url, {
-        headers: buildAuthHeaders(token),
-      });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "获取 Skill 列表失败");
-      }
+      const data = await requestBackend<{ data: Skill[]; total: number }>(
+        `/v1/skills/meta?${params.toString()}`,
+        {
+          fallbackMessage: "获取 Skill 列表失败",
+          router,
+        }
+      );
       setItems(data.data?.data ?? []);
       setTotal(data.data?.total ?? 0);
     } catch (err) {
@@ -70,7 +61,7 @@ export default function SkillsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getValidToken, page, pageSize, searchKeyword]);
+  }, [getValidToken, page, pageSize, router, searchKeyword]);
 
   useEffect(() => {
     fetchList();
@@ -95,24 +86,19 @@ export default function SkillsPage() {
       setUploadError("仅支持 .zip 文件");
       return;
     }
-    const token = getValidToken();
-    if (!token) return;
+    if (!getValidToken()) return;
     setUploading(true);
     setUploadError("");
     setUploadSuccess("");
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/v1/skills/import`, {
+      await requestBackend("/v1/skills/import", {
         method: "POST",
-        headers: buildAuthHeaders(token),
         body: formData,
+        fallbackMessage: "上传失败",
+        router,
       });
-      updateTokenFromResponse(res);
-      const data = await res.json();
-      if (!res.ok || data.code !== 0) {
-        throw new Error(data.message || "上传失败");
-      }
       setUploadSuccess("上传成功");
       await fetchList();
     } catch (err) {
