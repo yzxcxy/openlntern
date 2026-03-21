@@ -20,6 +20,54 @@
     border-radius: calc(var(--radius-xl) + 6px);
   }
 
+  /* Chat 页面使用单层工作区卡片，避免出现厚重的外层包裹感。 */
+  .chat-stage-surface {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .chat-stage-surface::before {
+    content: "";
+    position: absolute;
+    inset: 18px 28px auto;
+    height: 140px;
+    border-radius: 9999px;
+    background:
+      radial-gradient(circle at 12% 24%, rgba(37, 99, 255, 0.12), transparent 34%),
+      radial-gradient(circle at 84% 18%, rgba(14, 165, 233, 0.1), transparent 30%);
+    filter: blur(26px);
+    opacity: 0.95;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .chat-shell-surface {
+    position: relative;
+    border-color: rgba(226, 232, 240, 0.92);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95)),
+      linear-gradient(120deg, rgba(219, 234, 254, 0.16), transparent 22%);
+    box-shadow:
+      0 18px 42px rgba(148, 163, 184, 0.16),
+      0 2px 10px rgba(15, 23, 42, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  }
+
+  .chat-shell-surface::after {
+    content: "";
+    position: absolute;
+    inset: 0 18% auto;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(59, 130, 246, 0.24),
+      rgba(14, 165, 233, 0.18),
+      transparent
+    );
+    pointer-events: none;
+  }
+
   .workspace-gradient-surface--chat {
     background:
       radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 28%),

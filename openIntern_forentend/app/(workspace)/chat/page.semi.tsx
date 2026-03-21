@@ -70,6 +70,7 @@ import {
   extractInputPlainText,
   extractText,
   extractToolResultText,
+  groupAssistantProcessItems,
   mapAguiUserContentToSemi,
   mapActivityContent,
   mapHistoryMessages,
@@ -733,6 +734,39 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     []
   );
 
+  const completeReasoningItems = useCallback(
+    (runId: string) => {
+      if (!runId) return;
+      updateRunMessage(runId, (message) => {
+        const content = Array.isArray(message.content) ? [...message.content] : [];
+        let changed = false;
+        const nextContent = content.map((item) => {
+          if (item?.type !== "reasoning" || item.status === "completed") {
+            return item;
+          }
+          changed = true;
+          return {
+            ...item,
+            status: "completed",
+          };
+        });
+        if (!changed) {
+          return message;
+        }
+        return {
+          ...message,
+          content: nextContent,
+        };
+      });
+      reasoningMessageMapRef.current.forEach((mapping, messageId) => {
+        if (mapping.runId === runId) {
+          reasoningMessageMapRef.current.delete(messageId);
+        }
+      });
+    },
+    [updateRunMessage]
+  );
+
   const resolveRunId = (event: any) =>
     event?.runId ?? event?.run_id ?? event?.data?.runId ?? event?.data?.run_id;
 
@@ -803,6 +837,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
             });
           }
           if (runId) {
+            completeReasoningItems(runId);
             updateRunMessage(runId, (message) => ({
               ...message,
               status: "completed",
@@ -815,6 +850,14 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           reasoningMessageMapRef.current.clear();
           activityMessageMapRef.current.clear();
           startThreadTitleSync(finishedThreadId);
+          return;
+        }
+
+        if (eventType === "REASONING_END") {
+          const runId = resolveRunId(rawEvent) ?? currentRunIdRef.current;
+          if (runId) {
+            completeReasoningItems(runId);
+          }
           return;
         }
 
@@ -1125,12 +1168,16 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     return () => {
       subscription?.unsubscribe?.();
     };
-  }, [agent, startThreadTitleSync, threadId, updateRunMessage]);
+  }, [agent, completeReasoningItems, startThreadTitleSync, threadId, updateRunMessage]);
 
   const chats = useMemo<SemiMessage[]>(
     () =>
       semiMessages.map((message, index) => ({
         ...message,
+        content:
+          message.role === "assistant"
+            ? groupAssistantProcessItems(message.content)
+            : message.content,
         id: message.id ?? `${message.role}-${index}`,
       })),
     [semiMessages]
@@ -1138,6 +1185,12 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const showHistorySkeleton = historyLoading && chats.length === 0;
   const showEmptyState =
     !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
+  const emptyStatePrompts = [
+    "介绍一下你能做什么",
+    "帮我总结一份文档",
+    "帮我分析一个报错",
+    "给我写一个接口设计",
+  ];
 
   const roleConfig = useMemo(
     () => ({
@@ -1455,10 +1508,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
 
   return (
     <>
-      <div className="chat-page workspace-gradient-surface workspace-gradient-surface--chat flex h-full w-full flex-col p-3 md:p-4">
-        <div className="motion-safe-fade-in flex h-full min-h-0 flex-col gap-3">
-          <div className="motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] shadow-[var(--shadow-sm)] backdrop-blur-sm">
-            <div className="flex-1 overflow-hidden px-1 py-1">
+      <div className="chat-page chat-stage-surface flex h-full w-full flex-col p-0">
+        <div className="motion-safe-fade-in relative z-[1] flex h-full min-h-0 w-full flex-col gap-0">
+          <div className="chat-shell-surface motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border backdrop-blur-sm">
+            <div className="flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.36),rgba(248,250,252,0.18))] px-2 py-2 md:px-3 md:py-3">
               {showHistorySkeleton ? (
                 <div className="flex h-full flex-col gap-4 px-4 py-5">
                   <div className="flex justify-start">
@@ -1484,7 +1537,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 </div>
               ) : showEmptyState ? (
                 <div className="motion-safe-fade-in flex h-full items-center justify-center px-6 py-8">
-                  <div className="max-w-md rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.94))] p-6 text-center shadow-[var(--shadow-sm)]">
+                  <div className="max-w-2xl rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.94))] p-6 text-center shadow-[var(--shadow-sm)]">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]">
                       <svg
                         viewBox="0 0 24 24"
@@ -1503,8 +1556,17 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                     <div className="mt-4 text-sm font-semibold text-[var(--color-text-primary)]">
                       开始新的对话
                     </div>
-                    <div className="mt-2 text-sm text-[var(--color-text-muted)]">
-                      输入你的问题，系统会实时展示回复、工具调用和可视化内容。
+                    <div className="mt-6 flex flex-wrap justify-center gap-3">
+                      {emptyStatePrompts.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => setComposerText(prompt)}
+                          className="motion-safe-highlight rounded-full border border-[rgba(191,219,254,0.6)] bg-[rgba(255,255,255,0.88)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:border-[rgba(59,130,246,0.28)] hover:bg-[rgba(239,246,255,0.9)] hover:text-[var(--color-text-primary)]"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1519,7 +1581,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 />
               )}
             </div>
-            <div className="border-t border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.96))] px-4 py-3">
+            <div className="border-t border-[rgba(226,232,240,0.88)] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.98))] px-4 py-3 md:px-5 md:py-4">
               {agent.isRunning && (
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
                   <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />

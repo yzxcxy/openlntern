@@ -11,13 +11,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// persistUserLastMessage 持久化本次输入中的最后一条 user 消息。
-func persistUserLastMessage(messageStore MessageStore, threadID, runID string, messages []types.Message) error {
+// buildUserLastMessageModel 构建本次输入中的最后一条 user 消息模型。
+func buildUserLastMessageModel(threadID, runID string, messages []types.Message) (*models.Message, error) {
 	if len(messages) == 0 {
-		return nil
+		return nil, nil
 	}
 	if runID == "" {
-		return fmt.Errorf("run_id is required")
+		return nil, fmt.Errorf("run_id is required")
 	}
 	var lastUser *types.Message
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -28,34 +28,32 @@ func persistUserLastMessage(messageStore MessageStore, threadID, runID string, m
 		}
 	}
 	if lastUser == nil {
-		return nil
+		return nil, nil
 	}
 	msgID := normalizeMsgID(lastUser.ID)
 	normalized := *lastUser
 	normalized.ID = msgID
 	b, err := json.Marshal(normalized)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return messageStore.CreateMessages([]models.Message{
-		{
-			MsgID:    msgID,
-			ThreadID: threadID,
-			RunID:    runID,
-			Type:     "text",
-			Content:  string(b),
-			Status:   "completed",
-		},
-	})
+	return &models.Message{
+		MsgID:    msgID,
+		ThreadID: threadID,
+		RunID:    runID,
+		Type:     "text",
+		Content:  string(b),
+		Status:   "completed",
+	}, nil
 }
 
-// persistAccumulatedMessages 持久化流式累计的消息集合。
-func persistAccumulatedMessages(messageStore MessageStore, threadID, runID string, messages []agui.AccumulatedMessage) error {
+// buildAccumulatedMessageModels 构建流式累计消息的持久化模型集合。
+func buildAccumulatedMessageModels(threadID, runID string, messages []agui.AccumulatedMessage) ([]models.Message, error) {
 	if len(messages) == 0 {
-		return nil
+		return nil, nil
 	}
 	if runID == "" {
-		return fmt.Errorf("run_id is required")
+		return nil, fmt.Errorf("run_id is required")
 	}
 	modelsMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -74,7 +72,7 @@ func persistAccumulatedMessages(messageStore MessageStore, threadID, runID strin
 			Metadata: metadata,
 		})
 	}
-	return messageStore.CreateMessages(modelsMessages)
+	return modelsMessages, nil
 }
 
 // normalizeMsgID 标准化消息 ID，必要时生成新 UUID。

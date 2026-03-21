@@ -6,6 +6,7 @@ import type { ThreadHistoryItem } from "../thread-history-events";
 
 export const TOOL_RESULT_TYPE = "tool_result_text";
 export const ACTIVITY_CONTENT_TYPE = "activity_message";
+export const PROCESS_PANEL_TYPE = "process_panel";
 export const ACTIVITY_EVENT_SNAPSHOT = "ACTIVITY_SNAPSHOT";
 export const ACTIVITY_EVENT_DELTA = "ACTIVITY_DELTA";
 export const A2UI_SURFACE_ACTIVITY_TYPE = "a2ui-surface";
@@ -14,6 +15,7 @@ export type BackendMessageItem = {
   msg_id: string;
   thread_id: string;
   run_id: string;
+  sequence?: number;
   type: string;
   content: string;
   status?: string;
@@ -140,6 +142,53 @@ export const buildTextAvatarDataUrl = (
 export const joinClasses = (
   ...classes: Array<string | false | null | undefined>
 ) => classes.filter(Boolean).join(" ");
+
+const isProcessContentItem = (item: unknown) => {
+  const type = typeof (item as { type?: unknown })?.type === "string"
+    ? String((item as { type?: string }).type)
+    : "";
+  return type === "reasoning" || type === "function_call" || type === TOOL_RESULT_TYPE;
+};
+
+export const groupAssistantProcessItems = (
+  content: SemiMessage["content"]
+): SemiMessage["content"] => {
+  if (!Array.isArray(content)) {
+    return content;
+  }
+  const nextContent: Array<Record<string, any>> = [];
+  let processItems: Array<Record<string, any>> = [];
+  const flushProcessItems = () => {
+    if (processItems.length === 0) {
+      return;
+    }
+    const panelStatus = processItems.some((item) => item?.status !== "completed")
+      ? "in_progress"
+      : "completed";
+    nextContent.push({
+      type: PROCESS_PANEL_TYPE,
+      status: panelStatus,
+      items: processItems,
+    });
+    processItems = [];
+  };
+
+  content.forEach((item) => {
+    if (!item || typeof item !== "object") {
+      flushProcessItems();
+      return;
+    }
+    const normalizedItem = item as Record<string, any>;
+    if (isProcessContentItem(normalizedItem)) {
+      processItems.push(normalizedItem);
+      return;
+    }
+    flushProcessItems();
+    nextContent.push(normalizedItem);
+  });
+  flushProcessItems();
+  return nextContent;
+};
 
 // 后端消息中的 content 为 JSON 字符串，解析失败时返回 null
 const safeParseJson = <T,>(value: string): T | null => {
@@ -352,6 +401,17 @@ const toTimestamp = (value?: string) => {
   return parsed;
 };
 
+// 聚合历史消息时保留最早的创建时间，避免 assistant 容器被后续片段覆盖时间线。
+const mergeCreatedAt = (current?: number, incoming?: number) => {
+  if (current === undefined) return incoming;
+  if (incoming === undefined) return current;
+  return Math.min(current, incoming);
+};
+
+// 历史回放优先使用后端持久化的 sequence；旧数据无该字段时再回退到时间排序。
+const toSequence = (value?: number) =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+
 export const toRecord = (value: unknown): Record<string, any> => {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, any>;
@@ -451,19 +511,35 @@ export const mapActivityContent = (params: {
 
 // 历史消息：按时间排序后聚合到 SemiMessage[]
 export const mapHistoryMessages = (items: BackendMessageItem[]) => {
-  const sorted = [...items].sort((a, b) => {
-    const aTime = toTimestamp(a.updated_at) ?? toTimestamp(a.created_at) ?? 0;
-    const bTime = toTimestamp(b.updated_at) ?? toTimestamp(b.created_at) ?? 0;
-    return aTime - bTime;
-  });
+  const sorted = items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      const leftSequence = toSequence(left.item.sequence);
+      const rightSequence = toSequence(right.item.sequence);
+      if (leftSequence !== undefined && rightSequence !== undefined) {
+        return leftSequence - rightSequence;
+      }
+      // 历史时间线以 created_at 为准，避免 updated_at 把旧消息重新挪位。
+      const leftTime =
+        toTimestamp(left.item.created_at) ?? toTimestamp(left.item.updated_at) ?? 0;
+      const rightTime =
+        toTimestamp(right.item.created_at) ?? toTimestamp(right.item.updated_at) ?? 0;
+      if (leftTime !== rightTime) {
+        return leftTime - rightTime;
+      }
+      // 后端列表接口按倒序返回；同时间戳时反转原始索引，恢复正向时间线。
+      return right.index - left.index;
+    });
   const result: SemiMessage[] = [];
   const runIndexMap = new Map<string, number>();
+  const messageOrderKeys: number[] = [];
 
   const ensureAssistantMessage = (
     runId: string,
     status?: string,
     createdAt?: number,
-    updatedAt?: number
+    updatedAt?: number,
+    orderKey?: number
   ) => {
     let runIndex = runIndexMap.get(runId);
     if (runIndex === undefined) {
@@ -477,11 +553,17 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       });
       runIndex = result.length - 1;
       runIndexMap.set(runId, runIndex);
+      messageOrderKeys[runIndex] = orderKey ?? Number.MAX_SAFE_INTEGER;
+    } else if (orderKey !== undefined) {
+      messageOrderKeys[runIndex] = Math.min(
+        messageOrderKeys[runIndex] ?? Number.MAX_SAFE_INTEGER,
+        orderKey
+      );
     }
     return runIndex;
   };
 
-  sorted.forEach((item) => {
+  sorted.forEach(({ item, index }) => {
     const aguiMessage = safeParseJson<any>(item.content);
     const role = aguiMessage?.role;
     const createdAt =
@@ -499,6 +581,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
         createdAt,
         updatedAt,
       });
+      messageOrderKeys.push(toSequence(item.sequence) ?? index);
       return;
     }
 
@@ -518,7 +601,8 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
         runId,
         item.status,
         createdAt,
-        updatedAt
+        updatedAt,
+        toSequence(item.sequence) ?? index
       );
       const target = result[runIndex] as SemiMessage;
       const content = Array.isArray(target.content) ? [...target.content] : [];
@@ -557,6 +641,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       result[runIndex] = {
         ...target,
         content,
+        createdAt: mergeCreatedAt(target.createdAt, createdAt),
         updatedAt: updatedAt ?? target.updatedAt,
       } as SemiMessage;
       return;
@@ -571,7 +656,8 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       item.run_id,
       item.status,
       createdAt,
-      updatedAt
+      updatedAt,
+      toSequence(item.sequence) ?? index
     );
     const target = result[runIndex] as SemiMessage;
     const content = Array.isArray(target.content) ? target.content : [];
@@ -629,9 +715,23 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
     result[runIndex] = {
       ...target,
       content: nextContent,
+      createdAt: mergeCreatedAt(target.createdAt, createdAt),
       updatedAt: updatedAt ?? target.updatedAt,
     } as SemiMessage;
   });
 
-  return result;
+  return result
+    .map((message, index) => ({
+      message,
+      orderKey: messageOrderKeys[index] ?? Number.MAX_SAFE_INTEGER,
+      timestamp:
+        message.createdAt ?? message.updatedAt ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((left, right) => {
+      if (left.orderKey !== right.orderKey) {
+        return left.orderKey - right.orderKey;
+      }
+      return left.timestamp - right.timestamp;
+    })
+    .map(({ message }) => message);
 };

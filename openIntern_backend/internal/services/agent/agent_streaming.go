@@ -47,6 +47,23 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 	reasoningSessionID := ""
 	toolCallStarted := map[string]bool{}
 	toolCallArgs := map[string]string{}
+	closeReasoningPhase := func() error {
+		if reasoningMessageStarted {
+			if err := sender.EndReasoningMessage(reasoningMessageID); err != nil {
+				return err
+			}
+			reasoningMessageStarted = false
+			reasoningMessageID = ""
+		}
+		if reasoningSessionStarted {
+			if err := sender.EndReasoning(reasoningSessionID); err != nil {
+				return err
+			}
+			reasoningSessionStarted = false
+			reasoningSessionID = ""
+		}
+		return nil
+	}
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -57,6 +74,32 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 		}
 		if msg == nil {
 			continue
+		}
+		if msg.ReasoningContent != "" {
+			if !reasoningSessionStarted {
+				reasoningSessionID = events.GenerateMessageID()
+				if err := sender.StartReasoning(reasoningSessionID); err != nil {
+					return err
+				}
+				reasoningSessionStarted = true
+			}
+			if !reasoningMessageStarted {
+				reasoningMessageID = events.GenerateMessageID()
+				if err := sender.StartReasoningMessage(reasoningMessageID, string(types.RoleReasoning)); err != nil {
+					return err
+				}
+				reasoningMessageStarted = true
+			}
+			if err := sender.ReasoningContent(reasoningMessageID, msg.ReasoningContent); err != nil {
+				return err
+			}
+		}
+		// 一旦模型开始产出正式回答或工具调用，就立即结束 reasoning 阶段，
+		// 避免出现 TEXT_MESSAGE_CONTENT 已经发出但 REASONING_END 仍滞后的时序问题。
+		if reasoningSessionStarted && (len(msg.ToolCalls) > 0 || msg.Content != "" || len(msg.AssistantGenMultiContent) > 0) {
+			if err := closeReasoningPhase(); err != nil {
+				return err
+			}
 		}
 		if len(msg.ToolCalls) > 0 {
 			for _, call := range msg.ToolCalls {
@@ -130,35 +173,9 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 				return err
 			}
 		}
-		if msg.ReasoningContent != "" {
-			if !reasoningSessionStarted {
-				reasoningSessionID = events.GenerateMessageID()
-				if err := sender.StartReasoning(reasoningSessionID); err != nil {
-					return err
-				}
-				reasoningSessionStarted = true
-			}
-			if !reasoningMessageStarted {
-				reasoningMessageID = events.GenerateMessageID()
-				if err := sender.StartReasoningMessage(reasoningMessageID, string(types.RoleReasoning)); err != nil {
-					return err
-				}
-				reasoningMessageStarted = true
-			}
-			if err := sender.ReasoningContent(reasoningMessageID, msg.ReasoningContent); err != nil {
-				return err
-			}
-		}
 	}
-	if reasoningMessageStarted {
-		if err := sender.EndReasoningMessage(reasoningMessageID); err != nil {
-			return err
-		}
-	}
-	if reasoningSessionStarted {
-		if err := sender.EndReasoning(reasoningSessionID); err != nil {
-			return err
-		}
+	if err := closeReasoningPhase(); err != nil {
+		return err
 	}
 	for callID := range toolCallStarted {
 		args := toolCallArgs[callID]

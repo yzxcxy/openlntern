@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"openIntern/internal/models"
 	"openIntern/internal/services/agent/agui"
 	builtinTool "openIntern/internal/services/builtin_tool"
 	"strings"
@@ -114,11 +115,22 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	}
 
 	flushed := acc.Flush()
-	if err := persistUserLastMessage(s.deps.MessageStore, threadID, runID, input.Messages); err != nil {
-		log.Printf("RunAgent persist user message failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+	persistedMessages := make([]models.Message, 0, len(flushed)+1)
+	userMessage, err := buildUserLastMessageModel(threadID, runID, input.Messages)
+	if err != nil {
+		log.Printf("RunAgent build user message failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	if err := persistAccumulatedMessages(s.deps.MessageStore, threadID, runID, flushed); err != nil {
+	if userMessage != nil {
+		persistedMessages = append(persistedMessages, *userMessage)
+	}
+	accumulatedMessages, err := buildAccumulatedMessageModels(threadID, runID, flushed)
+	if err != nil {
+		log.Printf("RunAgent build persisted messages failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+		return err
+	}
+	persistedMessages = append(persistedMessages, accumulatedMessages...)
+	if err := s.deps.MessageStore.CreateMessages(persistedMessages); err != nil {
 		log.Printf("RunAgent persist failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
