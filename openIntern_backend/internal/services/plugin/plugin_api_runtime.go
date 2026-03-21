@@ -11,13 +11,20 @@ import (
 )
 
 func (s *PluginService) BuildRuntimeAPITools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, error) {
-	_ = ctx
-
 	toolIDs = util.NormalizeUniqueStringList(toolIDs)
 	if len(toolIDs) == 0 {
 		return nil, nil
 	}
+	return s.buildRuntimeAPITools(ctx, toolIDs)
+}
 
+// BuildAllRuntimeAPITools 构建全部启用态 api 插件工具，供动态工具池预装使用。
+func (s *PluginService) BuildAllRuntimeAPITools(ctx context.Context) ([]einoTool.BaseTool, error) {
+	return s.buildRuntimeAPITools(ctx, nil)
+}
+
+func (s *PluginService) buildRuntimeAPITools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, error) {
+	_ = ctx
 	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeAPI, pluginStatusEnabled, toolIDs)
 	if err != nil {
 		return nil, err

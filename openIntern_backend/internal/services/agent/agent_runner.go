@@ -6,6 +6,7 @@ import (
 	"log"
 	"openIntern/internal/models"
 	builtinTool "openIntern/internal/services/builtin_tool"
+	toolsearchmiddleware "openIntern/internal/services/middlewares/toolsearch"
 	pluginsvc "openIntern/internal/services/plugin"
 	"strings"
 
@@ -18,15 +19,29 @@ import (
 	"github.com/cloudwego/eino/compose"
 )
 
+type runtimeToolSet struct {
+	staticTools              []einoTool.BaseTool
+	dynamicTools             []einoTool.BaseTool
+	initialVisibleToolNames  []string
+	allowToolSearchSelection bool
+	toolVisibilityMiddleware adk.ChatModelAgentMiddleware
+	cleanup                  func()
+}
+
 // buildEinoRunner 基于当前运行时配置组装可流式执行的 runner。
 func (s *Service) buildEinoRunner(ctx context.Context, runtimeConfig *AgentRuntimeConfig, state runtimeState) (*adk.Runner, func(), error) {
 	chatModel, err := s.buildRuntimeChatModel(ctx, runtimeConfig, state)
 	if err != nil {
 		return nil, nil, err
 	}
-	runtimeTools, cleanup, err := s.resolveRuntimeTools(ctx, runtimeConfig, state)
+	runtimeTools, err := s.resolveRuntimeToolSet(ctx, runtimeConfig, state)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	handlers := append([]adk.ChatModelAgentMiddleware{}, state.agentHandlers...)
+	if runtimeTools.toolVisibilityMiddleware != nil {
+		handlers = append(handlers, runtimeTools.toolVisibilityMiddleware)
 	}
 	agent := "openintern agent"
 	agentNode, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
@@ -35,107 +50,133 @@ func (s *Service) buildEinoRunner(ctx context.Context, runtimeConfig *AgentRunti
 		Model:       chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: runtimeTools,
+				Tools: runtimeTools.staticTools,
 			},
 		},
-		Middlewares: state.agentMiddlewares,
+		Handlers: handlers,
 	})
 	if err != nil {
-		if cleanup != nil {
-			cleanup()
+		if runtimeTools.cleanup != nil {
+			runtimeTools.cleanup()
 		}
 		return nil, nil, err
 	}
-	return adk.NewRunner(ctx, adk.RunnerConfig{Agent: agentNode, EnableStreaming: true}), cleanup, nil
+	return adk.NewRunner(ctx, adk.RunnerConfig{Agent: agentNode, EnableStreaming: true}), runtimeTools.cleanup, nil
 }
 
-// resolveRuntimeTools 解析内置工具与插件工具，并返回必要的清理函数。
-func (s *Service) resolveRuntimeTools(ctx context.Context, runtimeConfig *AgentRuntimeConfig, state runtimeState) ([]einoTool.BaseTool, func(), error) {
-	resolved := make([]einoTool.BaseTool, 0, len(state.agentTools))
-	resolved = append(resolved, state.agentTools...)
+// resolveRuntimeToolSet 解析静态工具、动态工具与模型可见性控制中间件。
+func (s *Service) resolveRuntimeToolSet(ctx context.Context, runtimeConfig *AgentRuntimeConfig, state runtimeState) (*runtimeToolSet, error) {
+	resolved := &runtimeToolSet{
+		staticTools: append([]einoTool.BaseTool{}, state.staticAgentTools...),
+	}
 
 	sandboxTools, sandboxCleanup, err := builtinTool.GetSandboxMCPTools(ctx, state.sandboxBaseURL)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load builtin sandbox tool failed: %w", err)
+		return nil, fmt.Errorf("load builtin sandbox tool failed: %w", err)
 	}
-	resolved = append(resolved, sandboxTools...)
+	resolved.cleanup = sandboxCleanup
+	resolved.staticTools = append(resolved.staticTools, sandboxTools...)
 
 	if runtimeConfig == nil {
-		deduped, err := dedupeRuntimeToolsByName(ctx, resolved)
-		if err != nil {
-			if sandboxCleanup != nil {
-				sandboxCleanup()
-			}
-			return nil, nil, err
-		}
-		return deduped, sandboxCleanup, nil
+		return finalizeRuntimeToolSet(ctx, resolved)
 	}
 
-	selectedToolIDs := runtimeConfig.Plugins.SelectedToolIDs
-	if strings.EqualFold(runtimeConfig.Plugins.Mode, "search") {
-		searchedToolIDs, err := pluginsvc.Plugin.SearchRuntimeToolIDs(ctx, runtimeConfig.Plugins.SearchQuery, pluginsvc.ToolSearchOptions{
-			TopK:         runtimeConfig.Plugins.Search.TopK,
-			RuntimeTypes: runtimeConfig.Plugins.Search.RuntimeTypes,
-			MinScore:     runtimeConfig.Plugins.Search.MinScore,
-			MaxMCPTools:  runtimeConfig.Plugins.Search.MaxMCPTools,
-		})
+	mode := strings.ToLower(strings.TrimSpace(runtimeConfig.Plugins.Mode))
+	switch mode {
+	case "search":
+		searchTool, err := toolsearchmiddleware.NewTool(ctx)
 		if err != nil {
-			log.Printf("RunAgent tool search failed err=%v", err)
-			return resolved, sandboxCleanup, nil
-		}
-		selectedToolIDs = searchedToolIDs
-	}
-	if len(selectedToolIDs) == 0 {
-		deduped, err := dedupeRuntimeToolsByName(ctx, resolved)
-		if err != nil {
-			if sandboxCleanup != nil {
-				sandboxCleanup()
+			if resolved.cleanup != nil {
+				resolved.cleanup()
 			}
-			return nil, nil, err
+			return nil, err
 		}
-		return deduped, sandboxCleanup, nil
+		resolved.staticTools = append(resolved.staticTools, searchTool)
+		resolved.allowToolSearchSelection = true
+	case "select":
+		if len(runtimeConfig.Plugins.SelectedToolIDs) == 0 {
+			return finalizeRuntimeToolSet(ctx, resolved)
+		}
+	default:
+		return finalizeRuntimeToolSet(ctx, resolved)
 	}
 
-	codeTools, err := pluginsvc.Plugin.BuildRuntimeCodeTools(ctx, selectedToolIDs)
+	dynamicTools, dynamicCleanup, err := s.resolveDynamicRuntimeTools(ctx)
+	if err != nil {
+		if resolved.cleanup != nil {
+			resolved.cleanup()
+		}
+		return nil, err
+	}
+	resolved.cleanup = mergeToolCleanup(resolved.cleanup, dynamicCleanup)
+	resolved.dynamicTools = dynamicTools
+
+	if mode == "select" {
+		initialVisibleToolNames, err := pluginsvc.Plugin.ResolveEnabledRuntimeToolNamesByIDs(runtimeConfig.Plugins.SelectedToolIDs)
+		if err != nil {
+			if resolved.cleanup != nil {
+				resolved.cleanup()
+			}
+			return nil, err
+		}
+		resolved.initialVisibleToolNames = initialVisibleToolNames
+	}
+
+	return finalizeRuntimeToolSet(ctx, resolved)
+}
+
+// resolveDynamicRuntimeTools 预构建全部启用态插件工具，供运行时按可见性过滤。
+func (s *Service) resolveDynamicRuntimeTools(ctx context.Context) ([]einoTool.BaseTool, func(), error) {
+	codeTools, err := pluginsvc.Plugin.BuildAllRuntimeCodeTools(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(codeTools) > 0 {
-		resolved = append(resolved, codeTools...)
-	}
 
-	apiTools, err := pluginsvc.Plugin.BuildRuntimeAPITools(ctx, selectedToolIDs)
+	apiTools, err := pluginsvc.Plugin.BuildAllRuntimeAPITools(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(apiTools) > 0 {
-		resolved = append(resolved, apiTools...)
-	}
 
-	pluginTools, cleanup, err := pluginsvc.Plugin.BuildRuntimeMCPTools(ctx, selectedToolIDs)
+	mcpTools, cleanup, err := pluginsvc.Plugin.BuildAllRuntimeMCPTools(ctx)
 	if err != nil {
-		if sandboxCleanup != nil {
-			sandboxCleanup()
-		}
 		if cleanup != nil {
 			cleanup()
 		}
 		return nil, nil, err
 	}
-	if len(pluginTools) > 0 {
-		resolved = append(resolved, pluginTools...)
-	}
-	deduped, err := dedupeRuntimeToolsByName(ctx, resolved)
+
+	resolved := make([]einoTool.BaseTool, 0, len(codeTools)+len(apiTools)+len(mcpTools))
+	resolved = append(resolved, codeTools...)
+	resolved = append(resolved, apiTools...)
+	resolved = append(resolved, mcpTools...)
+	return resolved, cleanup, nil
+}
+
+// finalizeRuntimeToolSet 对静态/动态工具做名称去重，并在需要时挂上可见性 middleware。
+func finalizeRuntimeToolSet(ctx context.Context, resolved *runtimeToolSet) (*runtimeToolSet, error) {
+	staticTools, dynamicTools, err := dedupeRuntimeToolSetsByName(ctx, resolved.staticTools, resolved.dynamicTools)
 	if err != nil {
-		if sandboxCleanup != nil {
-			sandboxCleanup()
+		if resolved.cleanup != nil {
+			resolved.cleanup()
 		}
-		if cleanup != nil {
-			cleanup()
-		}
-		return nil, nil, err
+		return nil, err
 	}
-	return deduped, mergeToolCleanup(sandboxCleanup, cleanup), nil
+	resolved.staticTools = staticTools
+	resolved.dynamicTools = dynamicTools
+
+	if len(resolved.dynamicTools) == 0 {
+		return resolved, nil
+	}
+
+	toolVisibilityMiddleware, err := toolsearchmiddleware.NewVisibilityMiddleware(ctx, resolved.dynamicTools, resolved.initialVisibleToolNames, resolved.allowToolSearchSelection)
+	if err != nil {
+		if resolved.cleanup != nil {
+			resolved.cleanup()
+		}
+		return nil, err
+	}
+	resolved.toolVisibilityMiddleware = toolVisibilityMiddleware
+	return resolved, nil
 }
 
 // dedupeRuntimeToolsByName 按工具名去重，避免内建工具与插件广场同名工具重复注入。
@@ -165,6 +206,50 @@ func dedupeRuntimeToolsByName(ctx context.Context, tools []einoTool.BaseTool) ([
 		result = append(result, tool)
 	}
 	return result, nil
+}
+
+// dedupeRuntimeToolSetsByName 在保留静态工具优先级的前提下过滤动态工具重名项。
+func dedupeRuntimeToolSetsByName(ctx context.Context, staticTools []einoTool.BaseTool, dynamicTools []einoTool.BaseTool) ([]einoTool.BaseTool, []einoTool.BaseTool, error) {
+	dedupedStatic, err := dedupeRuntimeToolsByName(ctx, staticTools)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(dynamicTools) == 0 {
+		return dedupedStatic, nil, nil
+	}
+
+	staticNames := make(map[string]struct{}, len(dedupedStatic))
+	for _, tool := range dedupedStatic {
+		info, err := tool.Info(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if info == nil {
+			return nil, nil, fmt.Errorf("tool info is required")
+		}
+		staticNames[strings.TrimSpace(info.Name)] = struct{}{}
+	}
+
+	dedupedDynamic, err := dedupeRuntimeToolsByName(ctx, dynamicTools)
+	if err != nil {
+		return nil, nil, err
+	}
+	filteredDynamic := make([]einoTool.BaseTool, 0, len(dedupedDynamic))
+	for _, tool := range dedupedDynamic {
+		info, err := tool.Info(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if info == nil {
+			return nil, nil, fmt.Errorf("tool info is required")
+		}
+		if _, exists := staticNames[strings.TrimSpace(info.Name)]; exists {
+			log.Printf("RunAgent skip dynamic tool because of duplicate name tool_name=%s", info.Name)
+			continue
+		}
+		filteredDynamic = append(filteredDynamic, tool)
+	}
+	return dedupedStatic, filteredDynamic, nil
 }
 
 func mergeToolCleanup(cleanups ...func()) func() {

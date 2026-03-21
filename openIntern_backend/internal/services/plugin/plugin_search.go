@@ -11,6 +11,7 @@ import (
 
 const (
 	defaultToolSearchTopK               = 10
+	maxToolSearchTopK                   = 10
 	defaultToolSearchMaxMCPTools        = 3
 	defaultToolSearchCandidateFactor    = 4
 	defaultToolSearchTargetURI          = "viking://resources/tools/"
@@ -25,6 +26,12 @@ type ToolSearchOptions struct {
 	MinScore     float64
 	MaxMCPTools  int
 	TargetURI    string
+}
+
+// RuntimeToolSearchMatch 表示语义检索命中的最小工具元信息。
+type RuntimeToolSearchMatch struct {
+	ToolID   string
+	ToolName string
 }
 
 // SearchRuntimeToolIDs 使用 OpenViking find 召回工具并执行 MySQL 启用态二次过滤。
@@ -111,9 +118,47 @@ func (s *PluginService) SearchRuntimeToolIDs(ctx context.Context, query string, 
 	return selected, nil
 }
 
-// normalizeToolSearchTopK 固定工具上限为 10。
-func normalizeToolSearchTopK(_ int) int {
-	return defaultToolSearchTopK
+// SearchRuntimeTools 返回保序的命中工具列表，供运行时 tool_search 元工具复用。
+func (s *PluginService) SearchRuntimeTools(ctx context.Context, query string, options ToolSearchOptions) ([]RuntimeToolSearchMatch, error) {
+	selectedToolIDs, err := s.SearchRuntimeToolIDs(ctx, query, options)
+	if err != nil {
+		return nil, err
+	}
+	if len(selectedToolIDs) == 0 {
+		return []RuntimeToolSearchMatch{}, nil
+	}
+
+	toolNameByID, err := s.loadEnabledRuntimeToolNameMap(selectedToolIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(toolNameByID) == 0 {
+		return []RuntimeToolSearchMatch{}, nil
+	}
+
+	matches := make([]RuntimeToolSearchMatch, 0, len(selectedToolIDs))
+	for _, toolID := range selectedToolIDs {
+		toolName := strings.TrimSpace(toolNameByID[toolID])
+		if toolName == "" {
+			continue
+		}
+		matches = append(matches, RuntimeToolSearchMatch{
+			ToolID:   toolID,
+			ToolName: toolName,
+		})
+	}
+	return matches, nil
+}
+
+// normalizeToolSearchTopK 归一化工具上限，允许调用方在 1-10 范围内显式收缩结果集。
+func normalizeToolSearchTopK(value int) int {
+	if value <= 0 {
+		return defaultToolSearchTopK
+	}
+	if value > maxToolSearchTopK {
+		return maxToolSearchTopK
+	}
+	return value
 }
 
 // normalizeToolSearchMaxMCPTools 归一化 mcp 限流阈值，并保证最小可用值。

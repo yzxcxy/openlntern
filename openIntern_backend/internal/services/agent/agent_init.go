@@ -13,6 +13,7 @@ import (
 	"github.com/cloudwego/eino-ext/callbacks/apmplus"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/adk/middlewares/patchtoolcalls"
 	einoSkill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/callbacks"
 	einoTool "github.com/cloudwego/eino/components/tool"
@@ -22,6 +23,7 @@ import (
 func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
 	compressionSettings := newContextCompressionSettings(compressionCfg)
+	adk.SetLanguage(adk.LanguageChinese)
 
 	shutdown := func(context.Context) error { return nil }
 	if apmCfg.Host != "" && apmCfg.AppKey != "" && apmCfg.ServiceName != "" {
@@ -71,9 +73,12 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 	if err != nil {
 		return nil, err
 	}
-	skillMiddleware, err := einoSkill.New(ctx, &einoSkill.Config{
-		Backend:    skillBackend,
-		UseChinese: true,
+	patchToolCallsMiddleware, err := patchtoolcalls.New(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	skillMiddleware, err := einoSkill.NewMiddleware(ctx, &einoSkill.Config{
+		Backend: skillBackend,
 	})
 	if err != nil {
 		return nil, err
@@ -91,8 +96,8 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 		apmplusShutdown:     shutdown,
 		summaryModel:        runtimeSummaryModel,
 		sandboxBaseURL:      sandboxBaseURL,
-		agentTools:          allTools,
-		agentMiddlewares:    []adk.AgentMiddleware{skillMiddleware},
+		staticAgentTools:    allTools,
+		agentHandlers:       []adk.ChatModelAgentMiddleware{patchToolCallsMiddleware, skillMiddleware},
 		bootstrapChatConfig: cfg,
 		contextCompression:  compressionSettings,
 	})

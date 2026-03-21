@@ -13,13 +13,13 @@ type Message struct {
 	ThreadID string `gorm:"index;not null;size:64" json:"thread_id"`
 	RunID    string `gorm:"index;not null;size:64" json:"run_id"`
 
-	Type     string `gorm:"size:20" json:"type"`  // 和https://docs.ag-ui.com/concepts/messages 所拥有的类型是一样的
-	Content  string `gorm:"type:text;not null" json:"content"` // 这里面存放的是AGUI的消息结构体：https://docs.ag-ui.com/concepts/messages
-	Status   string `gorm:"size:20" json:"status"` 
-	Metadata string `gorm:"type:text" json:"metadata"`
+	Type     string `gorm:"size:20" json:"type"`                   // 和https://docs.ag-ui.com/concepts/messages 所拥有的类型是一样的
+	Content  string `gorm:"type:longtext;not null" json:"content"` // skill/tool 结果可能远超 TEXT 上限，因此统一提升为 LONGTEXT
+	Status   string `gorm:"size:20" json:"status"`
+	Metadata string `gorm:"type:longtext" json:"metadata"`
 
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

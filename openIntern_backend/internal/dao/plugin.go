@@ -240,6 +240,25 @@ func (d *PluginDAO) ListEnabledRuntimeToolRecords(toolIDs []string, runtimeTypes
 	return rows, nil
 }
 
+// ListEnabledToolsByIDs 返回指定 tool_id 对应的启用态工具定义，用于运行时可见性映射。
+func (d *PluginDAO) ListEnabledToolsByIDs(toolIDs []string) ([]models.Tool, error) {
+	toolIDs = util.NormalizeUniqueStringList(toolIDs)
+	if len(toolIDs) == 0 {
+		return []models.Tool{}, nil
+	}
+
+	var tools []models.Tool
+	if err := database.DB.
+		Table("tool").
+		Select("tool.*").
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
+		Where("tool.tool_id IN ? AND tool.enabled = ? AND plugin.status = ?", toolIDs, true, "enabled").
+		Find(&tools).Error; err != nil {
+		return nil, err
+	}
+	return tools, nil
+}
+
 func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {
 	result := make(map[string][]models.Tool, len(pluginIDs))
 	if len(pluginIDs) == 0 {

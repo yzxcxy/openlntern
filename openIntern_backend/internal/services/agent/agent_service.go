@@ -68,8 +68,8 @@ type runtimeState struct {
 	apmplusShutdown     func(context.Context) error
 	summaryModel        *deepseek.ChatModel
 	sandboxBaseURL      string
-	agentTools          []einoTool.BaseTool
-	agentMiddlewares    []adk.AgentMiddleware
+	staticAgentTools    []einoTool.BaseTool
+	agentHandlers       []adk.ChatModelAgentMiddleware
 	bootstrapChatConfig config.LLMConfig
 	contextCompression  contextCompressionSettings
 }
@@ -96,11 +96,11 @@ func (s *Service) snapshotState() runtimeState {
 	defer s.mu.RUnlock()
 
 	snapshot := s.state
-	if len(snapshot.agentTools) > 0 {
-		snapshot.agentTools = append([]einoTool.BaseTool{}, snapshot.agentTools...)
+	if len(snapshot.staticAgentTools) > 0 {
+		snapshot.staticAgentTools = append([]einoTool.BaseTool{}, snapshot.staticAgentTools...)
 	}
-	if len(snapshot.agentMiddlewares) > 0 {
-		snapshot.agentMiddlewares = append([]adk.AgentMiddleware{}, snapshot.agentMiddlewares...)
+	if len(snapshot.agentHandlers) > 0 {
+		snapshot.agentHandlers = append([]adk.ChatModelAgentMiddleware{}, snapshot.agentHandlers...)
 	}
 	if snapshot.apmplusShutdown == nil {
 		snapshot.apmplusShutdown = func(context.Context) error { return nil }

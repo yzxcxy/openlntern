@@ -45,6 +45,13 @@ func Init(dsn string) error {
 	); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
+	// AutoMigrate 在不同 MySQL 版本上对 TEXT -> LONGTEXT 的放大并不稳定，这里显式修正消息表字段类型。
+	if err := DB.Migrator().AlterColumn(&models.Message{}, "Content"); err != nil {
+		return fmt.Errorf("alter message.content: %w", err)
+	}
+	if err := DB.Migrator().AlterColumn(&models.Message{}, "Metadata"); err != nil {
+		return fmt.Errorf("alter message.metadata: %w", err)
+	}
 	if DB.Migrator().HasColumn(&models.A2UI{}, "type") {
 		if err := DB.Migrator().DropColumn(&models.A2UI{}, "type"); err != nil {
 			return fmt.Errorf("drop a2ui.type: %w", err)

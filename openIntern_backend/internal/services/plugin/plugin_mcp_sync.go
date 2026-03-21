@@ -750,7 +750,15 @@ func (s *PluginService) BuildRuntimeMCPTools(ctx context.Context, toolIDs []stri
 	if len(toolIDs) == 0 {
 		return nil, nil, nil
 	}
+	return s.buildRuntimeMCPTools(ctx, toolIDs)
+}
 
+// BuildAllRuntimeMCPTools 构建全部启用态 mcp 插件工具，供动态工具池预装使用。
+func (s *PluginService) BuildAllRuntimeMCPTools(ctx context.Context) ([]einoTool.BaseTool, func(), error) {
+	return s.buildRuntimeMCPTools(ctx, nil)
+}
+
+func (s *PluginService) buildRuntimeMCPTools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, func(), error) {
 	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeMCP, pluginStatusEnabled, toolIDs)
 	if err != nil {
 		return nil, nil, err
