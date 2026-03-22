@@ -1715,8 +1715,8 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 </div>
               ) : showEmptyState ? (
                 <div className="motion-safe-fade-in flex h-full items-center justify-center px-6 py-8">
-                  <div className="max-w-2xl rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,250,252,0.94))] p-6 text-center shadow-[var(--shadow-sm)]">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.08)] text-[var(--color-action-primary)]">
+                  <div className="max-w-xl text-center">
+                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-[18px] border border-[rgba(199,104,67,0.14)] bg-[rgba(255,250,245,0.72)] text-[var(--color-action-primary)]">
                       <svg
                         viewBox="0 0 24 24"
                         className="h-6 w-6"
@@ -1731,16 +1731,21 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                         <path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 2-2z" />
                       </svg>
                     </div>
-                    <div className="mt-4 text-sm font-semibold text-[var(--color-text-primary)]">
-                      开始新的对话
+                    <div className="mt-4">
+                      <h2 className="text-[24px] font-semibold leading-none tracking-[-0.04em] text-[var(--color-text-primary)]">
+                        开始新对话
+                      </h2>
+                      <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--color-text-secondary)]">
+                        输入一个任务，或者直接使用下面的快捷提示。
+                      </p>
                     </div>
-                    <div className="mt-6 flex flex-wrap justify-center gap-3">
+                    <div className="mt-5 flex flex-wrap justify-center gap-2.5">
                       {emptyStatePrompts.map((prompt) => (
                         <button
                           key={prompt}
                           type="button"
                           onClick={() => setComposerText(prompt)}
-                          className="motion-safe-highlight rounded-full border border-[rgba(191,219,254,0.6)] bg-[rgba(255,255,255,0.88)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:border-[rgba(59,130,246,0.28)] hover:bg-[rgba(239,246,255,0.9)] hover:text-[var(--color-text-primary)]"
+                          className="motion-safe-highlight rounded-full border border-[rgba(126,96,69,0.16)] bg-[rgba(255,252,247,0.82)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:border-[rgba(199,104,67,0.24)] hover:bg-[rgba(255,247,240,0.9)] hover:text-[var(--color-text-primary)]"
                         >
                           {prompt}
                         </button>
@@ -1761,7 +1766,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 </div>
               )}
             </div>
-            <div className="border-t border-[rgba(226,232,240,0.88)] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.98))] px-4 py-3 md:px-5 md:py-4">
+            <div className="border-t border-[rgba(126,96,69,0.12)] bg-[linear-gradient(180deg,rgba(255,252,247,0.9),rgba(247,237,227,0.96))] px-4 py-3 md:px-5 md:py-4">
               {agent.isRunning && (
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
                   <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
@@ -1772,7 +1777,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 <button
                   type="button"
                   onClick={openComposerExpandModal}
-                  className="absolute right-3 top-3 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(203,213,225,0.92)] bg-[rgba(248,250,252,0.92)] text-[var(--color-text-muted)] shadow-sm transition hover:border-[rgba(148,163,184,0.9)] hover:bg-[rgba(255,255,255,0.98)] hover:text-[var(--color-text-secondary)]"
+                  className="absolute right-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(126,96,69,0.14)] bg-[rgba(255,252,247,0.9)] text-[var(--color-text-muted)] shadow-sm transition hover:border-[rgba(199,104,67,0.24)] hover:bg-[rgba(255,249,242,0.98)] hover:text-[var(--color-text-secondary)]"
                   aria-label="展开输入框编辑"
                   title="展开编辑"
                 >
@@ -1814,7 +1819,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                   ref={inputRef as any}
                   className="chat-composer-input"
                   keepSkillAfterSend={false}
-                  placeholder="输入消息；@ 选择知识库，# 选择 Skill"
+                  placeholder="输入任务；@ 选择知识库，# 选择 Skill"
                   onContentChange={handleComposerContentChange}
                   onMessageSend={handleMessageSend}
                   onStopGenerate={handleStopGenerate}

@@ -19,8 +19,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "让你专注更美好的事",
-  description: "让你专注更美好的事",
+  title: "openIntern",
+  description: "统一管理聊天、Agent、模型、插件与知识库。",
   icons: {
     icon: "/OpenIntern.png",
   },
@@ -32,11 +32,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Google+Sans+Code&family=Google+Sans+Flex:opsz,wght,ROND@6..144,1..1000,100&family=Google+Sans:opsz,wght@17..18,400..700&display=block&family=IBM+Plex+Serif:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=IBM+Plex+Serif:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=Google+Sans+Code&display=swap"
         />
         <link
           rel="stylesheet"
@@ -44,6 +44,9 @@ export default function RootLayout({
         />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <a href="#main-content" className="skip-link">
+          跳转到主内容
+        </a>
         {children}
       </body>
     </html>

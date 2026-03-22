@@ -18,7 +18,7 @@ export function PendingUploadList({
   }
 
   return (
-    <div className="mb-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-2">
+    <div className="mb-3 rounded-[18px] border border-[rgba(126,96,69,0.14)] bg-[rgba(255,252,247,0.82)] p-3">
       <div className="mb-2 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
         <span>待发送附件</span>
         {uploading && <span>上传中...</span>}
@@ -27,7 +27,7 @@ export function PendingUploadList({
         {items.map((asset) => (
           <span
             key={asset.id}
-            className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[rgba(126,96,69,0.14)] bg-[rgba(255,248,242,0.92)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)]"
           >
             <span className="font-medium text-[var(--color-text-primary)]">
               {asset.mediaKind}

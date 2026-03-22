@@ -16,9 +16,8 @@ export function Sidebar({
   return (
     <aside
       className={joinClasses(
-        "flex h-full flex-col",
-        "bg-[var(--color-bg-surface)] transition-[width] duration-150",
-        collapsed ? "w-16" : "w-72",
+        "relative flex h-full shrink-0 flex-col overflow-hidden rounded-[34px] border border-[var(--color-border-default)] bg-[var(--color-bg-sidebar)] shadow-[var(--shadow-lg)] backdrop-blur-xl transition-[width] duration-200",
+        collapsed ? "w-[92px]" : "w-[336px]",
         className
       )}
       {...rest}

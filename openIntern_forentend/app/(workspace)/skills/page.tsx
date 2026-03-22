@@ -135,109 +135,156 @@ export default function SkillsPage() {
   return (
     <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-0">
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
-        <div className="workspace-toolbar-surface rounded-[var(--radius-lg)] border p-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <UiInput
-              className="w-full max-w-xs"
-              placeholder="搜索名称或描述"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-            />
-            <UiButton
-              type="button"
-              variant="secondary"
-              onClick={handleSearch}
-              className="px-5"
-            >
-              <svg
-                className="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+        <div className="workspace-page-stack">
+          <section className="workspace-filter-panel">
+            <div className="workspace-section-title">
+              <div>
+                <h1>Skill 管理</h1>
+                <p>搜索、上传和查看可用 Skill。</p>
+              </div>
+              <div className="workspace-stat-row">
+                <div className="workspace-stat-chip">
+                  <strong>{total}</strong>
+                  <span>数量</span>
+                </div>
+                <div className="workspace-stat-chip">
+                  <strong>{pageSize}</strong>
+                  <span>每页</span>
+                </div>
+                <div className="workspace-stat-chip">
+                  <strong>{totalPages}</strong>
+                  <span>页数</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <UiInput
+                className="w-full max-w-sm"
+                placeholder="搜索名称或描述"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+              <UiButton
+                type="button"
+                variant="secondary"
+                onClick={handleSearch}
+                className="px-5"
               >
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" />
-              </svg>
-              搜索
-            </UiButton>
-            <UiButton
-              type="button"
-              onClick={handleUploadClick}
-              disabled={uploading}
-              className="ui-button-soft-accent"
-            >
-              {uploading ? "上传中..." : "上传 Skill"}
-            </UiButton>
-            <input
-              ref={uploadInputRef}
-              type="file"
-              accept=".zip"
-              className="hidden"
-              onChange={handleUploadChange}
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-sm text-[var(--color-text-muted)]">共 {total} 条</div>
-        </div>
-
-        {error && (
-          <div className="mt-4 text-sm text-[var(--color-state-error)]">{error}</div>
-        )}
-        {uploadError && (
-          <div className="mt-2 text-sm text-[var(--color-state-error)]">{uploadError}</div>
-        )}
-        {uploadSuccess && (
-          <div className="mt-2 text-sm text-[var(--color-state-success)]">{uploadSuccess}</div>
-        )}
-        <div className="mt-4">
-          {loading ? (
-            <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
-          ) : cards.length === 0 ? (
-            <div className="text-sm text-[var(--color-text-muted)]">暂无数据</div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {cards.map((item) => (
-                <div
-                  key={item.path ?? item.skillName}
-                  className="workspace-item-surface workspace-item-hover-lift flex h-full flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4 text-left shadow-[var(--shadow-sm)] transition hover:-translate-y-1 hover:border-[var(--color-border-strong)]"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() =>
-                    router.push(
-                      `/skills/detail?name=${encodeURIComponent(item.skillName)}`
-                    )
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      router.push(
-                        `/skills/detail?name=${encodeURIComponent(item.skillName)}`
-                      );
-                    }
-                  }}
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-bg-page)] text-xl">
-                      {item.icon || "🧩"}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                        {item.name || item.skillName}
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
+                搜索
+              </UiButton>
+              <UiButton
+                type="button"
+                onClick={handleUploadClick}
+                disabled={uploading}
+                className="ui-button-soft-accent"
+              >
+                {uploading ? "上传中..." : "上传 Skill"}
+              </UiButton>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".zip"
+                className="hidden"
+                onChange={handleUploadChange}
+              />
+            </div>
+
+            {(error || uploadError || uploadSuccess) && (
+              <div className="mt-4 space-y-2">
+                {error && (
+                  <div className="rounded-[18px] border border-[rgba(179,64,51,0.16)] bg-[rgba(179,64,51,0.08)] px-4 py-3 text-sm text-[var(--color-state-error)]">
+                    {error}
+                  </div>
+                )}
+                {uploadError && (
+                  <div className="rounded-[18px] border border-[rgba(179,64,51,0.16)] bg-[rgba(179,64,51,0.08)] px-4 py-3 text-sm text-[var(--color-state-error)]">
+                    {uploadError}
+                  </div>
+                )}
+                {uploadSuccess && (
+                  <div className="rounded-[18px] border border-[rgba(47,122,87,0.16)] bg-[rgba(47,122,87,0.08)] px-4 py-3 text-sm text-[var(--color-state-success)]">
+                    {uploadSuccess}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="workspace-section-title">
+              <div>
+                <h2>Skill 卡片</h2>
+                <p>查看 Skill 名称、描述和详情入口。</p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              {loading ? (
+                <div className="workspace-empty-state">
+                  <strong>正在加载 Skill 列表</strong>
+                  <span>请稍候。</span>
+                </div>
+              ) : cards.length === 0 ? (
+                <div className="workspace-empty-state">
+                  <strong>当前没有可展示的 Skill</strong>
+                  <span>你可以先上传一个 zip 包，或者调整关键字重新搜索。</span>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {cards.map((item) => (
+                    <div
+                      key={item.path ?? item.skillName}
+                      className="workspace-item-surface workspace-item-hover-lift flex h-full flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-5 text-left shadow-[var(--shadow-sm)] transition hover:-translate-y-1 hover:border-[var(--color-border-strong)]"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() =>
+                        router.push(
+                          `/skills/detail?name=${encodeURIComponent(item.skillName)}`
+                        )
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push(
+                            `/skills/detail?name=${encodeURIComponent(item.skillName)}`
+                          );
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-[var(--color-border-default)] bg-[var(--color-surface-soft)] text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-action-primary)]">
+                          {(item.name || item.skillName).slice(0, 2)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-base font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
+                            {item.name || item.skillName}
+                          </div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+                            {item.skillName}
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      <div className="mt-4 line-clamp-3 text-sm leading-7 text-[var(--color-text-secondary)]">
                         {item.description || "暂无描述"}
                       </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </section>
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-end gap-3 text-sm text-[var(--color-text-secondary)]">

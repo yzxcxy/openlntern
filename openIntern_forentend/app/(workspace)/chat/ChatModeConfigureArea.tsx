@@ -32,28 +32,37 @@ export function ChatModeConfigureArea({
   onPluginModeChange,
   onOpenPluginPanel,
 }: ChatModeConfigureAreaProps) {
+  // 统一使用可点击胶囊壳层，再叠加透明 select，避免底部配置区出现多套控件视觉。
+  const pillClass =
+    "relative min-w-[116px] rounded-full border border-[rgba(126,96,69,0.16)] bg-[rgba(255,252,247,0.82)] px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] transition focus-within:border-[rgba(199,104,67,0.28)] focus-within:bg-[rgba(255,250,243,0.96)]";
+
   return (
     <div
-      className="flex items-center gap-2"
+      className="chat-configure-rail flex flex-wrap items-center gap-2"
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
-      <UiSelect
-        value={conversationMode}
-        onChange={(event) => {
-          onConversationModeChange(
-            event.target.value === "agent" ? "agent" : "chat"
-          );
-        }}
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-        className="ui-select-control--compact ui-select-control--glass rounded-full border-transparent px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
-      >
-        <option value="chat">Chat</option>
-        <option value="agent">Agent</option>
-      </UiSelect>
+      <div className={pillClass}>
+        <span className="pointer-events-none block pr-8 text-sm font-medium text-[var(--color-text-primary)]">
+          {conversationMode === "agent" ? "Agent 模式" : "聊天模式"}
+        </span>
+        <UiSelect
+          value={conversationMode}
+          onChange={(event) => {
+            onConversationModeChange(
+              event.target.value === "agent" ? "agent" : "chat"
+            );
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          className="absolute inset-0 h-full w-full cursor-pointer rounded-full opacity-0"
+        >
+          <option value="chat">Chat</option>
+          <option value="agent">Agent</option>
+        </UiSelect>
+      </div>
       {conversationMode === "agent" && (
-        <div className="ui-select-control--glass relative min-w-[196px] rounded-full border border-transparent px-4 py-2 focus-within:border-[var(--color-action-primary)]">
+        <div className={`${pillClass} min-w-[220px]`}>
           <span className="pointer-events-none block pr-8 text-sm font-medium text-[var(--color-text-primary)]">
             {agentOptions.find((item) => item.agent_id === selectedAgentId)?.name ||
               "选择 Agent"}
@@ -76,9 +85,9 @@ export function ChatModeConfigureArea({
       )}
       {conversationMode === "chat" && (
         <>
-          <div className="ui-select-control--glass relative min-w-[128px] rounded-full border border-transparent px-4 py-2 focus-within:border-[var(--color-action-primary)]">
+          <div className={`${pillClass} min-w-[132px]`}>
             <span className="pointer-events-none block pr-8 text-sm font-medium text-[var(--color-text-primary)]">
-              {pluginMode === "select" ? "Select" : "Search"}
+              {pluginMode === "select" ? "选择工具" : "搜索工具"}
             </span>
             <UiSelect
               value={pluginMode}
@@ -98,11 +107,11 @@ export function ChatModeConfigureArea({
           {pluginMode === "select" && (
             <UiButton
               onClick={onOpenPluginPanel}
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              className="rounded-full border-[var(--color-border-default)] text-[var(--color-text-secondary)]"
+              className="h-10 whitespace-nowrap rounded-full px-4 text-[13px]"
             >
-              <span>选工具 {selectedToolCount}</span>
+              <span>工具 {selectedToolCount}</span>
             </UiButton>
           )}
         </>

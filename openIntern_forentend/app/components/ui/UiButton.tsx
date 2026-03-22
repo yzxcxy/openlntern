@@ -18,9 +18,9 @@ const joinClasses = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
 const SIZE_CLASSES: Record<UiButtonSize, string> = {
-  sm: "h-8 px-3 text-xs",
-  md: "h-10 px-4 text-sm",
-  lg: "h-11 px-5 text-sm",
+  sm: "h-9 px-3.5 text-xs",
+  md: "h-11 px-5 text-sm",
+  lg: "h-12 px-6 text-sm",
 };
 
 const NATIVE_VARIANT_CLASSES: Record<UiButtonVariant, string> = {
@@ -86,8 +86,8 @@ export function UiButton({
     <button
       type={type}
       className={joinClasses(
-        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-semibold transition-[background-color,border-color,box-shadow,opacity,color,transform,filter] duration-150 outline-none",
-        "focus-visible:ring-2 focus-visible:ring-[var(--color-action-primary-soft)] focus-visible:ring-offset-2",
+        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-semibold tracking-[-0.01em] transition-[background-color,border-color,box-shadow,opacity,color,transform,filter] duration-150 outline-none",
+        "focus-visible:ring-2 focus-visible:ring-[rgba(199,104,67,0.18)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(255,249,242,0.92)]",
         "disabled:pointer-events-none disabled:opacity-60",
         SIZE_CLASSES[size],
         NATIVE_VARIANT_CLASSES[variant],

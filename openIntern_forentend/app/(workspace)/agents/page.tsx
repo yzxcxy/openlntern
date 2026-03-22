@@ -109,147 +109,161 @@ export default function AgentsPage() {
   return (
     <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-0">
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
-        <div className="workspace-toolbar-surface rounded-[var(--radius-lg)] border p-4">
-          <div className="grid items-center gap-3 grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_minmax(180px,1fr)_48px_auto]">
-            <UiInput
-              className="h-10"
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="搜索名字或描述"
-            />
-            <UiSelect
-              className="h-10"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="">全部状态</option>
-              <option value="draft">Draft</option>
-              <option value="enabled">Enabled</option>
-              <option value="disabled">Disabled</option>
-            </UiSelect>
-            <UiSelect className="h-10" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-              <option value="">全部类型</option>
-              <option value="single">Single</option>
-              <option value="supervisor">Supervisor</option>
-            </UiSelect>
-            <UiButton
-              variant="secondary"
-              className="h-10 w-12 px-0 justify-self-center"
-              onClick={() => void loadAgents()}
-              disabled={loading}
-              aria-label="刷新列表"
-              title="刷新列表"
-            >
-              <svg
-                className={joinClasses("h-4.5 w-4.5", loading && "animate-spin")}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <path d="M21 3v6h-6" />
-              </svg>
-            </UiButton>
-            <UiButton className="h-10 px-4 justify-self-start" onClick={() => router.push("/agents/editor")}>
-              创建 Agent
-            </UiButton>
-          </div>
-
-          <div className="mt-3 text-xs text-[var(--color-text-muted)]">共 {total} 个 Agent</div>
-          {error ? (
-            <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.14)] bg-[rgba(255,255,255,0.7)] px-3 py-2 text-sm text-[var(--color-danger)]">
-              {error}
+        <div className="workspace-page-stack">
+          <section className="workspace-filter-panel">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Agent 管理</h1>
+                <p className="text-sm text-[var(--color-text-muted)]">共 {total} 个 Agent</p>
+              </div>
+              <UiButton className="h-10 px-4" onClick={() => router.push("/agents/editor")}>
+                创建 Agent
+              </UiButton>
             </div>
-          ) : null}
-        </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {agents.map((item) => (
-            <section
-              key={item.agent_id}
-              className="workspace-item-surface workspace-item-hover-lift rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-semibold text-[var(--color-text-primary)]">{item.name}</span>
-                    <span className="rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)]">
-                      {item.agent_type === "supervisor" ? "Supervisor" : "Single"}
-                    </span>
-                    <span
-                      className={joinClasses(
-                        "rounded-full border px-2 py-0.5 text-[11px]",
-                        item.status === "enabled"
-                          ? "border-[rgba(22,163,74,0.22)] text-[rgb(22,163,74)]"
-                          : item.status === "disabled"
-                            ? "border-[rgba(234,88,12,0.22)] text-[rgb(234,88,12)]"
-                            : "border-[var(--color-border-default)] text-[var(--color-text-muted)]"
-                      )}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-                  <div className="mt-1 line-clamp-2 text-sm text-[var(--color-text-secondary)]">
-                    {item.description || "暂无描述"}
-                  </div>
-                </div>
-                {item.avatar_url ? (
-                  <img
-                    src={item.avatar_url}
-                    alt={item.name}
-                    className="h-12 w-12 rounded-[14px] border border-[var(--color-border-default)] object-cover"
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[14px] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] text-xs font-semibold text-[var(--color-text-muted)]">
-                    AG
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 space-y-2 text-xs text-[var(--color-text-secondary)]">
-                <div>默认模型：{item.default_model_name || item.default_model_id || "系统默认"}</div>
-                <div className="flex flex-wrap gap-2">
-                  <span>工具 {item.tool_count}</span>
-                  <span>Skill {item.skill_count}</span>
-                  <span>知识库 {item.knowledge_base_count}</span>
-                  <span>SubAgent {item.sub_agent_count}</span>
-                </div>
-                <div>长期记忆：{item.agent_memory_enabled ? "开启" : "关闭"}</div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <UiButton
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => router.push(`/agents/editor?agent_id=${encodeURIComponent(item.agent_id)}`)}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <UiInput
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="搜索名字或描述"
+                className="h-10 w-48"
+              />
+              <UiSelect
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-10 w-28"
+              >
+                <option value="">全部状态</option>
+                <option value="draft">Draft</option>
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled</option>
+              </UiSelect>
+              <UiSelect value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="h-10 w-28">
+                <option value="">全部类型</option>
+                <option value="single">Single</option>
+                <option value="supervisor">Supervisor</option>
+              </UiSelect>
+              <UiButton
+                variant="secondary"
+                className="h-10 w-10 px-0"
+                onClick={() => void loadAgents()}
+                disabled={loading}
+                aria-label="刷新列表"
+                title="刷新列表"
+              >
+                <svg
+                  className={joinClasses("h-4 w-4", loading && "animate-spin")}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  编辑
-                </UiButton>
-                {item.status === "enabled" ? (
-                  <UiButton variant="ghost" size="sm" onClick={() => void handleToggleEnabled(item, false)}>
-                    停用
-                  </UiButton>
-                ) : (
-                  <UiButton variant="primary" size="sm" onClick={() => void handleToggleEnabled(item, true)}>
-                    启用
-                  </UiButton>
-                )}
-                <UiButton variant="danger" size="sm" onClick={() => setDeleteTarget(item)}>
-                  删除
-                </UiButton>
-              </div>
-            </section>
-          ))}
-        </div>
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+              </UiButton>
+            </div>
 
-        {!loading && agents.length === 0 ? (
-          <div className="mt-6 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] px-6 py-10 text-center text-sm text-[var(--color-text-muted)]">
-            当前没有匹配的 Agent，先创建一个 single 或 supervisor 试试。
-          </div>
-        ) : null}
+            {error ? (
+              <div className="mt-4 rounded-[18px] border border-[rgba(179,64,51,0.16)] bg-[rgba(179,64,51,0.08)] px-4 py-3 text-sm text-[var(--color-state-error)]">
+                {error}
+              </div>
+            ) : null}
+          </section>
+
+          <section>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {agents.map((item) => (
+                <section
+                  key={item.agent_id}
+                  className="workspace-item-surface workspace-item-hover-lift rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
+                          {item.name}
+                        </span>
+                        <span className="rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)]">
+                          {item.agent_type === "supervisor" ? "Supervisor" : "Single"}
+                        </span>
+                        <span
+                          className={joinClasses(
+                            "rounded-full border px-2 py-0.5 text-[11px]",
+                            item.status === "enabled"
+                              ? "border-[rgba(47,122,87,0.22)] text-[rgb(47,122,87)]"
+                              : item.status === "disabled"
+                                ? "border-[rgba(183,121,31,0.22)] text-[rgb(183,121,31)]"
+                                : "border-[var(--color-border-default)] text-[var(--color-text-muted)]"
+                          )}
+                        >
+                          {item.status}
+                        </span>
+                      </div>
+                      <div className="mt-2 line-clamp-3 text-sm leading-7 text-[var(--color-text-secondary)]">
+                        {item.description || "暂无描述"}
+                      </div>
+                    </div>
+                    {item.avatar_url ? (
+                      <img
+                        src={item.avatar_url}
+                        alt={item.name}
+                        className="h-12 w-12 rounded-[16px] border border-[var(--color-border-default)] object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-[16px] border border-[var(--color-border-default)] bg-[var(--color-surface-soft)] text-xs font-semibold text-[var(--color-text-muted)]">
+                        AG
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {(item.tool_count > 0 || item.skill_count > 0 || item.knowledge_base_count > 0) && (
+                      <span className="text-xs text-[var(--color-text-muted)]">
+                        {[
+                          item.tool_count > 0 && `${item.tool_count} 工具`,
+                          item.skill_count > 0 && `${item.skill_count} Skill`,
+                          item.knowledge_base_count > 0 && `${item.knowledge_base_count} 知识库`,
+                        ].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <UiButton
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => router.push(`/agents/editor?agent_id=${encodeURIComponent(item.agent_id)}`)}
+                    >
+                      编辑
+                    </UiButton>
+                    {item.status === "enabled" ? (
+                      <UiButton variant="ghost" size="sm" onClick={() => void handleToggleEnabled(item, false)}>
+                        停用
+                      </UiButton>
+                    ) : (
+                      <UiButton variant="primary" size="sm" onClick={() => void handleToggleEnabled(item, true)}>
+                        启用
+                      </UiButton>
+                    )}
+                    <UiButton variant="danger" size="sm" onClick={() => setDeleteTarget(item)}>
+                      删除
+                    </UiButton>
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            {!loading && agents.length === 0 ? (
+              <div className="mt-6 workspace-empty-state">
+                <strong>当前没有匹配的 Agent</strong>
+                <span>先创建一个 single 或 supervisor，再回到这里统一管理生命周期。</span>
+              </div>
+            ) : null}
+          </section>
+        </div>
       </div>
 
       <UiConfirmDialog

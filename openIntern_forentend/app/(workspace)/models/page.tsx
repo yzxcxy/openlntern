@@ -740,57 +740,72 @@ export default function ModelsPage() {
   return (
     <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-0">
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
-        <div className="workspace-toolbar-surface rounded-[var(--radius-lg)] border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                模型服务管理
+        <div className="workspace-page-stack">
+          <section className="workspace-filter-panel">
+            <div className="workspace-section-title">
+              <div>
+                <h1>模型服务</h1>
+                <p>
+                  {currentDefaultModel
+                    ? `当前默认模型：${currentDefaultModel.provider_name || "未知提供商"} / ${currentDefaultModel.name}`
+                    : "管理模型提供商、模型目录以及系统默认模型。"}
+                </p>
               </div>
-              <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                {currentDefaultModel
-                  ? `当前默认模型：${currentDefaultModel.provider_name || "未知提供商"} / ${currentDefaultModel.name}`
-                  : "管理模型提供商、模型目录以及系统默认模型。"}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="workspace-stat-row">
+                  <div className="workspace-stat-chip">
+                    <strong>{providers.length}</strong>
+                    <span>提供商</span>
+                  </div>
+                  <div className="workspace-stat-chip">
+                    <strong>{models.length}</strong>
+                    <span>模型数</span>
+                  </div>
+                  <div className="workspace-stat-chip">
+                    <strong>{currentDefaultModel ? "1" : "0"}</strong>
+                    <span>默认模型</span>
+                  </div>
+                </div>
+                <UiButton type="button" variant="secondary" onClick={fetchAll} loading={loading}>
+                  刷新
+                </UiButton>
               </div>
             </div>
-            <UiButton type="button" variant="secondary" onClick={fetchAll} loading={loading}>
-              刷新
-            </UiButton>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <div className="text-xs font-semibold text-[var(--color-text-secondary)]">
-              系统默认模型
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-text-secondary)]">
+                系统默认模型
+              </div>
+              <UiSelect
+                className="min-w-[260px] flex-1"
+                value={defaultModelId}
+                disabled={models.length === 0}
+                onChange={(e) => setDefaultModelId(e.target.value)}
+              >
+                <option value="">请选择默认模型</option>
+                {sortedModels.map((item) => (
+                  <option key={item.model_id} value={item.model_id}>
+                    {item.provider_name || "未知提供商"} / {item.name}
+                  </option>
+                ))}
+              </UiSelect>
+              <UiButton
+                type="button"
+                onClick={handleSaveDefaultModel}
+                loading={savingDefault}
+                disabled={models.length === 0}
+              >
+                保存默认模型
+              </UiButton>
             </div>
-            <UiSelect
-              className="min-w-[260px] flex-1"
-              value={defaultModelId}
-              disabled={models.length === 0}
-              onChange={(e) => setDefaultModelId(e.target.value)}
-            >
-              <option value="">请选择默认模型</option>
-              {sortedModels.map((item) => (
-                <option key={item.model_id} value={item.model_id}>
-                  {item.provider_name || "未知提供商"} / {item.name}
-                </option>
-              ))}
-            </UiSelect>
-            <UiButton
-              type="button"
-              onClick={handleSaveDefaultModel}
-              loading={savingDefault}
-              disabled={models.length === 0}
-            >
-              保存默认模型
-            </UiButton>
-          </div>
-        </div>
 
-        {error && (
-          <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-panel)] px-3 py-2 text-sm text-[var(--color-state-error)]">
-            {error}
-          </div>
-        )}
+            {error && (
+              <div className="mt-4 rounded-[18px] border border-[rgba(179,64,51,0.16)] bg-[rgba(179,64,51,0.08)] px-4 py-3 text-sm text-[var(--color-state-error)]">
+                {error}
+              </div>
+            )}
+          </section>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -811,12 +826,14 @@ export default function ModelsPage() {
 
             <div className="mt-4 space-y-2">
               {providers.length === 0 ? (
-                <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] px-3 py-6 text-center text-sm text-[var(--color-text-muted)]">
-                  暂无模型服务，先新增一个提供商。
+                <div className="workspace-empty-state !px-4 !py-6">
+                  <strong>暂无模型服务</strong>
+                  <span>先新增一个提供商，再录入它的模型目录。</span>
                 </div>
               ) : filteredProviders.length === 0 ? (
-                <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-default)] px-3 py-6 text-center text-sm text-[var(--color-text-muted)]">
-                  没有匹配的服务。
+                <div className="workspace-empty-state !px-4 !py-6">
+                  <strong>没有匹配的服务</strong>
+                  <span>调整关键字后重新搜索提供商。</span>
                 </div>
               ) : (
                 filteredProviders.map((item) => {
@@ -1058,11 +1075,9 @@ export default function ModelsPage() {
                 </section>
             ) : (
               <section className="workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-8 text-center">
-                <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                  还没有可展示的模型提供商
-                </div>
-                <div className="mt-2 text-sm text-[var(--color-text-muted)]">
-                  先新增一个提供商，随后再录入该提供商下的模型。
+                <div className="workspace-empty-state">
+                  <strong>还没有可展示的模型提供商</strong>
+                  <span>先新增一个提供商，随后再录入该提供商下的模型。</span>
                 </div>
                 <div className="mt-4">
                   <UiButton type="button" onClick={handleCreateProvider}>
@@ -1072,6 +1087,7 @@ export default function ModelsPage() {
               </section>
             )}
           </main>
+          </div>
         </div>
 
         <Modal

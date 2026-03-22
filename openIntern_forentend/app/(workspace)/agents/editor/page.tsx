@@ -789,7 +789,7 @@ export default function AgentEditorPage() {
               style={chatBackgroundStyle}
             >
               {visibleChatMessages.length === 0 ? (
-                <div className="text-sm text-[var(--color-text-muted)]">这里是完整测试聊天区，支持多轮对话。</div>
+                <div className="text-sm text-[var(--color-text-muted)]">测试聊天区，支持多轮对话。</div>
               ) : (
                 <div className="space-y-3">
                   {visibleChatMessages.map((message) => (

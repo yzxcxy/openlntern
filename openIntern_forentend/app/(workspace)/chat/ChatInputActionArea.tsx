@@ -31,13 +31,13 @@ export function ChatInputActionArea({
 }) {
   return (
     <div
-      className={joinClasses(className, "flex items-center gap-2")}
+      className={joinClasses(className, "chat-action-rail flex flex-wrap items-center justify-end gap-2")}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
       {conversationMode === "chat" && (
         <div
-          className="ui-select-control--glass relative w-[280px] max-w-[70vw] rounded-full border border-transparent px-4 py-2 focus-within:border-[var(--color-action-primary)]"
+          className="relative w-[320px] max-w-full rounded-full border border-[rgba(126,96,69,0.16)] bg-[rgba(255,252,247,0.82)] px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] transition focus-within:border-[rgba(199,104,67,0.28)] focus-within:bg-[rgba(255,250,243,0.96)]"
           title={
             selectedModelOption
               ? `${selectedModelOption.provider_name} / ${selectedModelOption.model_name}`
@@ -77,7 +77,7 @@ export function ChatInputActionArea({
         type="button"
         onClick={onOpenUploadPicker}
         disabled={uploadDisabled}
-        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(126,96,69,0.16)] bg-[rgba(255,252,247,0.82)] text-[var(--color-text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] transition hover:border-[rgba(199,104,67,0.24)] hover:bg-[rgba(255,250,243,0.96)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
         title="上传图片/文件/音频/视频"
         aria-label="上传图片/文件/音频/视频"
       >
@@ -102,7 +102,7 @@ export function ChatInputActionArea({
           </span>
         )}
       </button>
-      {menuItem}
+      <div className="flex items-center gap-2">{menuItem}</div>
     </div>
   );
 }

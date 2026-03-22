@@ -68,11 +68,11 @@ export function ChatComposerAssist({
         </div>
       )}
       {selectedMentions.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
+        <div className="mb-3 flex flex-wrap gap-2">
           {selectedMentions.map((item) => (
             <span
               key={`${item.type}:${item.id}`}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(126,96,69,0.14)] bg-[rgba(255,252,247,0.84)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)]"
             >
               <span className="font-medium text-[var(--color-text-primary)]">
                 {item.type === "skill" ? "Skill" : "知识库"}

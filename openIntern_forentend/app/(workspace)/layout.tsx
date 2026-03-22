@@ -41,21 +41,21 @@ const joinClasses = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
 const sidebarIconButtonClass =
-  "motion-safe-highlight flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-secondary)]";
+  "motion-safe-highlight flex h-10 w-10 items-center justify-center rounded-[18px] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.7)] text-[var(--color-text-muted)] hover:-translate-y-0.5 hover:border-[var(--color-border-strong)] hover:bg-[rgba(255,252,247,0.96)] hover:text-[var(--color-text-primary)]";
 
 const sidebarPanelClass =
-  "motion-safe-lift sidebar-panel-surface rounded-[20px] border p-3 backdrop-blur-md";
+  "motion-safe-lift sidebar-panel-surface rounded-[26px] border p-4 backdrop-blur-xl";
 
 const quickEntryClass = (active: boolean) =>
   joinClasses(
-    "motion-safe-highlight sidebar-quick-entry group flex w-full items-center justify-between rounded-[16px] border px-2.5 py-2 text-[var(--color-text-secondary)]",
+    "motion-safe-highlight sidebar-quick-entry group flex w-full items-center justify-between rounded-[18px] border px-3 py-3 text-[var(--color-text-secondary)]",
     "hover:-translate-y-0.5 hover:text-[var(--color-text-primary)]",
     active && "sidebar-quick-entry-active text-[var(--color-text-primary)]"
   );
 
 const historyEntryClass = (active: boolean) =>
   joinClasses(
-    "motion-safe-highlight history-entry-surface flex w-full items-center gap-2.5 rounded-[14px] border px-2.5 py-1.5 text-left",
+    "motion-safe-highlight history-entry-surface flex w-full items-center gap-2.5 rounded-[18px] border px-3 py-2 text-left",
     active
       ? "history-entry-surface-active text-[var(--color-text-primary)]"
       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -521,13 +521,32 @@ export default function WorkspaceLayout({
             <div className="px-4 pt-4">
               <div
                 className={joinClasses(
-                  "motion-safe-fade-in relative flex items-center",
+                  "motion-safe-fade-in relative flex items-start",
                   isSidebarCollapsed
                     ? "flex-col-reverse justify-center gap-3"
-                    : "justify-between"
+                    : "justify-between gap-3"
                 )}
               >
-                <img src="/OpenIntern.png" alt="openIntern" className="h-8 w-8 rounded-full" />
+                <div
+                  className={joinClasses(
+                    "flex min-w-0 items-start gap-3",
+                    isSidebarCollapsed && "flex-col items-center"
+                  )}
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-[rgba(126,96,69,0.14)] bg-[linear-gradient(145deg,rgba(255,252,247,0.98),rgba(246,233,220,0.92))] shadow-[0_16px_30px_rgba(48,32,16,0.1)]">
+                    <img src="/OpenIntern.png" alt="openIntern" className="h-8 w-8 rounded-full" />
+                  </div>
+                  {!isSidebarCollapsed && (
+                    <div className="min-w-0">
+                      <div className="truncate font-[var(--font-brand-display)] text-[22px] font-semibold leading-none tracking-[-0.04em] text-[var(--color-text-primary)]">
+                        openIntern
+                      </div>
+                      <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+                        AI 协作工作区
+                      </p>
+                    </div>
+                  )}
+                </div>
                 {!isSidebarCollapsed && (
                   <button
                     onClick={() => setIsSidebarCollapsed(true)}
@@ -571,17 +590,17 @@ export default function WorkspaceLayout({
                 <button
                   onClick={() => router.push(`/chat?threadId=${createThreadId()}&new=1`)}
                   className={joinClasses(
-                    "motion-safe-highlight flex items-center rounded-full border border-[var(--color-border-default)] px-3 py-2",
-                    "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]",
+                    "motion-safe-highlight flex items-center rounded-[22px] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.78)] px-3 py-3 shadow-[0_12px_24px_rgba(48,32,16,0.08)]",
+                    "text-[var(--color-text-secondary)] hover:-translate-y-0.5 hover:border-[rgba(199,104,67,0.18)] hover:bg-[rgba(255,252,247,0.96)] hover:text-[var(--color-text-primary)]",
                     isSidebarCollapsed
-                      ? "h-10 w-10 justify-center px-0"
+                      ? "h-12 w-12 justify-center px-0"
                       : "w-full justify-between",
                     isChat &&
-                      "border-[rgba(37,99,255,0.18)] bg-[linear-gradient(90deg,rgba(37,99,255,0.14),rgba(37,99,255,0.04))] text-[var(--color-text-primary)]"
+                      "border-[rgba(199,104,67,0.18)] bg-[linear-gradient(135deg,rgba(255,247,240,0.98),rgba(245,231,219,0.78))] text-[var(--color-text-primary)]"
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-muted)]">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-muted)]">
                       <svg
                         viewBox="0 0 24 24"
                         className="h-4 w-4"
@@ -595,8 +614,15 @@ export default function WorkspaceLayout({
                         <path d="M12 8v8M8 12h8" />
                       </svg>
                     </span>
-                    {!isSidebarCollapsed && <span className="text-sm font-semibold">新建对话</span>}
+                    {!isSidebarCollapsed && (
+                      <span className="text-sm font-semibold tracking-[-0.02em]">发起新对话</span>
+                    )}
                   </div>
+                  {!isSidebarCollapsed && (
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+                      Cmd K
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -938,10 +964,10 @@ export default function WorkspaceLayout({
             {!isSidebarCollapsed && (
               <div
                 ref={userMenuRef}
-                className="motion-safe-fade-in relative mx-4 mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.92)] px-3 py-2 shadow-[var(--shadow-sm)] backdrop-blur-sm"
+                className="motion-safe-fade-in relative mx-4 mb-4 rounded-[26px] border border-[var(--color-border-default)] bg-[linear-gradient(135deg,rgba(255,252,247,0.88),rgba(247,235,223,0.74))] px-3 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm"
               >
                 {isUserMenuOpen && (
-                  <div className="motion-safe-slide-up absolute inset-x-0 bottom-full z-20 mb-2 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] p-2 shadow-[var(--shadow-lg)]">
+                  <div className="motion-safe-slide-up absolute inset-x-0 bottom-full z-20 mb-2 rounded-[24px] border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] p-2 shadow-[var(--shadow-lg)]">
                     <button
                       type="button"
                       onClick={handleUserManage}
@@ -1006,7 +1032,7 @@ export default function WorkspaceLayout({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleUserManage}
-                    className="motion-safe-highlight flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] px-1 py-1 text-left hover:bg-[var(--color-bg-page)]"
+                    className="motion-safe-highlight flex min-w-0 flex-1 items-center gap-3 rounded-[20px] px-2 py-2 text-left hover:bg-[rgba(255,252,247,0.8)]"
                   >
                     {userInfo?.avatar ? (
                       <img
@@ -1015,12 +1041,12 @@ export default function WorkspaceLayout({
                         className="h-9 w-9 rounded-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-bg-page)] text-sm font-semibold text-[var(--color-text-secondary)]">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,252,247,0.88)] text-sm font-semibold text-[var(--color-text-secondary)]">
                         {avatarLabel}
                       </div>
                     )}
                     <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                      <span className="truncate text-sm font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
                         {displayName}
                       </span>
                       {displayEmail ? (
@@ -1039,7 +1065,7 @@ export default function WorkspaceLayout({
                     aria-label="打开账户菜单"
                     aria-expanded={isUserMenuOpen}
                     onClick={() => setIsUserMenuOpen((open) => !open)}
-                    className="motion-safe-highlight flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]"
+                    className="motion-safe-highlight flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.72)] text-[var(--color-text-muted)] hover:bg-[rgba(255,252,247,0.96)] hover:text-[var(--color-text-primary)]"
                   >
                     <svg
                       className="h-4 w-4"
@@ -1061,7 +1087,7 @@ export default function WorkspaceLayout({
           </Sidebar>
         }
       >
-        <PageContainer className="h-full max-w-none px-2 py-2 md:px-3 md:py-3">
+        <PageContainer className="h-full max-w-none px-2 py-2 md:px-4 md:py-4">
           {children}
         </PageContainer>
       </AppShell>

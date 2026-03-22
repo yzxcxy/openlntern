@@ -42,10 +42,10 @@ export function UiInput({
       onChange={onChange}
       className={joinClasses(
         "block w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)]",
-        "bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)]",
+        "bg-[rgba(255,252,247,0.92)] px-4 py-3 text-sm text-[var(--color-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.58)]",
         "placeholder:text-[var(--color-text-muted)]",
-        "outline-none transition-[border-color,box-shadow] duration-150",
-        "focus:border-[var(--color-action-primary)] focus:ring-2 focus:ring-[var(--color-action-primary-soft)]",
+        "outline-none transition-[border-color,box-shadow,background-color] duration-150",
+        "focus:border-[var(--color-action-primary)] focus:bg-[rgba(255,253,250,0.98)] focus:ring-2 focus:ring-[rgba(199,104,67,0.12)]",
         "disabled:cursor-not-allowed disabled:opacity-60",
         className
       )}
