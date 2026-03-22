@@ -52,9 +52,9 @@ export function ToolResultCollapse({ text }: { text: string }) {
   );
 
   return (
-    <div className="motion-safe-slide-up">
+    <div className="motion-safe-slide-up w-full">
       <div
-        className="semi-ai-chat-dialogue-content-tool-call motion-safe-highlight"
+        className="semi-ai-chat-dialogue-content-tool-call motion-safe-highlight w-full"
         onClick={toggleOpen}
         role="button"
         tabIndex={0}
@@ -65,7 +65,7 @@ export function ToolResultCollapse({ text }: { text: string }) {
         {isOpen ? <IconChevronUp /> : <IconChevronDown />}
       </div>
       <Collapsible isOpen={isOpen}>
-        <div className="semi-ai-chat-dialogue-content-bubble px-3 py-3">
+        <div className="semi-ai-chat-dialogue-content-bubble mt-2 w-full px-3 py-3">
           <MarkdownRender format="md" raw={text} />
         </div>
       </Collapsible>

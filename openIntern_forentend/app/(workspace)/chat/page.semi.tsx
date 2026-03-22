@@ -949,6 +949,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           const index = content.length;
           content.push({
             type: "reasoning",
+            id: messageId,
             summary: [{ type: "summary_text", text: "" }],
             status: "in_progress",
           });
@@ -1090,6 +1091,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           const content = Array.isArray(message.content) ? [...message.content] : [];
           content.push({
             type: TOOL_RESULT_TYPE,
+            id: createMessageId(),
             text: outputText,
             status: "completed",
           });

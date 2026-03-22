@@ -2,7 +2,9 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -37,6 +39,7 @@ type FunctionCallItem = {
 };
 
 type ProcessPanelItem = {
+  collapseOnOutput?: boolean;
   items?: Array<Record<string, any>>;
   status?: string;
 };
@@ -111,8 +114,8 @@ function ReasoningContentItem({
   content,
 }: ReasoningRendererProps) {
   const isCompleted = status === "completed";
-  const [runningOpen, setRunningOpen] = useState(!isCompleted);
-  const [completedOpen, setCompletedOpen] = useState(false);
+  // 折叠状态只保留一份，避免运行态切到完成态时被重置为默认关闭。
+  const [isOpen, setIsOpen] = useState(!isCompleted);
 
   const text = useMemo(() => {
     const source = Array.isArray(summary) && summary.length > 0 ? summary : content;
@@ -124,14 +127,14 @@ function ReasoningContentItem({
       : "";
   }, [content, summary]);
 
-  const isOpen = isCompleted ? completedOpen : runningOpen;
-
   const handleToggle = useCallback(() => {
+    setIsOpen((current) => !current);
+  }, []);
+
+  useEffect(() => {
     if (isCompleted) {
-      setCompletedOpen((current) => !current);
-      return;
+      setIsOpen(false);
     }
-    setRunningOpen((current) => !current);
   }, [isCompleted]);
 
   return (
@@ -163,23 +166,19 @@ function ReasoningContentItem({
 function ToolCallCollapse({ name, arguments: args, status }: FunctionCallItem) {
   const isCompleted = status === "completed";
   const hasArgs = typeof args === "string" && args.trim().length > 0;
-  const [runningOpen, setRunningOpen] = useState(!isCompleted);
-  const [completedOpen, setCompletedOpen] = useState(false);
-  const isOpen = hasArgs && (isCompleted ? completedOpen : runningOpen);
+  // 运行态默认展开，完成后沿用用户最后一次的显式选择。
+  const [isOpen, setIsOpen] = useState(!isCompleted);
+  const hasOpenContent = hasArgs && isOpen;
 
   const handleToggle = useCallback(() => {
     if (!hasArgs) return;
-    if (isCompleted) {
-      setCompletedOpen((current) => !current);
-      return;
-    }
-    setRunningOpen((current) => !current);
-  }, [hasArgs, isCompleted]);
+    setIsOpen((current) => !current);
+  }, [hasArgs]);
 
   return (
-    <div className="motion-safe-slide-up">
+    <div className="motion-safe-slide-up w-full">
       <div
-        className="semi-ai-chat-dialogue-content-tool-call motion-safe-highlight"
+        className="semi-ai-chat-dialogue-content-tool-call motion-safe-highlight w-full"
         onClick={handleToggle}
         role={hasArgs ? "button" : undefined}
         tabIndex={hasArgs ? 0 : -1}
@@ -207,8 +206,8 @@ function ToolCallCollapse({ name, arguments: args, status }: FunctionCallItem) {
           {isCompleted ? "已完成" : "执行中"}
         </span>
       </div>
-      {hasArgs && isOpen ? (
-        <div className="semi-ai-chat-dialogue-content-bubble mt-2 px-3 py-3 text-sm whitespace-pre-wrap text-[var(--color-text-secondary)]">
+      {hasOpenContent ? (
+        <div className="semi-ai-chat-dialogue-content-bubble mt-2 w-full px-3 py-3 text-sm whitespace-pre-wrap text-[var(--color-text-secondary)]">
           {args}
         </div>
       ) : null}
@@ -216,20 +215,29 @@ function ToolCallCollapse({ name, arguments: args, status }: FunctionCallItem) {
   );
 }
 
-function ProcessPanelCollapse({ items, status }: ProcessPanelItem) {
+function ProcessPanelCollapse({ items, status, collapseOnOutput }: ProcessPanelItem) {
   const processItems = Array.isArray(items) ? items : [];
   const isCompleted = status === "completed";
-  const [runningOpen, setRunningOpen] = useState(!isCompleted);
-  const [completedOpen, setCompletedOpen] = useState(false);
-  const isOpen = isCompleted ? completedOpen : runningOpen;
+  // 面板默认跟随运行态展开，只在助手正文真正到达后再自动收起。
+  const [isOpen, setIsOpen] = useState(!isCompleted);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const handleToggle = useCallback(() => {
-    if (isCompleted) {
-      setCompletedOpen((current) => !current);
-      return;
+    setIsOpen((current) => {
+      const next = !current;
+      if (next) {
+        shouldStickToBottomRef.current = true;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (collapseOnOutput) {
+      setIsOpen(false);
     }
-    setRunningOpen((current) => !current);
-  }, [isCompleted]);
+  }, [collapseOnOutput]);
 
   const processLabel = useMemo(() => {
     const toolCount = processItems.filter((item) => item?.type === "function_call").length;
@@ -244,19 +252,46 @@ function ProcessPanelCollapse({ items, status }: ProcessPanelItem) {
     return labels.length > 0 ? labels.join("，") : `${processItems.length} 个过程项`;
   }, [processItems]);
 
-  const bodyClassName = isCompleted
-    ? "max-h-80"
-    : "h-72";
-  const containerClassName = isOpen
-    ? "w-full"
-    : "inline-block max-w-full";
-  const headerClassName = isOpen
-    ? "flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-    : "flex items-center gap-3 px-3 py-2 text-left";
+  // 运行过程容器保持固定宽高，避免内部思考块或工具块开合时整体尺寸抖动。
+  const bodyClassName = "h-72";
+  const headerClassName =
+    "flex w-full items-center justify-between gap-3 px-4 py-3 text-left";
+  const handleBodyScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom <= 48;
+  }, []);
+
+  const getProcessItemKey = useCallback((item: Record<string, any>, index: number) => {
+    const itemType = String(item?.type ?? "process");
+    const itemId =
+      typeof item?.id === "string" && item.id.length > 0
+        ? item.id
+        : typeof item?.call_id === "string" && item.call_id.length > 0
+          ? item.call_id
+          : "";
+    return itemId ? `${itemType}-${itemId}` : `${itemType}-${index}`;
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const container = scrollContainerRef.current;
+    if (!container || !shouldStickToBottomRef.current) {
+      return;
+    }
+    // 仅在用户停留在底部附近时自动跟随，避免手动回看过程时被强制拉回。
+    container.scrollTop = container.scrollHeight;
+  }, [isOpen, processItems, status]);
 
   return (
     <div
-      className={`${containerClassName} overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]`}
+      className="w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
     >
       <button
         type="button"
@@ -278,6 +313,8 @@ function ProcessPanelCollapse({ items, status }: ProcessPanelItem) {
       </button>
       {isOpen ? (
         <div
+          ref={scrollContainerRef}
+          onScroll={handleBodyScroll}
           className={`${bodyClassName} overflow-y-auto border-t border-[var(--color-border-default)] px-3 py-3`}
         >
           <div className="space-y-3">
@@ -286,7 +323,7 @@ function ProcessPanelCollapse({ items, status }: ProcessPanelItem) {
             if (itemType === "reasoning") {
               return (
                 <ReasoningContentItem
-                  key={`reasoning-${index}`}
+                  key={getProcessItemKey(item, index)}
                   status={item?.status}
                   summary={Array.isArray(item?.summary) ? item.summary : []}
                   content={Array.isArray(item?.content) ? item.content : []}
@@ -296,7 +333,7 @@ function ProcessPanelCollapse({ items, status }: ProcessPanelItem) {
             if (itemType === "function_call") {
               return (
                 <ToolCallCollapse
-                  key={`tool-call-${index}`}
+                  key={getProcessItemKey(item, index)}
                   name={item?.name}
                   arguments={item?.arguments}
                   status={item?.status}
@@ -304,7 +341,12 @@ function ProcessPanelCollapse({ items, status }: ProcessPanelItem) {
               );
             }
             if (itemType === TOOL_RESULT_TYPE) {
-              return <ToolResultCollapse key={`tool-result-${index}`} text={String(item?.text ?? "")} />;
+              return (
+                <ToolResultCollapse
+                  key={getProcessItemKey(item, index)}
+                  text={String(item?.text ?? "")}
+                />
+              );
             }
             return null;
           })}
@@ -321,7 +363,11 @@ export function useChatDialogueRenderers(
   return useMemo(
     () => ({
       [PROCESS_PANEL_TYPE]: (item: ProcessPanelItem) => (
-        <ProcessPanelCollapse items={item?.items} status={item?.status} />
+        <ProcessPanelCollapse
+          items={item?.items}
+          status={item?.status}
+          collapseOnOutput={item?.collapseOnOutput}
+        />
       ),
       reasoning: (item: {
         status?: string;

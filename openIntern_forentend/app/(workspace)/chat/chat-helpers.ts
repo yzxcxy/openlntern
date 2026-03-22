@@ -158,7 +158,7 @@ export const groupAssistantProcessItems = (
   }
   const nextContent: Array<Record<string, any>> = [];
   let processItems: Array<Record<string, any>> = [];
-  const flushProcessItems = () => {
+  const flushProcessItems = (options?: { collapseOnOutput?: boolean }) => {
     if (processItems.length === 0) {
       return;
     }
@@ -168,6 +168,7 @@ export const groupAssistantProcessItems = (
     nextContent.push({
       type: PROCESS_PANEL_TYPE,
       status: panelStatus,
+      collapseOnOutput: Boolean(options?.collapseOnOutput),
       items: processItems,
     });
     processItems = [];
@@ -183,7 +184,8 @@ export const groupAssistantProcessItems = (
       processItems.push(normalizedItem);
       return;
     }
-    flushProcessItems();
+    // 只有后面跟着真正的助手文本时，才触发外层面板自动收起。
+    flushProcessItems({ collapseOnOutput: normalizedItem.type === "message" });
     nextContent.push(normalizedItem);
   });
   flushProcessItems();
@@ -695,6 +697,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       if (text) {
         nextContent.push({
           type: TOOL_RESULT_TYPE,
+          id: item.msg_id,
           text,
           status: item.status ?? "completed",
         });
@@ -706,6 +709,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       const text = extractText(aguiMessage?.content);
       nextContent.push({
         type: "reasoning",
+        id: item.msg_id,
         status: item.status ?? "completed",
         summary: text ? [{ type: "summary_text", text }] : [],
         encryptedValue: aguiMessage?.encryptedValue,
