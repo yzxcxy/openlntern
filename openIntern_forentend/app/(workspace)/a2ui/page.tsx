@@ -518,65 +518,82 @@ export default function A2uiPage() {
           )}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-[var(--color-text-secondary)]">
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[rgba(126,96,69,0.14)] pt-4">
           <div className="flex shrink-0 items-center gap-2">
-            <span className="shrink-0 whitespace-nowrap">每页</span>
-            <UiSelect
-              className="w-24"
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-            >
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </UiSelect>
+            <span className="whitespace-nowrap text-sm text-[var(--color-text-muted)]">
+              共 {total} 条
+            </span>
+            <span className="text-sm text-[var(--color-text-muted)]">/</span>
+            <div className="flex items-center gap-1">
+              <UiSelect
+                value={String(pageSize)}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="h-8 w-[60px] !py-0 !pl-2 !pr-6"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </UiSelect>
+              <span className="whitespace-nowrap text-sm text-[var(--color-text-muted)]">条/页</span>
+            </div>
           </div>
-          <UiButton
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={page <= 1}
-          >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+
+          <div className="flex items-center gap-1">
+            <UiButton
+              variant="secondary"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page <= 1}
             >
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-            上一页
-          </UiButton>
-          <span>
-            {page} / {totalPages}
-          </span>
-          <UiButton
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={page >= totalPages}
-          >
-            下一页
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              ←
+            </UiButton>
+
+            {(() => {
+              const pages: (number | string)[] = [];
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+              } else {
+                if (page <= 4) {
+                  pages.push(1, 2, 3, 4, 5, "...", totalPages);
+                } else if (page >= totalPages - 3) {
+                  pages.push(1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+                } else {
+                  pages.push(1, "...", page - 1, page, page + 1, "...", totalPages);
+                }
+              }
+              return pages.map((p, idx) =>
+                p === "..." ? (
+                  <span key={`dot-${idx}`} className="px-1 text-sm text-[var(--color-text-muted)]">
+                    ...
+                  </span>
+                ) : (
+                  <UiButton
+                    key={p}
+                    variant={p === page ? "primary" : "secondary"}
+                    size="sm"
+                    className="h-7 min-w-[28px] px-2"
+                    onClick={() => setPage(p as number)}
+                  >
+                    {p}
+                  </UiButton>
+                )
+              );
+            })()}
+
+            <UiButton
+              variant="secondary"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages}
             >
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </UiButton>
+              →
+            </UiButton>
+          </div>
         </div>
       </div>
 
