@@ -77,12 +77,27 @@ export function ChatInputActionArea({
         type="button"
         onClick={onOpenUploadPicker}
         disabled={uploadDisabled}
-        className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-bg-page)] disabled:cursor-not-allowed disabled:opacity-50"
         title="上传图片/文件/音频/视频"
+        aria-label="上传图片/文件/音频/视频"
       >
-        <span>上传</span>
+        {/* 聊天输入区的上传入口改为图标按钮，避免文案挤占模型选择区域。 */}
+        <svg
+          viewBox="0 0 24 24"
+          className="h-[18px] w-[18px]"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 16V5" />
+          <path d="m7.5 9.5 4.5-4.5 4.5 4.5" />
+          <path d="M5 19h14" />
+        </svg>
         {pendingUploadCount > 0 && (
-          <span className="rounded-full bg-[var(--color-bg-page)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]">
+          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-[var(--color-bg-page)] px-1 py-0.5 text-center text-[10px] leading-none text-[var(--color-text-muted)] shadow-sm">
             {pendingUploadCount}
           </span>
         )}

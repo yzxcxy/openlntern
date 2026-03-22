@@ -17,7 +17,28 @@
 @layer components {
   .workspace-gradient-surface {
     overflow: hidden;
-    border-radius: calc(var(--radius-xl) + 6px);
+    border-radius: var(--radius-xl);
+  }
+
+  /* 让直接贴在工作区表面的主卡片继承同一圆角，避免左上角出现双层弧线。 */
+  .workspace-gradient-surface > .workspace-panel-card {
+    border-radius: inherit;
+  }
+
+  /* 工作区内容容器统一隐藏原生滚动条，避免主面板长期显示灰色滑轨。 */
+  .workspace-gradient-surface,
+  .workspace-gradient-surface--chat,
+  .workspace-gradient-surface--kb,
+  .workspace-gradient-surface--panel {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .workspace-gradient-surface::-webkit-scrollbar,
+  .workspace-gradient-surface--chat::-webkit-scrollbar,
+  .workspace-gradient-surface--kb::-webkit-scrollbar,
+  .workspace-gradient-surface--panel::-webkit-scrollbar {
+    display: none;
   }
 
   /* Chat 页面使用单层工作区卡片，避免出现厚重的外层包裹感。 */
@@ -168,6 +189,16 @@
     border-color: rgba(37, 99, 255, 0.2);
     background: linear-gradient(135deg, rgba(219, 234, 254, 0.8), rgba(255, 255, 255, 0.95));
     box-shadow: 0 10px 20px rgba(37, 99, 235, 0.08);
+  }
+
+  /* 隐藏侧边栏原生滚动条，保留滚动能力，避免常驻滚动条破坏卡片视觉。 */
+  .sidebar-scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .sidebar-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
   }
 
   .ui-button-primary {

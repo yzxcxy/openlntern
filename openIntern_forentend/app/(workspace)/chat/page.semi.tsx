@@ -27,6 +27,7 @@ import type {
   MessageContent,
 } from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
 import { ChatComposerAssist } from "./ChatComposerAssist";
+import { ChatComposerExpandModal } from "./ChatComposerExpandModal";
 import { ChatInputActionArea } from "./ChatInputActionArea";
 import { ChatModeConfigureArea } from "./ChatModeConfigureArea";
 import { PluginSelectionModal } from "./PluginSelectionModal";
@@ -119,6 +120,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   });
   const { renderActivityMessage } = useRenderActivityMessage();
   const [inputError, setInputError] = useState("");
+  const [composerDraft, setComposerDraft] = useState("");
+  const [composerExpandOpen, setComposerExpandOpen] = useState(false);
+  const [composerExpandDraft, setComposerExpandDraft] = useState("");
   const [threadId, setThreadId] = useState("");
   const [semiMessages, setSemiMessages] = useState<SemiMessage[]>([]);
   const [conversationMode, setConversationMode] = useState<"chat" | "agent">("chat");
@@ -142,6 +146,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [mentionOptions, setMentionOptions] = useState<MentionTargetOption[]>([]);
 
   const setComposerText = useCallback((text: string) => {
+    setComposerDraft(text);
     inputRef.current?.setContent(toEditorParagraphHtml(text));
   }, []);
 
@@ -163,6 +168,15 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     mentionOptions,
     setComposerText,
   });
+
+  const handleComposerContentChange = useCallback(
+    (contents: AIChatInputContent[]) => {
+      const text = extractInputPlainText(contents ?? []);
+      setComposerDraft(text);
+      handleInputContentChange(contents);
+    },
+    [handleInputContentChange]
+  );
 
   const {
     uploadInputRef,
@@ -628,6 +642,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       agent.threadId = resolvedThreadId;
       agent.setMessages([]);
       setInputError("");
+      setComposerDraft("");
+      setComposerExpandDraft("");
+      setComposerExpandOpen(false);
       setSemiMessages([]);
       setHistoryLoading(false);
       // 新会话不继承上一会话的 @知识库 / #skill 选择，避免上下文串线。
@@ -1191,6 +1208,17 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     "帮我分析一个报错",
     "给我写一个接口设计",
   ];
+  const openComposerExpandModal = useCallback(() => {
+    setComposerExpandDraft(composerDraft);
+    setComposerExpandOpen(true);
+  }, [composerDraft]);
+  const closeComposerExpandModal = useCallback(() => {
+    setComposerExpandOpen(false);
+  }, []);
+  const applyExpandedComposerDraft = useCallback(() => {
+    setComposerText(composerExpandDraft);
+    setComposerExpandOpen(false);
+  }, [composerExpandDraft, setComposerText]);
 
   const roleConfig = useMemo(
     () => ({
@@ -1413,6 +1441,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       clearUploadError();
       closeMentionMenu();
       clearComposerDraft();
+      setComposerDraft("");
+      setComposerExpandDraft("");
+      setComposerExpandOpen(false);
       const now = new Date().toISOString();
       dispatchThreadHistoryUpsert({
         thread_id: threadId,
@@ -1589,6 +1620,32 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 </div>
               )}
               <div className="relative" onKeyDownCapture={handleMentionKeyDownCapture}>
+                <button
+                  type="button"
+                  onClick={openComposerExpandModal}
+                  className="absolute right-3 top-3 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(203,213,225,0.92)] bg-[rgba(248,250,252,0.92)] text-[var(--color-text-muted)] shadow-sm transition hover:border-[rgba(148,163,184,0.9)] hover:bg-[rgba(255,255,255,0.98)] hover:text-[var(--color-text-secondary)]"
+                  aria-label="展开输入框编辑"
+                  title="展开编辑"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M8 3H3v5" />
+                    <path d="M16 3h5v5" />
+                    <path d="M3 16v5h5" />
+                    <path d="M21 16v5h-5" />
+                    <path d="M8 8 3 3" />
+                    <path d="m16 8 5-5" />
+                    <path d="m8 16-5 5" />
+                    <path d="m16 16 5 5" />
+                  </svg>
+                </button>
                 <ChatComposerAssist
                   mentionOpen={mentionOpen}
                   mentionCandidates={mentionCandidates}
@@ -1606,9 +1663,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 />
                 <AIChatInput
                   ref={inputRef as any}
+                  className="chat-composer-input"
                   keepSkillAfterSend={false}
                   placeholder="输入消息；@ 选择知识库，# 选择 Skill"
-                  onContentChange={handleInputContentChange}
+                  onContentChange={handleComposerContentChange}
                   onMessageSend={handleMessageSend}
                   onStopGenerate={handleStopGenerate}
                   generating={agent.isRunning}
@@ -1675,6 +1733,13 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         onTogglePluginExpanded={togglePluginExpanded}
         onTogglePluginSelection={togglePluginSelection}
         onToggleToolSelection={toggleToolSelection}
+      />
+      <ChatComposerExpandModal
+        open={composerExpandOpen}
+        value={composerExpandDraft}
+        onChange={setComposerExpandDraft}
+        onClose={closeComposerExpandModal}
+        onApply={applyExpandedComposerDraft}
       />
     </>
   );

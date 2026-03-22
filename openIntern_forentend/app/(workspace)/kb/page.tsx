@@ -608,7 +608,7 @@ export default function KnowledgeBasePage() {
   };
 
   return (
-    <div className="kb-page workspace-gradient-surface workspace-gradient-surface--kb h-full overflow-auto p-4 md:p-6">
+    <div className="kb-page workspace-gradient-surface workspace-gradient-surface--kb h-full overflow-auto p-0">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <div className="workspace-panel-card motion-safe-fade-in rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5 backdrop-blur-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">

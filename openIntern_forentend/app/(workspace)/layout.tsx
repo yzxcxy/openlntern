@@ -601,7 +601,7 @@ export default function WorkspaceLayout({
             </div>
 
             {!isSidebarCollapsed && (
-              <div className="motion-safe-fade-in flex-1 overflow-auto px-4 pb-4 pt-4">
+              <div className="motion-safe-fade-in sidebar-scrollbar-hidden flex-1 overflow-auto px-4 pb-4 pt-4">
                 <div className="space-y-3">
                   <div className={sidebarPanelClass}>
                     <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
@@ -1024,7 +1024,7 @@ export default function WorkspaceLayout({
           </Sidebar>
         }
       >
-        <PageContainer className="h-full max-w-none px-0 py-0">
+        <PageContainer className="h-full max-w-none px-2 py-2 md:px-3 md:py-3">
           {children}
         </PageContainer>
       </AppShell>

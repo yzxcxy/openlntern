@@ -539,7 +539,7 @@ export default function PluginsPage() {
   const isBuiltinFilterActive = sourceFilter === "builtin";
 
   return (
-    <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-6">
+    <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-0">
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
         {!selectedPlugin && (
           <>

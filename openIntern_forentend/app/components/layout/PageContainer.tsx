@@ -13,7 +13,7 @@ export function PageContainer({
   return (
     <div
       className={joinClasses(
-        "mx-auto h-full w-full max-w-[1440px] px-4 py-4 md:px-6",
+        "mx-auto h-full w-full max-w-[1440px]",
         className
       )}
       {...rest}
