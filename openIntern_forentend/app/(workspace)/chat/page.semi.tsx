@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -99,11 +100,13 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const router = useRouter();
   const searchParams = useSearchParams();
   const inputRef = useRef<{ setContent: (content: string) => void } | null>(null);
+  const dialogueWrapperRef = useRef<HTMLDivElement | null>(null);
   const fallbackThreadIdRef = useRef<string>("");
   const latestThreadIdRef = useRef("");
   const currentRunIdRef = useRef<string>("");
   const titleSyncTokenRef = useRef(0);
   const titleSyncTimerRef = useRef<number | null>(null);
+  const shouldScrollHistoryToBottomRef = useRef(false);
   const textMessageMapRef = useRef(new Map<string, { runId: string; index: number }>());
   const toolCallMapRef = useRef(new Map<string, { runId: string; index: number }>());
   const reasoningMessageMapRef = useRef(
@@ -620,24 +623,26 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     }
   }, [pluginPage, pluginTotalPages]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const requestedThreadId = searchParams.get("threadId")?.trim() ?? "";
 
   // 根据 query 参数或生成新 thread_id
   const resolvedThreadId = useMemo(() => {
-    const paramThreadId = searchParams.get("threadId");
-    if (paramThreadId) {
-      return paramThreadId;
+    if (requestedThreadId) {
+      return requestedThreadId;
     }
     if (!fallbackThreadIdRef.current) {
       fallbackThreadIdRef.current = createThreadId();
     }
     return fallbackThreadIdRef.current;
-  }, [searchParams]);
+  }, [requestedThreadId]);
 
   // 切换 thread 时重置消息与事件映射表
   useEffect(() => {
     if (!agent) return;
     if (resolvedThreadId !== threadId) {
       clearThreadTitleSync();
+      // 历史会话首屏消息加载后补一次滚到底，覆盖组件首次滚动时机过早的问题。
+      shouldScrollHistoryToBottomRef.current = requestedThreadId.length > 0;
       setThreadId(resolvedThreadId);
       agent.threadId = resolvedThreadId;
       agent.setMessages([]);
@@ -662,6 +667,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     resetMentionComposer,
     resetUploads,
     resolvedThreadId,
+    requestedThreadId,
     threadId,
   ]);
 
@@ -682,25 +688,32 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       if (!response.ok) {
         if (data?.code === 1004) {
           // 新建会话暂无历史，保持空消息列表
+          shouldScrollHistoryToBottomRef.current = false;
           setSemiMessages([]);
           return;
         }
+        shouldScrollHistoryToBottomRef.current = false;
         setInputError(data?.message || "历史消息加载失败");
         return;
       }
       if (!data || data.code !== 0) {
         if (data?.code === 1004) {
           // 新建会话暂无历史，保持空消息列表
+          shouldScrollHistoryToBottomRef.current = false;
           setSemiMessages([]);
           return;
         }
+        shouldScrollHistoryToBottomRef.current = false;
         setInputError(data?.message || "历史消息加载失败");
         return;
       }
       // 后端返回 data.data 才是消息列表
       const mapped = mapHistoryMessages(data.data?.data ?? []);
+      shouldScrollHistoryToBottomRef.current =
+        requestedThreadId.length > 0 && mapped.length > 0;
       setSemiMessages(mapped);
     } catch (error) {
+      shouldScrollHistoryToBottomRef.current = false;
       if (error instanceof Error && error.message) {
         setInputError(error.message);
       } else {
@@ -709,7 +722,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     } finally {
       setHistoryLoading(false);
     }
-  }, [threadId, token, userId]);
+  }, [requestedThreadId, threadId, token, userId]);
 
   useEffect(() => {
     loadHistory();
@@ -1201,6 +1214,33 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       })),
     [semiMessages]
   );
+  useLayoutEffect(() => {
+    if (!shouldScrollHistoryToBottomRef.current || historyLoading || chats.length === 0) {
+      return;
+    }
+    const dialogueContainer =
+      dialogueWrapperRef.current?.querySelector<HTMLElement>(
+        ".semi-ai-chat-dialogue-list"
+      ) ?? null;
+    if (!dialogueContainer) {
+      return;
+    }
+    dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+    let secondFrameId = 0;
+    const firstFrameId = window.requestAnimationFrame(() => {
+      dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+      secondFrameId = window.requestAnimationFrame(() => {
+        dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+        shouldScrollHistoryToBottomRef.current = false;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [chats.length, historyLoading]);
   const showHistorySkeleton = historyLoading && chats.length === 0;
   const showEmptyState =
     !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
@@ -1604,14 +1644,16 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                   </div>
                 </div>
               ) : (
-                <AIChatDialogue
-                  align="leftRight"
-                  mode="bubble"
-                  chats={chats}
-                  renderDialogueContentItem={renderDialogueContentItem}
-                  roleConfig={roleConfig}
-                  className="h-full"
-                />
+                <div ref={dialogueWrapperRef} className="h-full">
+                  <AIChatDialogue
+                    align="leftRight"
+                    mode="bubble"
+                    chats={chats}
+                    renderDialogueContentItem={renderDialogueContentItem}
+                    roleConfig={roleConfig}
+                    className="h-full"
+                  />
+                </div>
               )}
             </div>
             <div className="border-t border-[rgba(226,232,240,0.88)] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.98))] px-4 py-3 md:px-5 md:py-4">
