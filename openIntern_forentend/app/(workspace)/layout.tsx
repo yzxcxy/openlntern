@@ -499,6 +499,7 @@ export default function WorkspaceLayout({
   const avatarLabel = displayName ? displayName.slice(0, 1) : "U";
   const isA2ui = pathname === "/a2ui";
   const isChat = pathname === "/chat";
+  const isAgent = pathname.startsWith("/agents");
   const isSkill = pathname.startsWith("/skills");
   const isPlugin = pathname.startsWith("/plugins");
   const isKB = pathname === "/kb";
@@ -642,6 +643,42 @@ export default function WorkspaceLayout({
                             </svg>
                           </span>
                           <span className="truncate text-[13px] font-semibold">A2UI 管理</span>
+                        </span>
+                        <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
+                          <svg
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 5l6 7-6 7" />
+                          </svg>
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => router.push("/agents")}
+                        className={quickEntryClass(isAgent)}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="sidebar-quick-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border text-[var(--color-action-primary)]">
+                            <svg
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" />
+                              <path d="M12 7l4 2.3v5.4L12 17l-4-2.3V9.3L12 7z" />
+                            </svg>
+                          </span>
+                          <span className="truncate text-[13px] font-semibold">Agent 市场</span>
                         </span>
                         <span className="sidebar-quick-meta flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[var(--color-text-muted)]">
                           <svg

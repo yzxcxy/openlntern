@@ -50,7 +50,8 @@ func ChatSSE(c *gin.Context) {
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	c.Stream(func(w io.Writer) bool {
-		if err := agentsvc.RunAgent(c.Request.Context(), w, &input); err != nil {
+		runtimeCtx := agentsvc.WithOwnerID(c.Request.Context(), ownerID)
+		if err := agentsvc.RunAgent(runtimeCtx, w, &input); err != nil {
 			if isBenignSSECloseError(err) {
 				log.Printf("ChatSSE client disconnected thread_id=%s run_id=%s client_ip=%s err=%v", input.ThreadID, input.RunID, c.ClientIP(), err)
 			} else {

@@ -29,6 +29,20 @@ func SetupRouter() *gin.Engine {
 	r.POST("/v1/chat/sse", middleware.AuthRequired(), controllers.ChatSSE)
 	r.POST("/v1/chat/uploads", middleware.AuthRequired(), controllers.UploadChatAsset)
 
+	agentGroup := r.Group("/v1/agents", middleware.AuthRequired())
+	{
+		agentGroup.POST("", controllers.CreateAgent)
+		agentGroup.GET("/debug/sse", controllers.DebugAgentSSEInfo)
+		agentGroup.POST("/debug/sse", controllers.DebugAgentSSE)
+		agentGroup.GET("", controllers.ListAgents)
+		agentGroup.GET("/enabled-options", controllers.ListEnabledAgentOptions)
+		agentGroup.GET("/:id", controllers.GetAgent)
+		agentGroup.PUT("/:id", controllers.UpdateAgent)
+		agentGroup.POST("/:id/enable", controllers.EnableAgent)
+		agentGroup.POST("/:id/disable", controllers.DisableAgent)
+		agentGroup.DELETE("/:id", controllers.DeleteAgent)
+	}
+
 	// User routes
 	userGroup := r.Group("/v1/users", middleware.AuthRequired())
 	{

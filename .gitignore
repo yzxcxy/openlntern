@@ -3,3 +3,4 @@
 .venv/
 # eino framework source (AI coding reference — see eino_setup.sh)
 _eino/
+.codex/

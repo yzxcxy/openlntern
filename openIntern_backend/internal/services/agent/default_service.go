@@ -50,6 +50,11 @@ func RunAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) erro
 	return defaultService.RunAgent(ctx, w, input)
 }
 
+// RunDebugAgent runs the transient editor-side agent debug entry.
+func RunDebugAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput) error {
+	return defaultService.RunDebugAgent(ctx, w, input)
+}
+
 // InitEino initializes the default agent service runtime dependencies.
 func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	return defaultService.InitEino(cfg, summaryCfg, toolsCfg, compressionCfg, apmCfg)

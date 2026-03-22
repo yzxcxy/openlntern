@@ -96,6 +96,14 @@ type ChatContentProps = {
   userAvatar: string;
 };
 
+type EnabledAgentOption = {
+  agent_id: string;
+  name: string;
+  description?: string;
+  agent_type: "single" | "supervisor";
+  default_model_id?: string;
+};
+
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -132,6 +140,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [availableModels, setAvailableModels] = useState<ModelCatalogOption[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
+  const [enabledAgents, setEnabledAgents] = useState<EnabledAgentOption[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [agentModelBackfilled, setAgentModelBackfilled] = useState(false);
   const [pluginMode, setPluginMode] = useState<"select" | "search">("select");
   const [availablePlugins, setAvailablePlugins] = useState<ChatPluginOption[]>([]);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
@@ -473,9 +484,44 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     };
   }, [token, userId]);
 
+  useEffect(() => {
+    let active = true;
+    const loadEnabledAgents = async () => {
+      if (!token) return;
+      try {
+        const data = await requestBackend<EnabledAgentOption[]>("/v1/agents/enabled-options", {
+          fallbackMessage: "Agent 列表加载失败",
+          router,
+          userId,
+        });
+        const nextItems = Array.isArray(data.data) ? data.data : [];
+        if (!active) return;
+        setEnabledAgents(nextItems);
+        setSelectedAgentId((current) => {
+          if (current && nextItems.some((item) => item.agent_id === current)) {
+            return current;
+          }
+          return "";
+        });
+      } catch {
+        if (!active) return;
+        setEnabledAgents([]);
+        setSelectedAgentId("");
+      }
+    };
+    void loadEnabledAgents();
+    return () => {
+      active = false;
+    };
+  }, [token, userId]);
+
   const selectedModelOption = useMemo(
     () => availableModels.find((item) => item.model_id === selectedModelId) ?? null,
     [availableModels, selectedModelId]
+  );
+  const selectedAgentOption = useMemo(
+    () => enabledAgents.find((item) => item.agent_id === selectedAgentId) ?? null,
+    [enabledAgents, selectedAgentId]
   );
   const selectedToolIdSet = useMemo(
     () => new Set(selectedToolIds),
@@ -1373,8 +1419,46 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       if (nextMode !== "chat") {
         closePluginPanel();
       }
+      if (nextMode === "agent" && !selectedAgentId && enabledAgents.length > 0) {
+        const firstAgent = enabledAgents[0];
+        if (!firstAgent) {
+          return;
+        }
+        setSelectedAgentId(firstAgent.agent_id);
+        const fallbackModel =
+          (typeof firstAgent.default_model_id === "string" && firstAgent.default_model_id.trim()) ||
+          availableModels.find((item) => item.is_system_default)?.model_id ||
+          availableModels[0]?.model_id ||
+          "";
+        if (fallbackModel) {
+          const matchedModel = availableModels.find((item) => item.model_id === fallbackModel);
+          setSelectedModelId(fallbackModel);
+          setSelectedProviderId(matchedModel?.provider_id ?? "");
+          setAgentModelBackfilled(true);
+        }
+      }
     },
-    [closePluginPanel]
+    [availableModels, closePluginPanel, enabledAgents, selectedAgentId]
+  );
+
+  const handleAgentChange = useCallback(
+    (nextAgentId: string) => {
+      setSelectedAgentId(nextAgentId);
+      const nextAgent = enabledAgents.find((item) => item.agent_id === nextAgentId) ?? null;
+      const fallbackModelID =
+        (typeof nextAgent?.default_model_id === "string" && nextAgent.default_model_id.trim()) ||
+        availableModels.find((item) => item.is_system_default)?.model_id ||
+        availableModels[0]?.model_id ||
+        "";
+      if (!fallbackModelID) {
+        return;
+      }
+      const nextModel = availableModels.find((item) => item.model_id === fallbackModelID);
+      setSelectedModelId(fallbackModelID);
+      setSelectedProviderId(nextModel?.provider_id ?? "");
+      setAgentModelBackfilled(true);
+    },
+    [availableModels, enabledAgents]
   );
 
   const handlePluginModeChange = useCallback(
@@ -1406,18 +1490,24 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       <ChatModeConfigureArea
         conversationMode={conversationMode}
         pluginMode={pluginMode}
+        selectedAgentId={selectedAgentId}
+        agentOptions={enabledAgents}
         selectedToolCount={selectedToolIds.length}
         onConversationModeChange={handleConversationModeChange}
+        onAgentChange={handleAgentChange}
         onPluginModeChange={handlePluginModeChange}
         onOpenPluginPanel={openPluginPanel}
       />
     ),
     [
       conversationMode,
+      enabledAgents,
+      handleAgentChange,
       handleConversationModeChange,
       handlePluginModeChange,
       openPluginPanel,
       pluginMode,
+      selectedAgentId,
       selectedToolIds.length,
     ]
   );
@@ -1435,6 +1525,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
           const nextItem = availableModels.find((item) => item.model_id === nextModelId);
           setSelectedModelId(nextModelId);
           setSelectedProviderId(nextItem?.provider_id ?? "");
+          if (conversationMode === "agent") {
+            setAgentModelBackfilled(false);
+          }
         }}
         onOpenUploadPicker={handleOpenUploadPicker}
         uploadDisabled={agent.isRunning || uploading}
@@ -1461,10 +1554,6 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         setInputError("附件上传中，请稍候");
         return;
       }
-      if (conversationMode === "agent") {
-        setInputError("Agent 模式暂未开放");
-        return;
-      }
       if (!selectedModelOption) {
         setInputError("请先配置模型服务并选择模型");
         return;
@@ -1472,6 +1561,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       const inputContents = payload?.inputContents ?? [];
       const text = extractInputPlainText(inputContents as AIChatInputContent[]);
       const textExists = text.trim().length > 0;
+      if (conversationMode === "agent" && !selectedAgentId) {
+        setInputError("请选择 Agent");
+        return;
+      }
       if (!textExists && pendingUploads.length === 0) {
         setInputError("请输入内容或上传附件");
         return;
@@ -1513,18 +1606,24 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         .runAgent({
           forwardedProps: {
             contextSelections: {
-              skills: selectedMentions
-                .filter((item) => item.type === "skill")
-                .map((item) => ({
-                  id: item.id,
-                  name: item.name,
-                })),
-              knowledgeBases: selectedMentions
-                .filter((item) => item.type === "kb")
-                .map((item) => ({
-                  id: item.id,
-                  name: item.name,
-                })),
+              skills:
+                conversationMode === "agent"
+                  ? []
+                  : selectedMentions
+                      .filter((item) => item.type === "skill")
+                      .map((item) => ({
+                        id: item.id,
+                        name: item.name,
+                      })),
+              knowledgeBases:
+                conversationMode === "agent"
+                  ? []
+                  : selectedMentions
+                      .filter((item) => item.type === "kb")
+                      .map((item) => ({
+                        id: item.id,
+                        name: item.name,
+                      })),
             },
             agentConfig: {
               conversation: {
@@ -1538,7 +1637,11 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                 mode: pluginMode,
                 selectedToolIds: pluginMode === "select" ? selectedToolIds : [],
               },
-              features: {},
+              features: {
+                selectedAgentId: conversationMode === "agent" ? selectedAgentId : "",
+                agentMode: conversationMode === "agent",
+                agentModelBackfilled,
+              },
             },
           },
         })
@@ -1562,9 +1665,11 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       clearPendingUploads,
       clearUploadError,
       closeMentionMenu,
+      agentModelBackfilled,
       conversationMode,
       pluginMode,
       restorePendingUploads,
+      selectedAgentId,
       selectedModelOption,
       selectedMentions,
       selectedProviderId,

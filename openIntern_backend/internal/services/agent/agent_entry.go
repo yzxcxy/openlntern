@@ -8,7 +8,6 @@ import (
 	"openIntern/internal/models"
 	"openIntern/internal/services/agent/agui"
 	builtinTool "openIntern/internal/services/builtin_tool"
-	"strings"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
@@ -57,15 +56,13 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		log.Printf("RunAgent forwarded props handle failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	if runtimeConfig != nil && strings.EqualFold(runtimeConfig.Conversation.Mode, "agent") {
-		err := fmt.Errorf("agent mode is not available yet")
-		_ = sender.Error(err.Error(), "agent_mode_not_available")
-		return err
-	}
-	preparedInput, err := injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, mergedInput)
-	if err != nil {
-		log.Printf("RunAgent memory retrieval failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
-		preparedInput = mergedInput
+	preparedInput := mergedInput
+	if !isAgentConversationMode(runtimeConfig) {
+		preparedInput, err = injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, mergedInput)
+		if err != nil {
+			log.Printf("RunAgent memory retrieval failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
+			preparedInput = mergedInput
+		}
 	}
 	compressedInput, compressionStats, err := s.compressInputContext(ctx, preparedInput, runtimeConfig, state)
 	if err != nil {
@@ -102,7 +99,11 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyFileUploader, s.deps.FileUploader)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeySandboxBaseURL, state.sandboxBaseURL)
 
-	err = s.runEinoStreaming(ctx, sender, einoMessages, runtimeConfig, state)
+	if isAgentConversationMode(runtimeConfig) {
+		err = s.runAgentModeStreaming(ctx, sender, einoMessages, runtimeConfig, state)
+	} else {
+		err = s.runEinoStreaming(ctx, sender, einoMessages, runtimeConfig, state)
+	}
 	if err != nil {
 		_ = sender.Error(err.Error(), "eino_run_failed")
 		log.Printf("RunAgent eino run failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
@@ -169,6 +170,54 @@ func (s *Service) runEinoStreaming(ctx context.Context, sender *agui.Accumulatin
 		defer cleanup()
 	}
 	iter := runner.Run(ctx, messages)
+	for {
+		event, ok := iter.Next()
+		if !ok {
+			break
+		}
+		if event == nil {
+			continue
+		}
+		if event.Err != nil {
+			return event.Err
+		}
+		if event.Output == nil || event.Output.MessageOutput == nil {
+			continue
+		}
+		mv := event.Output.MessageOutput
+		if mv.IsStreaming {
+			if err := streamMessageVariant(sender, mv); err != nil {
+				return err
+			}
+			continue
+		}
+		msg, err := mv.GetMessage()
+		if err != nil {
+			return err
+		}
+		if msg == nil {
+			continue
+		}
+		if err := agui.SendEinoMessagesAsAGUI(sender, []*schema.Message{msg}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runAgentModeStreaming compiles the selected agent tree and streams events through the shared AGUI sender.
+func (s *Service) runAgentModeStreaming(ctx context.Context, sender *agui.AccumulatingSender, messages []*schema.Message, runtimeConfig *AgentRuntimeConfig, state runtimeState) error {
+	if len(messages) == 0 {
+		return nil
+	}
+	compiled, err := s.buildAgentModeRunner(ctx, runtimeConfig, state)
+	if err != nil {
+		return err
+	}
+	if compiled.cleanup != nil {
+		defer compiled.cleanup()
+	}
+	iter := compiled.runner.Run(ctx, messages)
 	for {
 		event, ok := iter.Next()
 		if !ok {
