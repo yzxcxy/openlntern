@@ -1294,7 +1294,7 @@ function AgentEditorContent({
         ) : null}
 
         <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(360px,1fr)_minmax(420px,1.2fr)]">
-          <section className="workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4">
+          <section className="chat-page workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-[var(--color-text-primary)]">基本信息</div>
               <UiButton variant="secondary" size="sm" onClick={() => setMoreOptionsOpen(true)}>
