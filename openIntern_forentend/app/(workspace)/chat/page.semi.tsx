@@ -1939,12 +1939,6 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
               )}
             </div>
             <div className="border-t border-[rgba(126,96,69,0.12)] bg-[linear-gradient(180deg,rgba(255,252,247,0.9),rgba(247,237,227,0.96))] px-4 py-3 md:px-5 md:py-4">
-              {agent.isRunning && (
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
-                  AI 正在生成回复
-                </div>
-              )}
               <div className="relative" onKeyDownCapture={handleMentionKeyDownCapture}>
                 <button
                   type="button"

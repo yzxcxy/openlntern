@@ -1500,12 +1500,6 @@ function AgentEditorContent({
               )}
             </div>
             <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,252,247,0.9),rgba(247,237,227,0.96))] p-3">
-              {chatRunning ? (
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
-                  AI 正在生成回复
-                </div>
-              ) : null}
               <div className="relative">
                 <ChatComposerAssist
                   mentionOpen={false}
