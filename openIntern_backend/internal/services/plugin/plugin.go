@@ -21,9 +21,10 @@ const (
 	pluginSourceCustom  = "custom"
 	pluginSourceBuiltin = "builtin"
 
-	pluginRuntimeAPI  = "api"
-	pluginRuntimeMCP  = "mcp"
-	pluginRuntimeCode = "code"
+	pluginRuntimeAPI     = "api"
+	pluginRuntimeMCP     = "mcp"
+	pluginRuntimeCode    = "code"
+	pluginRuntimeBuiltin = "builtin"
 
 	mcpProtocolSSE            = "sse"
 	mcpProtocolStreamableHTTP = "streamableHttp"
@@ -156,6 +157,9 @@ func InitPlugin(cfg config.PluginConfig) {
 	pluginDefaultIconURL = strings.TrimSpace(cfg.DefaultIconURL)
 	initPluginMCPSync(cfg)
 	initPluginOpenVikingSync(cfg)
+	if err := ensureBuiltinPlugins(cfg.BuiltinManifestPath); err != nil {
+		panic(fmt.Errorf("ensure builtin plugins failed: %w", err))
+	}
 }
 
 func GetDefaultPluginIconURL() string {

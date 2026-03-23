@@ -59,6 +59,8 @@ const getRuntimeTypeLabel = (runtimeType: string) => {
       return "MCP";
     case "code":
       return "Code";
+    case "builtin":
+      return "内建";
     default:
       return normalized ? normalized.toUpperCase() : "PLUGIN";
   }

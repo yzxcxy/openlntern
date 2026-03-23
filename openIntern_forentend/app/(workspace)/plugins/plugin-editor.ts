@@ -1,6 +1,6 @@
 // 插件编辑页的纯类型和纯函数集中到这里，避免页面文件继续堆叠领域逻辑。
 
-export type RuntimeType = "" | "api" | "mcp" | "code";
+export type RuntimeType = "" | "api" | "mcp" | "code" | "builtin";
 export type ResponseMode = "" | "streaming" | "non_streaming";
 export type RequestType = "GET" | "POST";
 export type FieldType =
@@ -174,6 +174,7 @@ export const runtimeLabel: Record<Exclude<RuntimeType, "">, string> = {
   api: "API",
   mcp: "MCP",
   code: "Code",
+  builtin: "内建",
 };
 
 export const responseModeLabel: Record<Exclude<ResponseMode, "">, string> = {
@@ -201,6 +202,8 @@ export const getRuntimeBadgeClassName = (runtimeType?: RuntimeType) => {
       return "border-[rgba(13,148,136,0.18)] bg-[rgba(20,184,166,0.12)] text-[rgb(15,118,110)]";
     case "code":
       return "border-[rgba(234,88,12,0.18)] bg-[rgba(249,115,22,0.12)] text-[rgb(194,65,12)]";
+    case "builtin":
+      return "border-[rgba(202,138,4,0.18)] bg-[rgba(234,179,8,0.12)] text-[rgb(161,98,7)]";
     default:
       return "border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)]";
   }

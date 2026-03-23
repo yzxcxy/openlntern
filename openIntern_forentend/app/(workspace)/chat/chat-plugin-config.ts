@@ -1,7 +1,7 @@
 export const MAX_SELECTED_TOOLS = 40;
 export const PLUGIN_PAGE_SIZE = 6;
 export const PLUGIN_PAGE_SIZE_OPTIONS = [6, 12, 24];
-export const KNOWN_PLUGIN_RUNTIME_TYPES = ["api", "mcp", "code"];
+export const KNOWN_PLUGIN_RUNTIME_TYPES = ["api", "mcp", "code", "builtin"];
 
 export type ChatPluginToolOption = {
   tool_id?: string;

@@ -252,16 +252,7 @@ func (c *agentModeCompiler) buildTools(detail *AgentDetailView, depth int) ([]ei
 }
 
 func (c *agentModeCompiler) buildBuiltinTools() ([]einoTool.BaseTool, func(), error) {
-	// Agent 模式仍需注入平台级内建能力，保证 A2UI、文件上传和沙箱执行在
-	// 正式会话与编辑页测试链路中保持一致；Skill 相关工具仍然只按显式绑定注入。
-	a2uiTools, err := builtinTool.GetA2UITools(c.ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	cosTools, err := builtinTool.GetCOSTools(c.ctx)
-	if err != nil {
-		return nil, nil, err
-	}
+	// Agent 模式默认只注入沙箱工具；A2UI/COS 通过内建插件显式绑定后再进入运行时。
 	sandboxTools, sandboxCleanup, err := builtinTool.GetSandboxMCPTools(c.ctx, c.state.sandboxBaseURL)
 	if err != nil {
 		if sandboxCleanup != nil {
@@ -269,16 +260,16 @@ func (c *agentModeCompiler) buildBuiltinTools() ([]einoTool.BaseTool, func(), er
 		}
 		return nil, nil, err
 	}
-	tools := make([]einoTool.BaseTool, 0, len(a2uiTools)+len(cosTools)+len(sandboxTools))
-	tools = append(tools, a2uiTools...)
-	tools = append(tools, cosTools...)
-	tools = append(tools, sandboxTools...)
-	return tools, sandboxCleanup, nil
+	return append([]einoTool.BaseTool{}, sandboxTools...), sandboxCleanup, nil
 }
 
 func (c *agentModeCompiler) buildPluginTools(toolIDs []string) ([]einoTool.BaseTool, func(), error) {
 	if len(toolIDs) == 0 {
 		return nil, nil, nil
+	}
+	builtinTools, err := pluginsvc.Plugin.BuildRuntimeBuiltinTools(c.ctx, toolIDs)
+	if err != nil {
+		return nil, nil, err
 	}
 	codeTools, err := pluginsvc.Plugin.BuildRuntimeCodeTools(c.ctx, toolIDs)
 	if err != nil {
@@ -295,7 +286,8 @@ func (c *agentModeCompiler) buildPluginTools(toolIDs []string) ([]einoTool.BaseT
 		}
 		return nil, nil, err
 	}
-	tools := make([]einoTool.BaseTool, 0, len(codeTools)+len(apiTools)+len(mcpTools))
+	tools := make([]einoTool.BaseTool, 0, len(builtinTools)+len(codeTools)+len(apiTools)+len(mcpTools))
+	tools = append(tools, builtinTools...)
 	tools = append(tools, codeTools...)
 	tools = append(tools, apiTools...)
 	tools = append(tools, mcpTools...)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
-	builtinTool "openIntern/internal/services/builtin_tool"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	pluginsvc "openIntern/internal/services/plugin"
 	"strings"
@@ -61,14 +60,6 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 	}
 	pluginsvc.SetSandboxBaseURL(sandboxBaseURL)
 
-	a2uiTools, err := builtinTool.GetA2UITools(ctx)
-	if err != nil {
-		return nil, err
-	}
-	cosTools, err := builtinTool.GetCOSTools(ctx)
-	if err != nil {
-		return nil, err
-	}
 	skillBackend, err := skillmiddleware.NewRemoteBackend(dao.SkillStore, s.deps.SkillFrontmatterStore)
 	if err != nil {
 		return nil, err
@@ -88,9 +79,8 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 		return nil, err
 	}
 
-	allTools := append([]einoTool.BaseTool{}, a2uiTools...)
-	allTools = append(allTools, cosTools...)
-	allTools = append(allTools, skillTools...)
+	// A2UI/COS 已切换为内建插件显式绑定，这里只保留全局默认可用的 Skill 工具。
+	allTools := append([]einoTool.BaseTool{}, skillTools...)
 
 	s.setState(runtimeState{
 		apmplusShutdown:     shutdown,

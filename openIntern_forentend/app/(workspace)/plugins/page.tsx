@@ -573,6 +573,7 @@ export default function PluginsPage() {
                 >
                   <option value="">全部类型</option>
                   <option value="api">API</option>
+                  <option value="builtin">内建</option>
                   <option value="mcp">MCP</option>
                   <option value="code">Code</option>
                 </UiSelect>

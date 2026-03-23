@@ -97,6 +97,15 @@ func (s *Service) resolveRuntimeToolSet(ctx context.Context, runtimeConfig *Agen
 		if len(runtimeConfig.Plugins.SelectedToolIDs) == 0 {
 			return finalizeRuntimeToolSet(ctx, resolved)
 		}
+		// 内建插件不进入动态搜索池，只在显式选中后直接挂到静态工具集合中。
+		builtinTools, err := pluginsvc.Plugin.BuildRuntimeBuiltinTools(ctx, runtimeConfig.Plugins.SelectedToolIDs)
+		if err != nil {
+			if resolved.cleanup != nil {
+				resolved.cleanup()
+			}
+			return nil, err
+		}
+		resolved.staticTools = append(resolved.staticTools, builtinTools...)
 	default:
 		return finalizeRuntimeToolSet(ctx, resolved)
 	}

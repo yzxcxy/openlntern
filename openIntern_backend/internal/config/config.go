@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -46,6 +47,7 @@ type COSConfig struct {
 }
 
 type PluginConfig struct {
+	BuiltinManifestPath          string `yaml:"builtin_manifest_path"`
 	DefaultIconURL               string `yaml:"default_icon_url"`
 	MCPSyncDelaySeconds          int    `yaml:"mcp_sync_delay_seconds"`
 	MCPSyncPollSeconds           int    `yaml:"mcp_sync_poll_seconds"`
@@ -131,6 +133,10 @@ func LoadConfig(configFile string) *Config {
 	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		log.Fatalf("failed to parse config.yaml: %v", err)
+	}
+	// 配置文件里的相对路径统一按 config.yaml 所在目录解析，避免不同启动目录下表现不一致。
+	if cfg.Plugin.BuiltinManifestPath != "" && !filepath.IsAbs(cfg.Plugin.BuiltinManifestPath) {
+		cfg.Plugin.BuiltinManifestPath = filepath.Join(filepath.Dir(configFile), cfg.Plugin.BuiltinManifestPath)
 	}
 	return cfg
 }
