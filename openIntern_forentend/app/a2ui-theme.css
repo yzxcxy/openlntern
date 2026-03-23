@@ -1,126 +1,131 @@
 :root {
+  /* Neutral - 暖灰色调，匹配网站整体 */
   --n-100: #ffffff;
-  --n-99: #fcfcfc;
-  --n-98: #f9f9f9;
-  --n-95: #f1f1f1;
-  --n-90: #e2e2e2;
-  --n-80: #c6c6c6;
-  --n-70: #ababab;
-  --n-60: #919191;
-  --n-50: #777777;
-  --n-40: #5e5e5e;
-  --n-35: #525252;
-  --n-30: #474747;
-  --n-25: #3b3b3b;
-  --n-20: #303030;
-  --n-15: #262626;
-  --n-10: #1b1b1b;
-  --n-5: #111111;
+  --n-99: #fffcf9;
+  --n-98: #fff9f4;
+  --n-95: #fff5ed;
+  --n-90: #f3ede2;
+  --n-80: #e6ddd0;
+  --n-70: #d4c6b5;
+  --n-60: #b8a894;
+  --n-50: #9a8872;
+  --n-40: #7a6a58;
+  --n-35: #6a5c4c;
+  --n-30: #5a4e40;
+  --n-25: #4a4034;
+  --n-20: #3a322a;
+  --n-15: #2d2822;
+  --n-10: #211e1a;
+  --n-5: #161412;
   --n-0: #000000;
 
+  /* Primary - 珊瑚色/橙红色，匹配 --color-action-primary */
   --p-100: #ffffff;
-  --p-99: #fffbff;
-  --p-98: #fcf8ff;
-  --p-95: #f2efff;
-  --p-90: #e1e0ff;
-  --p-80: #c0c1ff;
-  --p-70: #a0a3ff;
-  --p-60: #8487ea;
-  --p-50: #6a6dcd;
-  --p-40: #5154b3;
-  --p-35: #4447a6;
-  --p-30: #383b99;
-  --p-25: #2c2e8d;
-  --p-20: #202182;
-  --p-15: #131178;
-  --p-10: #06006c;
-  --p-5: #03004d;
+  --p-99: #fffcfa;
+  --p-98: #fff7f3;
+  --p-95: #fff0e8;
+  --p-90: #ffe4d6;
+  --p-80: #ffceba;
+  --p-70: #fbb093;
+  --p-60: #f08d68;
+  --p-50: #e0704a;
+  --p-40: #c76843;
+  --p-35: #b15735;
+  --p-30: #934228;
+  --p-25: #7a3621;
+  --p-20: #622a1b;
+  --p-15: #4a1f14;
+  --p-10: #34150e;
+  --p-5: #200b07;
   --p-0: #000000;
 
+  /* Secondary - 青蓝色，匹配 --color-action-secondary */
   --s-100: #ffffff;
-  --s-99: #fffbff;
-  --s-98: #fcf8ff;
-  --s-95: #f2efff;
-  --s-90: #e2e0f9;
-  --s-80: #c6c4dd;
-  --s-70: #aaa9c1;
-  --s-60: #8f8fa5;
-  --s-50: #75758b;
-  --s-40: #5d5c72;
-  --s-35: #515165;
-  --s-30: #454559;
-  --s-25: #393a4d;
-  --s-20: #2e2f42;
-  --s-15: #242437;
-  --s-10: #191a2c;
-  --s-5: #0f0f21;
+  --s-99: #fbfcfd;
+  --s-98: #f5f9fa;
+  --s-95: #ecf4f7;
+  --s-90: #d8ebee;
+  --s-80: #b3d4de;
+  --s-70: #8bbacc;
+  --s-60: #5fa3b4;
+  --s-50: #388a9c;
+  --s-40: #1f5f72;
+  --s-35: #1a5060;
+  --s-30: #16414e;
+  --s-25: #12323c;
+  --s-20: #0e252c;
+  --s-15: #0a1a1f;
+  --s-10: #071215;
+  --s-5: #040a0b;
   --s-0: #000000;
 
+  /* Tertiary - 金色，匹配 --color-accent-glow */
   --t-100: #ffffff;
-  --t-99: #fffbff;
-  --t-98: #fff8f9;
-  --t-95: #ffecf4;
-  --t-90: #ffd8ec;
-  --t-80: #e9b9d3;
-  --t-70: #cc9eb8;
-  --t-60: #af849d;
-  --t-50: #946b83;
-  --t-40: #79536a;
-  --t-35: #6c475d;
-  --t-30: #5f3c51;
-  --t-25: #523146;
-  --t-20: #46263a;
-  --t-15: #3a1b2f;
-  --t-10: #2e1125;
-  --t-5: #22071a;
+  --t-99: #fffdf8;
+  --t-98: #fffbf0;
+  --t-95: #fff6e4;
+  --t-90: #ffedce;
+  --t-80: #fde0ab;
+  --t-70: #f5ce82;
+  --t-60: #ecb85a;
+  --t-50: #d19d56;
+  --t-40: #b58440;
+  --t-35: #a27538;
+  --t-30: #8a6330;
+  --t-25: #725128;
+  --t-20: #5a3f1f;
+  --t-15: #422e17;
+  --t-10: #2d1f0f;
+  --t-5: #1a1108;
   --t-0: #000000;
 
+  /* Neutral Variant - 暖灰变体 */
   --nv-100: #ffffff;
-  --nv-99: #fffbff;
-  --nv-98: #fcf8ff;
-  --nv-95: #f2effa;
-  --nv-90: #e4e1ec;
-  --nv-80: #c8c5d0;
-  --nv-70: #acaab4;
-  --nv-60: #918f9a;
-  --nv-50: #777680;
-  --nv-40: #5e5d67;
-  --nv-35: #52515b;
-  --nv-30: #46464f;
-  --nv-25: #3b3b43;
-  --nv-20: #303038;
-  --nv-15: #25252d;
-  --nv-10: #1b1b23;
-  --nv-5: #101018;
+  --nv-99: #fdfbf8;
+  --nv-98: #faf6f0;
+  --nv-95: #f5efe6;
+  --nv-90: #ebe3d5;
+  --nv-80: #d9cdbb;
+  --nv-70: #c4b4a0;
+  --nv-60: #ab9a84;
+  --nv-50: #92806a;
+  --nv-40: #786856;
+  --nv-35: #6a5c4c;
+  --nv-30: #5c5042;
+  --nv-25: #4d4438;
+  --nv-20: #3e372e;
+  --nv-15: #302b24;
+  --nv-10: #221f1a;
+  --nv-5: #141210;
   --nv-0: #000000;
 
+  /* Error - 保持红色但略暖 */
   --e-100: #ffffff;
-  --e-99: #fffbff;
-  --e-98: #fff8f7;
-  --e-95: #ffedea;
-  --e-90: #ffdad6;
-  --e-80: #ffb4ab;
-  --e-70: #ff897d;
-  --e-60: #ff5449;
-  --e-50: #de3730;
-  --e-40: #ba1a1a;
-  --e-35: #a80710;
-  --e-30: #93000a;
-  --e-25: #7e0007;
-  --e-20: #690005;
-  --e-15: #540003;
-  --e-10: #410002;
-  --e-5: #2d0001;
+  --e-99: #fffbfa;
+  --e-98: #fff7f5;
+  --e-95: #fff0ec;
+  --e-90: #ffe2db;
+  --e-80: #ffc7ba;
+  --e-70: #fba694;
+  --e-60: #f4806a;
+  --e-50: #e35a42;
+  --e-40: #b34033;
+  --e-35: #9c382d;
+  --e-30: #852f26;
+  --e-25: #6e271f;
+  --e-20: #571f18;
+  --e-15: #401711;
+  --e-10: #2b0f0b;
+  --e-5: #180705;
   --e-0: #000000;
 
-  --primary: #137fec;
-  --text-color: #fff;
-  --background-light: #f6f7f8;
-  --background-dark: #101922;
-  --border-color: oklch(from var(--background-light) l c h / calc(alpha * 0.15));
-  --elevated-background-light: oklch(
-    from var(--background-light) l c h / calc(alpha * 0.05)
-  );
+  /* 核心品牌色 */
+  --primary: #c76843;
+  --text-color: #1f1d1a;
+  --background-light: #f3ede2;
+  --background-dark: #1f1d1a;
+  --border-color: rgba(126, 96, 69, 0.18);
+  --elevated-background-light: rgba(255, 252, 247, 0.92);
   --bb-grid-size: 4px;
   --bb-grid-size-2: calc(var(--bb-grid-size) * 2);
   --bb-grid-size-3: calc(var(--bb-grid-size) * 3);
@@ -157,4 +162,89 @@ body {
   padding: 0;
   width: 100svw;
   height: 100svh;
+}
+
+/* =========================================================================
+ * Slider 样式覆盖 - 使用品牌色
+ * ========================================================================= */
+.a2ui-surface .a2ui-slider input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--p-40) 0%,
+    var(--p-40) var(--value-percent, 50%),
+    var(--n-90) var(--value-percent, 50%),
+    var(--n-90) 100%
+  );
+  cursor: pointer;
+}
+
+.a2ui-surface .a2ui-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--p-40), var(--p-50));
+  border: 2px solid var(--p-100);
+  box-shadow: 0 2px 6px rgba(199, 104, 67, 0.3);
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.a2ui-surface .a2ui-slider input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 8px rgba(199, 104, 67, 0.4);
+}
+
+.a2ui-surface .a2ui-slider input[type="range"]::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+
+.a2ui-surface .a2ui-slider input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--p-40), var(--p-50));
+  border: 2px solid var(--p-100);
+  box-shadow: 0 2px 6px rgba(199, 104, 67, 0.3);
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.a2ui-surface .a2ui-slider input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--n-90);
+}
+
+.a2ui-surface .a2ui-slider input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--p-40);
+}
+
+/* =========================================================================
+ * 其他 A2UI 组件样式微调
+ * ========================================================================= */
+
+/* 按钮悬停效果 */
+.a2ui-surface .a2ui-button button:hover,
+.a2ui-surface .a2ui-button button:focus-visible {
+  background-color: var(--p-50) !important;
+}
+
+/* 复选框和单选按钮 */
+.a2ui-surface input[type="checkbox"]:checked,
+.a2ui-surface input[type="radio"]:checked {
+  accent-color: var(--p-40);
+}
+
+/* 进度条 */
+.a2ui-surface progress {
+  accent-color: var(--p-40);
 }

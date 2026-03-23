@@ -113,37 +113,37 @@
   .workspace-app-shell {
     position: relative;
     isolation: isolate;
-  }
-
-  .workspace-app-shell::before {
-    content: "";
-    position: absolute;
-    inset: 14px;
     border-radius: 40px;
-    border: 1px solid rgba(255, 255, 255, 0.46);
-    background: linear-gradient(180deg, rgba(255, 252, 246, 0.24), rgba(255, 252, 246, 0));
-    pointer-events: none;
+    background:
+      radial-gradient(circle at top left, rgba(209, 157, 86, 0.1), transparent 30%),
+      linear-gradient(180deg, rgba(255, 252, 248, 0.9), rgba(248, 239, 228, 0.8)),
+      rgba(255, 249, 242, 0.76);
   }
 
-  .workspace-main-shell {
+  .workspace-sidebar-shell {
     position: relative;
     overflow: hidden;
-    border-radius: 36px;
-    border: 1px solid var(--color-border-default);
-    background:
-      linear-gradient(180deg, rgba(255, 252, 247, 0.78), rgba(255, 248, 240, 0.58)),
-      rgba(255, 250, 244, 0.66);
-    box-shadow: var(--shadow-lg);
     backdrop-filter: blur(22px);
   }
 
-  .workspace-main-shell::before {
+  .workspace-sidebar-shell {
+    border-radius: 34px;
+    border: 1px solid rgba(126, 96, 69, 0.14);
+    border-right-color: rgba(126, 96, 69, 0.06);
+    background:
+      radial-gradient(circle at top left, rgba(209, 157, 86, 0.1), transparent 30%),
+      linear-gradient(180deg, rgba(255, 252, 248, 0.9), rgba(248, 239, 228, 0.8)),
+      rgba(255, 249, 242, 0.76);
+    box-shadow: 0 26px 64px rgba(48, 32, 16, 0.12);
+  }
+
+  .workspace-sidebar-shell::before {
     content: "";
     position: absolute;
     inset: 0;
     background:
-      linear-gradient(90deg, rgba(255, 255, 255, 0.2), transparent 25%),
-      radial-gradient(circle at top right, rgba(209, 157, 86, 0.08), transparent 28%);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 22%),
+      radial-gradient(circle at top right, rgba(209, 157, 86, 0.06), transparent 28%);
     pointer-events: none;
   }
 
@@ -151,10 +151,24 @@
     overflow: hidden;
     border-radius: var(--radius-xl);
     border: 1px solid rgba(126, 96, 69, 0.12);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(18px);
   }
 
+  /* Visually merge the main panel into the sidebar edge instead of creating a second seam. */
+  .workspace-main-content > .workspace-gradient-surface {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left-color: transparent;
+  }
+
+  /* Collapse the inner card chrome so the page surface renders as a single panel. */
   .workspace-gradient-surface > .workspace-panel-card {
+    min-height: 100%;
     border-radius: inherit;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .workspace-gradient-surface,
@@ -229,9 +243,9 @@
 
   .workspace-gradient-surface--panel {
     background:
-      radial-gradient(circle at top right, rgba(31, 95, 114, 0.07), transparent 28%),
-      radial-gradient(circle at top left, rgba(199, 104, 67, 0.08), transparent 22%),
-      linear-gradient(180deg, rgba(255, 252, 247, 0.82), rgba(255, 248, 240, 0.92));
+      radial-gradient(circle at top right, rgba(31, 95, 114, 0.05), transparent 30%),
+      radial-gradient(circle at top left, rgba(199, 104, 67, 0.06), transparent 24%),
+      linear-gradient(180deg, rgba(255, 252, 247, 0.9), rgba(250, 242, 232, 0.88));
   }
 
   .workspace-panel-card {

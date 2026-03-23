@@ -6,7 +6,6 @@ import {
   useMemo,
   useState,
   type MouseEvent,
-  type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -15,25 +14,8 @@ import {
 } from "../auth";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
-import {
-  Card,
-  List,
-  Space,
-  Spin,
-  Tree,
-  Typography,
-  Upload,
-} from "@douyinfe/semi-ui-19";
 import { UiConfirmDialog as ConfirmDialog } from "../../components/ui/UiConfirmDialog";
 import { UiModal as Modal } from "../../components/ui/UiModal";
-import {
-  IconDelete,
-  IconFolder,
-  IconFile,
-  IconPlus,
-  IconRefresh,
-  IconUpload,
-} from "@douyinfe/semi-icons";
 
 type KnowledgeBase = {
   name?: string;
@@ -61,8 +43,6 @@ type SelectedNode = {
   path: string;
   isDir: boolean;
 };
-
-const API_BASE = "/api/backend";
 
 const buildNodeKey = (segments: string[], isDir: boolean) => {
   if (segments.length === 0) return "";
@@ -289,6 +269,247 @@ const buildUri = (kbName: string, relPath: string) => {
   return `${base}${normalized}`;
 };
 
+const joinClasses = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
+
+// Folder Icon
+const IconFolder = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+// File Icon
+const IconFile = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+  </svg>
+);
+
+// Plus Icon
+const IconPlus = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+// Refresh Icon
+const IconRefresh = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+    <path d="M21 3v6h-6" />
+  </svg>
+);
+
+// Upload Icon
+const IconUpload = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+// Delete Icon
+const IconDelete = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
+// Eye Icon for preview
+const IconEye = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+// Chevron Icon for tree expand/collapse
+const IconChevron = ({ className, expanded }: { className?: string; expanded?: boolean }) => (
+  <svg
+    className={joinClasses(className, "transition-transform duration-200", expanded && "rotate-90")}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+
+// Tree Item Component
+const TreeItem = ({
+  node,
+  level,
+  selectedNode,
+  onSelect,
+  onDelete,
+  onPreview,
+  expandedNodes,
+  toggleExpand,
+}: {
+  node: TreeNode;
+  level: number;
+  selectedNode: SelectedNode | null;
+  onSelect: (node: TreeNode) => void;
+  onDelete: (node: TreeNode) => void;
+  onPreview: (node: TreeNode) => void;
+  expandedNodes: Set<string>;
+  toggleExpand: (key: string) => void;
+}) => {
+  const isSelected = selectedNode?.path === node.path;
+  const isExpanded = expandedNodes.has(node.key);
+  const hasChildren = node.children && node.children.length > 0;
+
+  const handleClick = () => {
+    onSelect(node);
+    if (node.isDir && hasChildren) {
+      toggleExpand(node.key);
+    }
+  };
+
+  const handleDoubleClick = () => {
+    if (!node.isDir) {
+      onPreview(node);
+    }
+  };
+
+  return (
+    <div>
+      <div
+        className={joinClasses(
+          "group flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] px-2 py-2 transition-colors",
+          isSelected
+            ? "border-[rgba(199,104,67,0.18)] bg-[linear-gradient(135deg,rgba(255,247,240,0.98),rgba(245,231,219,0.78))] text-[var(--color-text-primary)]"
+            : "text-[var(--color-text-secondary)] hover:bg-[rgba(255,252,247,0.9)]"
+        )}
+        style={{ paddingLeft: `${level * 16 + 8}px` }}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+      >
+        {node.isDir ? (
+          <>
+            {hasChildren && (
+              <IconChevron className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" expanded={isExpanded} />
+            )}
+            {!hasChildren && <span className="w-4" />}
+            <IconFolder className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" />
+          </>
+        ) : (
+          <>
+            <span className="w-4" />
+            <IconFile className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" />
+          </>
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm">{node.label}</span>
+        {!node.isDir && (
+          <UiButton
+            variant="ghost"
+            size="sm"
+            className="opacity-0 group-hover:opacity-100"
+            onClick={(e: MouseEvent) => {
+              e.stopPropagation();
+              onPreview(node);
+            }}
+          >
+            <IconEye className="h-4 w-4" />
+          </UiButton>
+        )}
+        <UiButton
+          variant="ghost"
+          size="sm"
+          className="opacity-0 group-hover:opacity-100"
+          onClick={(e: MouseEvent) => {
+            e.stopPropagation();
+            onDelete(node);
+          }}
+        >
+          <IconDelete className="h-4 w-4" />
+        </UiButton>
+      </div>
+      {node.isDir && hasChildren && isExpanded && (
+        <div>
+          {node.children!.map((child) => (
+            <TreeItem
+              key={child.key}
+              node={child}
+              level={level + 1}
+              selectedNode={selectedNode}
+              onSelect={onSelect}
+              onDelete={onDelete}
+              onPreview={onPreview}
+              expandedNodes={expandedNodes}
+              toggleExpand={toggleExpand}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function KnowledgeBasePage() {
   const router = useRouter();
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
@@ -297,6 +518,7 @@ export default function KnowledgeBasePage() {
   const [selectedKb, setSelectedKb] = useState("");
   const [treeEntries, setTreeEntries] = useState<TreeEntry[]>([]);
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [createVisible, setCreateVisible] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createFile, setCreateFile] = useState<File | null>(null);
@@ -309,6 +531,13 @@ export default function KnowledgeBasePage() {
   const [pendingEntry, setPendingEntry] = useState<TreeNode | null>(null);
   const [deletingKb, setDeletingKb] = useState(false);
   const [deletingEntry, setDeletingEntry] = useState(false);
+
+  // File preview state
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewNode, setPreviewNode] = useState<TreeNode | null>(null);
+  const [previewContent, setPreviewContent] = useState<string>("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
 
   const showError = (message: string) => {
     setErrorMessage(message);
@@ -361,7 +590,21 @@ export default function KnowledgeBasePage() {
             router,
           }
         );
-        setTreeEntries(normalizeTreeEntries(data.data, kbName));
+        const entries = normalizeTreeEntries(data.data, kbName);
+        setTreeEntries(entries);
+        // Auto expand all nodes
+        const allKeys = new Set<string>();
+        const collectKeys = (nodes: TreeNode[]) => {
+          nodes.forEach((n) => {
+            if (n.isDir) {
+              allKeys.add(n.key);
+              if (n.children) collectKeys(n.children);
+            }
+          });
+        };
+        const treeNodes = buildTreeNodes(entries, kbName);
+        collectKeys(treeNodes);
+        setExpandedNodes(allKeys);
       } catch (err) {
         const message = err instanceof Error ? err.message : "获取知识库文件失败";
         showError(message);
@@ -390,23 +633,6 @@ export default function KnowledgeBasePage() {
     () => buildTreeNodes(treeEntries, selectedKb),
     [treeEntries, selectedKb]
   );
-  const kbStats = useMemo(() => {
-    let folders = 0;
-    let files = 0;
-
-    treeEntries.forEach((entry) => {
-      if (entry.isDir) {
-        folders += 1;
-      } else {
-        files += 1;
-      }
-    });
-
-    return {
-      folders,
-      files,
-    };
-  }, [treeEntries]);
 
   const resetCreateModal = useCallback(() => {
     setCreateVisible(false);
@@ -505,44 +731,6 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const handleMove = async (
-    draggingNode: TreeNode,
-    targetNode: TreeNode,
-    dropToGap: boolean
-  ) => {
-    if (!selectedKb) return;
-    if (!getValidToken()) return;
-    const fromPath = draggingNode.path;
-    const dragBase = getBaseName(fromPath);
-    const targetDir = dropToGap
-      ? getParentDir(targetNode.path)
-      : targetNode.isDir
-      ? targetNode.path
-      : getParentDir(targetNode.path);
-    const toPath = targetDir ? `${targetDir}${dragBase}${draggingNode.isDir ? "/" : ""}` : `${dragBase}${draggingNode.isDir ? "/" : ""}`;
-    if (fromPath === toPath) return;
-    try {
-      setErrorMessage("");
-      await requestBackend("/v1/kbs/drag", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from_uri: buildUri(selectedKb, fromPath),
-          to_uri: buildUri(selectedKb, toPath),
-        }),
-        fallbackMessage: "移动失败",
-        router,
-      });
-      showSuccess("移动成功");
-      await fetchTree(selectedKb);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "移动失败";
-      showError(message);
-    }
-  };
-
   const handleUploadFile = async (file: File) => {
     if (!selectedKb) return;
     if (!getValidToken()) return;
@@ -573,282 +761,338 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const treeRenderLabel = (label?: ReactNode, treeNode?: any) => {
-    const node = treeNode as TreeNode | undefined;
-    const displayLabel = typeof label === "string" ? label : node?.label ?? "";
-    if (!node) return <span>{displayLabel}</span>;
-    const isSelected = selectedNode?.path === node.path;
-    return (
-      <div
-        data-kb-tree-node="true"
-        className={`group flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-1 py-1 ${
-          isSelected
-            ? "bg-[linear-gradient(90deg,rgba(37,99,255,0.12),rgba(37,99,255,0.04))] text-[var(--color-text-primary)]"
-            : "text-[var(--color-text-secondary)]"
-        }`}
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {node.isDir ? <IconFolder /> : <IconFile />}
-          <span className="truncate">{displayLabel}</span>
-        </span>
-        <UiButton
-          provider="semi"
-          variant="danger"
-          size="sm"
-          className="opacity-70 motion-safe-highlight group-hover:opacity-100"
-          onClick={(event: MouseEvent) => {
-            event.stopPropagation();
-            handleDeleteEntry(node);
-          }}
-        >
-          <IconDelete />
-        </UiButton>
-      </div>
-    );
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.name.toLowerCase().endsWith(".zip") || !file.name.includes(".")) {
+        // Accept zip files or files without extension
+      }
+      handleUploadFile(file);
+    }
+  };
+
+  const toggleExpand = (key: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // File type detection
+  const getFileType = (filename: string): "text" | "image" | "binary" => {
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const textExts = ["txt", "md", "json", "yaml", "yml", "xml", "html", "css", "js", "ts", "jsx", "tsx", "py", "go", "java", "c", "cpp", "h", "sh", "bash", "zsh", "sql", "csv", "log", "conf", "ini", "toml", "env", "gitignore", "dockerfile", "makefile", "rst", "adoc", "tex", "vue", "svelte", "scss", "sass", "less"];
+    const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp"];
+
+    if (imageExts.includes(ext)) return "image";
+    if (textExts.includes(ext) || !ext) return "text";
+    return "binary";
+  };
+
+  // Fetch file content for preview
+  const fetchFileContent = useCallback(async (node: TreeNode) => {
+    if (!selectedKb || !node.path) return;
+
+    const fileType = getFileType(node.label);
+    if (fileType === "binary") {
+      setPreviewError("该文件类型暂不支持预览");
+      setPreviewContent("");
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewError("");
+    setPreviewContent("");
+
+    try {
+      const uri = buildUri(selectedKb, node.path);
+      const params = new URLSearchParams();
+      params.set("uri", uri);
+
+      const data = await requestBackend<{ content?: string; url?: string }>(
+        `/v1/kbs/entry/content?${params.toString()}`,
+        {
+          router,
+          fallbackMessage: "获取文件内容失败",
+        }
+      );
+
+      if (fileType === "image") {
+        // For images, we might get a URL or base64 content
+        if (data.data?.url) {
+          setPreviewContent(data.data.url);
+        } else if (data.data?.content) {
+          setPreviewContent(data.data.content);
+        }
+      } else {
+        // For text files
+        if (typeof data.data?.content === "string") {
+          setPreviewContent(data.data.content);
+        } else if (data.data) {
+          setPreviewContent(JSON.stringify(data.data, null, 2));
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "获取文件内容失败";
+      setPreviewError(message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [selectedKb, router]);
+
+  const handlePreviewFile = useCallback((node: TreeNode) => {
+    setPreviewNode(node);
+    setPreviewVisible(true);
+    void fetchFileContent(node);
+  }, [fetchFileContent]);
+
+  const closePreview = useCallback(() => {
+    setPreviewVisible(false);
+    setPreviewNode(null);
+    setPreviewContent("");
+    setPreviewError("");
+  }, []);
+
   return (
-    <div className="kb-page workspace-gradient-surface workspace-gradient-surface--kb h-full overflow-auto p-0">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <div className="workspace-panel-card motion-safe-fade-in rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5 backdrop-blur-sm">
-          <div className="flex flex-wrap items-start justify-end gap-4">
-            <Space wrap>
+    <div className="workspace-gradient-surface workspace-gradient-surface--kb h-full overflow-auto p-0">
+      <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
+        <div className="workspace-page-stack">
+          {/* Filter Panel */}
+          <section className="workspace-filter-panel">
+            <div className="flex flex-wrap items-center gap-3">
               <UiButton
-                provider="semi"
-                className="ui-button-soft-accent"
                 onClick={() => setCreateVisible(true)}
+                className="ui-button-soft-accent"
               >
-                <IconPlus />
+                <IconPlus className="h-4 w-4" />
                 新建知识库
               </UiButton>
               <UiButton
-                provider="semi"
                 variant="secondary"
                 onClick={fetchList}
-                loading={loading}
+                disabled={loading}
               >
-                <IconRefresh />
+                <IconRefresh className={joinClasses("h-4 w-4", loading && "animate-spin")} />
                 刷新列表
               </UiButton>
               <UiButton
-                provider="semi"
                 variant="danger"
                 disabled={!selectedKb}
                 onClick={handleDeleteKb}
               >
-                <IconDelete />
+                <IconDelete className="h-4 w-4" />
                 删除知识库
               </UiButton>
-            </Space>
-          </div>
-        </div>
+            </div>
 
-        {errorMessage && (
-          <div className="motion-safe-slide-up rounded-[var(--radius-lg)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-4 py-3 text-sm text-[var(--color-state-error)]">
-            {errorMessage}
-          </div>
-        )}
-        {successMessage && (
-          <div className="motion-safe-slide-up rounded-[var(--radius-lg)] border border-[rgba(22,163,74,0.18)] bg-[rgba(22,163,74,0.08)] px-4 py-3 text-sm text-[var(--color-state-success)]">
-            {successMessage}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-          <Card
-            className="motion-safe-lift"
-            title="知识库列表"
-            bodyStyle={{ padding: 0 }}
-          >
-            {loading && kbs.length === 0 ? (
-              <div className="space-y-3 p-4">
-                <div className="h-9 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.14)]" />
-                <div className="h-9 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.1)]" />
-                <div className="h-9 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.08)]" />
-              </div>
-            ) : (
-              <Spin spinning={loading}>
-                {kbs.length ? (
-                  <List
-                    dataSource={kbs}
-                    renderItem={(item: KnowledgeBase) => {
-                      const name = item.name ?? "";
-                      const active = name === selectedKb;
-                      return (
-                        <List.Item
-                          onClick={() => setSelectedKb(name)}
-                          className={`motion-safe-highlight cursor-pointer px-4 py-3 ${
-                            active
-                              ? "bg-[linear-gradient(90deg,rgba(37,99,255,0.12),rgba(37,99,255,0.04))] text-[var(--color-text-primary)]"
-                              : "text-[var(--color-text-secondary)] hover:bg-[rgba(241,245,249,0.9)]"
-                          }`}
-                        >
-                          <span className="text-sm font-medium">
-                            {name || "未命名知识库"}
-                          </span>
-                        </List.Item>
-                      );
-                    }}
-                  />
-                ) : (
-                  <div className="px-4 py-6 text-sm text-[var(--color-text-muted)]">
-                    暂无知识库，先创建一个新的空间。
+            {(errorMessage || successMessage) && (
+              <div className="mt-4 space-y-2">
+                {errorMessage && (
+                  <div className="rounded-[18px] border border-[rgba(179,64,51,0.16)] bg-[rgba(179,64,51,0.08)] px-4 py-3 text-sm text-[var(--color-state-error)]">
+                    {errorMessage}
                   </div>
                 )}
-              </Spin>
-            )}
-          </Card>
-
-          <Card
-            className="motion-safe-lift"
-            title={selectedKb ? `${selectedKb} 文件树` : "文件树"}
-            headerExtraContent={
-              <Space wrap>
-                <Upload
-                  action={`${API_BASE}/v1/kbs/file`}
-                  customRequest={(options: any) => {
-                    const { fileInstance, onSuccess, onError } = options ?? {};
-                    if (!fileInstance || !(fileInstance instanceof File)) return;
-                    handleUploadFile(fileInstance)
-                      .then(() => onSuccess?.({}))
-                      .catch(() => onError?.({ status: 500 }, undefined));
-                  }}
-                  showUploadList={false}
-                >
-                  <UiButton
-                    provider="semi"
-                    className="ui-button-soft-accent"
-                    disabled={!selectedKb}
-                    loading={uploading}
-                  >
-                    <IconUpload />
-                    上传文件
-                  </UiButton>
-                </Upload>
-                <UiButton
-                  provider="semi"
-                  variant="secondary"
-                  onClick={() => selectedKb && fetchTree(selectedKb)}
-                  disabled={!selectedKb}
-                >
-                  <IconRefresh />
-                  刷新
-                </UiButton>
-              </Space>
-            }
-          >
-            {treeLoading && treeEntries.length === 0 ? (
-              <div className="space-y-3 p-2">
-                <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.12)]" />
-                <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.1)]" />
-                <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.08)]" />
-                <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.06)]" />
+                {successMessage && (
+                  <div className="rounded-[18px] border border-[rgba(47,122,87,0.16)] bg-[rgba(47,122,87,0.08)] px-4 py-3 text-sm text-[var(--color-state-success)]">
+                    {successMessage}
+                  </div>
+                )}
               </div>
-            ) : (
-              <Spin spinning={treeLoading}>
-                {selectedKb ? (
-                  treeData.length ? (
-                    <div
-                      className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.72)] p-2"
-                      onClick={(event) => {
-                        const target = event.target as HTMLElement | null;
-                        if (target?.closest('[data-kb-tree-node="true"]')) {
-                          return;
-                        }
-                        setSelectedNode(null);
-                      }}
-                    >
-                      <Tree
-                        treeData={treeData}
-                        className="kb-tree"
-                        draggable
-                        expandAll
-                        renderLabel={treeRenderLabel}
-                        onSelect={(
-                          selectedKey: string,
-                          selected: boolean,
-                          selectedNode: any
-                        ) => {
-                          if (selected && selectedNode) {
-                            setSelectedNode({
-                              path: selectedNode.path ?? selectedKey,
-                              isDir: !!selectedNode.isDir,
-                            });
-                          }
-                        }}
-                        onDrop={(info: any) => {
-                          const dragNode = info?.dragNode;
-                          const node = info?.node;
-                          if (dragNode?.path && node?.path) {
-                            handleMove(dragNode, node, !!info.dropToGap);
-                          }
-                        }}
-                      />
+            )}
+          </section>
+
+          {/* Main Content */}
+          <section>
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+              {/* KB List */}
+              <div className="workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)]">
+                <div className="border-b border-[var(--color-border-default)] px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">知识库列表</h3>
+                </div>
+                <div className="max-h-[400px] overflow-auto">
+                  {loading && kbs.length === 0 ? (
+                    <div className="space-y-3 p-4">
+                      <div className="h-9 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.14)]" />
+                      <div className="h-9 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.1)]" />
+                      <div className="h-9 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.08)]" />
+                    </div>
+                  ) : kbs.length > 0 ? (
+                    <div>
+                      {kbs.map((item) => {
+                        const name = item.name ?? "";
+                        const active = name === selectedKb;
+                        return (
+                          <div
+                            key={name}
+                            onClick={() => setSelectedKb(name)}
+                            className={joinClasses(
+                              "cursor-pointer px-4 py-3 transition-colors",
+                              active
+                                ? "border-[rgba(199,104,67,0.18)] bg-[linear-gradient(135deg,rgba(255,247,240,0.98),rgba(245,231,219,0.78))] text-[var(--color-text-primary)]"
+                                : "text-[var(--color-text-secondary)] hover:bg-[rgba(255,252,247,0.9)]"
+                            )}
+                          >
+                            <span className="text-sm font-medium">
+                              {name || "未命名知识库"}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
-                    <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[rgba(248,250,252,0.78)] px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      当前知识库为空，可上传文件或拖入 zip 初始化内容。
+                    <div className="px-4 py-6 text-sm text-[var(--color-text-muted)]">
+                      暂无知识库，先创建一个新的空间。
                     </div>
-                  )
-                ) : (
-                  <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[rgba(248,250,252,0.78)] px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                    暂无知识库，请先从左侧选择或创建。
+                  )}
+                </div>
+              </div>
+
+              {/* File Tree */}
+              <div className="workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)]">
+                <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    {selectedKb ? `${selectedKb} 文件树` : "文件树"}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) handleUploadFile(file);
+                        }}
+                      />
+                      <UiButton
+                        variant="secondary"
+                        size="sm"
+                        disabled={!selectedKb || uploading}
+                        onClick={() => {}}
+                      >
+                        <IconUpload className="h-4 w-4" />
+                        上传文件
+                      </UiButton>
+                    </label>
+                    <UiButton
+                      variant="secondary"
+                      size="sm"
+                      disabled={!selectedKb}
+                      onClick={() => selectedKb && fetchTree(selectedKb)}
+                    >
+                      <IconRefresh className={joinClasses("h-4 w-4", treeLoading && "animate-spin")} />
+                    </UiButton>
                   </div>
-                )}
-              </Spin>
-            )}
-          </Card>
+                </div>
+                <div
+                  className="max-h-[400px] overflow-auto p-2"
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                >
+                  {treeLoading && treeEntries.length === 0 ? (
+                    <div className="space-y-3 p-2">
+                      <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.12)]" />
+                      <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.1)]" />
+                      <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.08)]" />
+                    </div>
+                  ) : selectedKb ? (
+                    treeData.length > 0 ? (
+                      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.6)] p-2">
+                        {treeData.map((node) => (
+                          <TreeItem
+                            key={node.key}
+                            node={node}
+                            level={0}
+                            selectedNode={selectedNode}
+                            onSelect={setSelectedNode}
+                            onDelete={handleDeleteEntry}
+                            onPreview={handlePreviewFile}
+                            expandedNodes={expandedNodes}
+                            toggleExpand={toggleExpand}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
+                        当前知识库为空，可上传文件或拖入 zip 初始化内容。
+                      </div>
+                    )
+                  ) : (
+                    <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
+                      暂无知识库，请先从左侧选择或创建。
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 
+      {/* Create Modal */}
       <Modal
         open={createVisible}
         title="新建知识库"
         onClose={resetCreateModal}
         footer={
-          <>
-            <UiButton
-              type="button"
-              variant="secondary"
-              onClick={resetCreateModal}
-            >
+          <div className="flex justify-end gap-3">
+            <UiButton variant="secondary" onClick={resetCreateModal}>
               取消
             </UiButton>
-            <UiButton
-              type="button"
-              onClick={handleCreate}
-              disabled={creating}
-              className="min-w-24"
-            >
+            <UiButton onClick={handleCreate} disabled={creating}>
               {creating ? "创建中..." : "创建"}
             </UiButton>
-          </>
+          </div>
         }
       >
         <div className="space-y-4">
           <UiInput
-            provider="semi"
             placeholder="输入知识库名称"
             value={createName}
             onChange={(event) => setCreateName(event.target.value)}
           />
-          <Upload
-            action={`${API_BASE}/v1/kbs/import`}
-            draggable
-            uploadTrigger="custom"
-            onFileChange={(files: File[]) => setCreateFile(files[0] ?? null)}
-            customRequest={(options: any) => options?.onSuccess?.({})}
-            showUploadList
-            accept=".zip"
-            dragMainText="选择或拖拽知识库 zip"
-            dragSubText="支持空知识库，zip 可选"
-          />
+          <div>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept=".zip"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  setCreateFile(file ?? null);
+                }}
+              />
+              <div className="rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] p-8 text-center transition-colors hover:border-[rgba(199,104,67,0.24)] hover:bg-[rgba(255,247,240,0.8)]">
+                <IconUpload className="mx-auto h-8 w-8 text-[var(--color-text-muted)]" />
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                  点击选择或拖拽知识库 zip
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  支持空知识库，zip 可选
+                </p>
+              </div>
+            </label>
+          </div>
           <div className="text-xs text-[var(--color-text-muted)]">
             {createFile ? `已选择 ${createFile.name}` : "未选择 zip 文件"}
           </div>
         </div>
       </Modal>
 
+      {/* Delete KB Confirm */}
       <ConfirmDialog
         open={deleteKbVisible}
         title="删除知识库"
@@ -860,6 +1104,7 @@ export default function KnowledgeBasePage() {
         onCancel={() => setDeleteKbVisible(false)}
       />
 
+      {/* Delete Entry Confirm */}
       <ConfirmDialog
         open={deleteEntryVisible}
         title="删除文件"
@@ -873,6 +1118,50 @@ export default function KnowledgeBasePage() {
           setPendingEntry(null);
         }}
       />
+
+      {/* File Preview Modal */}
+      <Modal
+        open={previewVisible}
+        title={previewNode?.label ?? "文件预览"}
+        onClose={closePreview}
+        footer={null}
+      >
+        <div className="min-h-[200px]">
+          {previewLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <IconRefresh className="h-6 w-6 animate-spin text-[var(--color-text-muted)]" />
+              <span className="ml-2 text-sm text-[var(--color-text-muted)]">加载中...</span>
+            </div>
+          ) : previewError ? (
+            <div className="rounded-[var(--radius-lg)] border border-[rgba(179,64,51,0.16)] bg-[rgba(179,64,51,0.08)] px-4 py-6 text-center text-sm text-[var(--color-state-error)]">
+              {previewError}
+            </div>
+          ) : previewNode && getFileType(previewNode.label) === "image" ? (
+            <div className="flex items-center justify-center rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] p-4">
+              {previewContent.startsWith("data:") || previewContent.startsWith("http") ? (
+                <img
+                  src={previewContent}
+                  alt={previewNode.label}
+                  className="max-h-[400px] max-w-full rounded object-contain"
+                />
+              ) : (
+                <span className="text-sm text-[var(--color-text-muted)]">无法预览此图片</span>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.7)] p-4">
+              <pre className="max-h-[400px] overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                {previewContent}
+              </pre>
+            </div>
+          )}
+          {previewNode && (
+            <div className="mt-4 text-xs text-[var(--color-text-muted)]">
+              路径: {previewNode.path}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

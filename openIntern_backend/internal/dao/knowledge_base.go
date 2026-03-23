@@ -156,3 +156,7 @@ func (d *KnowledgeBaseDAO) Delete(ctx context.Context, name string) error {
 func (d *KnowledgeBaseDAO) DeleteEntry(ctx context.Context, uri string, recursive bool) error {
 	return deletePath(ctx, uri, recursive)
 }
+
+func (d *KnowledgeBaseDAO) ReadContent(ctx context.Context, uri string) (string, error) {
+	return readContent(ctx, uri, "/api/v1/fs/cat")
+}

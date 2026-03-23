@@ -165,6 +165,38 @@
   justify-content: flex-end;
 }
 
+/* =========================================================================
+ * AIChatInput 发送按钮全局样式（不依赖特定页面类）
+ * ========================================================================= */
+.chat-composer-input .semi-aiChatInput-footer-action-send {
+  background: linear-gradient(135deg, #c76843, #b65a36 54%, #9f4a2b) !important;
+  color: #fffaf5 !important;
+  box-shadow: 0 16px 28px rgba(199, 104, 67, 0.22) !important;
+}
+
+.chat-composer-input .semi-aiChatInput-footer-action-send:hover {
+  background: linear-gradient(135deg, #cf714c, #bc603b 54%, #a55130) !important;
+  color: #fffdf9 !important;
+  transform: translateY(-1px);
+}
+
+.chat-composer-input .semi-aiChatInput-footer-action-stop {
+  background: linear-gradient(135deg, #1f5f72, #184b5a 54%, #123946) !important;
+  color: #f5fbfd !important;
+  box-shadow: 0 16px 28px rgba(31, 95, 114, 0.18) !important;
+}
+
+.chat-composer-input .semi-aiChatInput-footer-action-send-disabled {
+  background: rgba(236, 228, 217, 0.8) !important;
+  color: var(--color-text-muted) !important;
+  box-shadow: none !important;
+}
+
+.chat-composer-input .semi-aiChatInput-footer-action-send-disabled:hover {
+  transform: none;
+}
+
+/* chat-page 特定样式 */
 .chat-page .chat-composer-input .semi-aiChatInput-footer-action-button {
   height: 40px;
   min-width: 40px;
@@ -184,34 +216,6 @@
   border-color: rgba(199, 104, 67, 0.24);
   background: rgba(255, 249, 242, 0.96);
   color: var(--color-text-primary);
-}
-
-.chat-page .chat-composer-input .semi-aiChatInput-footer-action-send {
-  background: linear-gradient(135deg, #c76843, #b65a36 54%, #9f4a2b);
-  color: #fffaf5;
-  box-shadow: 0 16px 28px rgba(199, 104, 67, 0.22);
-}
-
-.chat-page .chat-composer-input .semi-aiChatInput-footer-action-send:hover {
-  background: linear-gradient(135deg, #cf714c, #bc603b 54%, #a55130);
-  color: #fffdf9;
-  transform: translateY(-1px);
-}
-
-.chat-page .chat-composer-input .semi-aiChatInput-footer-action-stop {
-  background: linear-gradient(135deg, #1f5f72, #184b5a 54%, #123946);
-  color: #f5fbfd;
-  box-shadow: 0 16px 28px rgba(31, 95, 114, 0.18);
-}
-
-.chat-page .chat-composer-input .semi-aiChatInput-footer-action-send-disabled {
-  background: rgba(236, 228, 217, 0.8);
-  color: var(--color-text-muted);
-  box-shadow: none;
-}
-
-.chat-page .chat-composer-input .semi-aiChatInput-footer-action-send-disabled:hover {
-  transform: none;
 }
 
 .chat-page .chat-composer-input .semi-aiChatInput-editor-content::-webkit-scrollbar {

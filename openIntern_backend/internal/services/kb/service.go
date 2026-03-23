@@ -205,6 +205,17 @@ func (s *Service) DeleteEntry(ctx context.Context, rawURI string, recursive bool
 	return uri, nil
 }
 
+func (s *Service) ReadContent(ctx context.Context, rawURI string) (string, error) {
+	if err := s.ensureConfigured(); err != nil {
+		return "", err
+	}
+	uri, err := normalizeEntryURI(rawURI)
+	if err != nil {
+		return "", err
+	}
+	return dao.KnowledgeBase.ReadContent(ctx, uri)
+}
+
 func normalizeKnowledgeBaseName(rawName string) (string, error) {
 	kbName, err := dao.KnowledgeBase.CleanName(rawName)
 	if err != nil {

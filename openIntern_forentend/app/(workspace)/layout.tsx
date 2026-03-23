@@ -1119,7 +1119,7 @@ export default function WorkspaceLayout({
           </Sidebar>
         }
       >
-        <PageContainer className="h-full max-w-none px-2 py-2 md:px-4 md:py-4">
+        <PageContainer className="h-full max-w-none">
           {children}
         </PageContainer>
       </AppShell>

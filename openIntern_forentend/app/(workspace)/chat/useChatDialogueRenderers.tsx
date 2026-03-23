@@ -50,7 +50,7 @@ function ProcessPanelStatusIcon({ status }: { status?: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[rgba(15,23,42,0.06)] text-[var(--color-text-secondary)]"
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[rgba(126,96,69,0.08)] text-[var(--color-text-secondary)]"
     >
       {isCompleted ? (
         <svg
@@ -291,7 +291,7 @@ function ProcessPanelCollapse({ items, status, collapseOnOutput }: ProcessPanelI
 
   return (
     <div
-      className="w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(248,250,252,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+      className="w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[rgba(255,252,247,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
     >
       <button
         type="button"
@@ -401,7 +401,7 @@ export function useChatDialogueRenderers(
         if (!activityNode) return null;
         return (
           <div className="motion-safe-slide-up my-2 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-md)]">
-            <div className="border-b border-[var(--color-border-default)] bg-[linear-gradient(90deg,rgba(37,99,255,0.08),rgba(14,165,233,0.08))] px-3 py-2">
+            <div className="border-b border-[var(--color-border-default)] bg-[linear-gradient(90deg,rgba(199,104,67,0.08),rgba(209,157,86,0.06))] px-3 py-2">
               <span className="text-xs font-medium text-[var(--color-text-secondary)]">
                 可视化内容
               </span>

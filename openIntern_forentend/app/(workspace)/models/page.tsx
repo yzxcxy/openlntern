@@ -485,6 +485,20 @@ export default function ModelsPage() {
     [savedDefaultModelId, models]
   );
 
+  // 默认模型下拉不保留空选项，列表变化后自动收敛到一个有效模型。
+  useEffect(() => {
+    if (!sortedModels.length) {
+      if (defaultModelId) {
+        setDefaultModelId("");
+      }
+      return;
+    }
+    if (sortedModels.some((item) => item.model_id === defaultModelId)) {
+      return;
+    }
+    setDefaultModelId(savedDefaultModelId || sortedModels[0]?.model_id || "");
+  }, [defaultModelId, savedDefaultModelId, sortedModels]);
+
   const resetProviderForm = () => {
     setProviderForm(EMPTY_PROVIDER_FORM);
     setProviderEditId("");
@@ -769,7 +783,6 @@ export default function ModelsPage() {
                 disabled={models.length === 0}
                 onChange={(e) => setDefaultModelId(e.target.value)}
               >
-                <option value="">请选择默认模型</option>
                 {sortedModels.map((item) => (
                   <option key={item.model_id} value={item.model_id}>
                     {item.provider_name || "未知提供商"} / {item.name}

@@ -113,13 +113,14 @@ func SetupRouter() *gin.Engine {
 	kbGroup := r.Group("/v1/kbs", middleware.AuthRequired())
 	{
 		kbGroup.GET("", controllers.ListKnowledgeBases)
+		kbGroup.GET("/entry/content", controllers.GetKnowledgeBaseContent)
 		kbGroup.GET("/:name/tree", controllers.GetKnowledgeBaseTree)
 		kbGroup.POST("/import", controllers.ImportKnowledgeBase)
 		kbGroup.POST("/file", controllers.UploadKnowledgeBaseFile)
 		kbGroup.POST("/move", controllers.MoveKnowledgeBaseEntry)
 		kbGroup.POST("/drag", controllers.DragKnowledgeBaseEntry)
-		kbGroup.DELETE("/:name", controllers.DeleteKnowledgeBase)
 		kbGroup.DELETE("/entry", controllers.DeleteKnowledgeBaseEntry)
+		kbGroup.DELETE("/:name", controllers.DeleteKnowledgeBase)
 	}
 
 	modelProviderGroup := r.Group("/v1/model-providers", middleware.AuthRequired())

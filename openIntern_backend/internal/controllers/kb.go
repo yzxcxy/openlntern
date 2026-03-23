@@ -181,6 +181,24 @@ func DeleteKnowledgeBaseEntry(c *gin.Context) {
 	response.JSONSuccess(c, http.StatusOK, gin.H{"uri": uri})
 }
 
+func GetKnowledgeBaseContent(c *gin.Context) {
+	content, err := kbsvc.KnowledgeBase.ReadContent(c.Request.Context(), c.Query("uri"))
+	if err != nil {
+		switch {
+		case errors.Is(err, kbsvc.ErrNotConfigured):
+			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		case errors.Is(err, kbsvc.ErrInvalidInput):
+			response.BadRequest(c)
+		case kbsvc.IsNotFound(err):
+			response.NotFound(c, "entry not found")
+		default:
+			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		}
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, gin.H{"content": content})
+}
+
 func isMissingKnowledgeBaseImportFile(err error) bool {
 	if err == nil {
 		return false
