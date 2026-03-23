@@ -113,17 +113,7 @@ export default function AgentsPage() {
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
         <div className="workspace-page-stack">
           <section className="workspace-filter-panel">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Agent 管理</h1>
-                <p className="text-sm text-[var(--color-text-muted)]">共 {total} 个 Agent</p>
-              </div>
-              <UiButton className="h-10 px-4" onClick={() => router.push("/agents/editor")}>
-                创建 Agent
-              </UiButton>
-            </div>
-
-            <div className="mt-4 flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <UiInput
                 value={keyword}
                 onChange={(event) => {
@@ -131,7 +121,7 @@ export default function AgentsPage() {
                   setPage(1);
                 }}
                 placeholder="搜索名字或描述"
-                className="h-10 w-40"
+                className="h-10 w-32"
               />
               <UiSelect
                 value={statusFilter}
@@ -139,7 +129,7 @@ export default function AgentsPage() {
                   setStatusFilter(event.target.value);
                   setPage(1);
                 }}
-                className="h-10 w-28"
+                className="h-10 w-24"
               >
                 <option value="">全部状态</option>
                 <option value="draft">Draft</option>
@@ -152,7 +142,7 @@ export default function AgentsPage() {
                   setTypeFilter(event.target.value);
                   setPage(1);
                 }}
-                className="h-10 w-28"
+                className="h-10 w-24"
               >
                 <option value="">全部类型</option>
                 <option value="single">Single</option>
@@ -160,7 +150,7 @@ export default function AgentsPage() {
               </UiSelect>
               <UiButton
                 variant="secondary"
-                className="h-10 w-10 px-0"
+                className="h-10 w-9 px-0"
                 onClick={() => void loadAgents()}
                 disabled={loading}
                 aria-label="刷新列表"
@@ -179,6 +169,9 @@ export default function AgentsPage() {
                   <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                   <path d="M21 3v6h-6" />
                 </svg>
+              </UiButton>
+              <UiButton className="h-10 whitespace-nowrap px-3" onClick={() => router.push("/agents/editor")}>
+                创建 Agent
               </UiButton>
             </div>
 
@@ -268,8 +261,7 @@ export default function AgentsPage() {
 
             {!loading && agents.length === 0 ? (
               <div className="mt-6 workspace-empty-state">
-                <strong>当前没有匹配的 Agent</strong>
-                <span>先创建一个 single 或 supervisor，再回到这里统一管理生命周期。</span>
+                <span>暂无 Agent</span>
               </div>
             ) : null}
 
