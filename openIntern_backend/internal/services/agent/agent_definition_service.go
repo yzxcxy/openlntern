@@ -105,15 +105,16 @@ type AgentDetailView struct {
 }
 
 type EnabledAgentOption struct {
-	AgentID           string   `json:"agent_id"`
-	Name              string   `json:"name"`
-	Description       string   `json:"description"`
-	AgentType         string   `json:"agent_type"`
-	Status            string   `json:"status"`
-	AvatarURL         string   `json:"avatar_url"`
-	DefaultModelID    string   `json:"default_model_id"`
-	DefaultModelName  string   `json:"default_model_name"`
-	ExampleQuestions  []string `json:"example_questions"`
+	AgentID            string   `json:"agent_id"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	AgentType          string   `json:"agent_type"`
+	Status             string   `json:"status"`
+	AvatarURL          string   `json:"avatar_url"`
+	ChatBackgroundJSON string   `json:"chat_background_json"`
+	DefaultModelID     string   `json:"default_model_id"`
+	DefaultModelName   string   `json:"default_model_name"`
+	ExampleQuestions   []string `json:"example_questions"`
 }
 
 var AgentDefinition = new(AgentDefinitionService)
@@ -314,15 +315,16 @@ func (s *AgentDefinitionService) ListEnabledOptions(ownerID string) ([]EnabledAg
 	result := make([]EnabledAgentOption, 0, len(items))
 	for _, item := range items {
 		result = append(result, EnabledAgentOption{
-			AgentID:          item.AgentID,
-			Name:             item.Name,
-			Description:      item.Description,
-			AgentType:        item.AgentType,
-			Status:           item.Status,
-			AvatarURL:        normalizeAgentAvatarURL(item.AvatarURL),
-			DefaultModelID:   item.DefaultModelID,
-			DefaultModelName: modelNames[item.DefaultModelID],
-			ExampleQuestions: parseExampleQuestions(item.ExampleQuestionsJSON),
+			AgentID:            item.AgentID,
+			Name:               item.Name,
+			Description:        item.Description,
+			AgentType:          item.AgentType,
+			Status:             item.Status,
+			AvatarURL:          normalizeAgentAvatarURL(item.AvatarURL),
+			ChatBackgroundJSON: item.ChatBackgroundJSON,
+			DefaultModelID:     item.DefaultModelID,
+			DefaultModelName:   modelNames[item.DefaultModelID],
+			ExampleQuestions:   parseExampleQuestions(item.ExampleQuestionsJSON),
 		})
 	}
 	return result, nil

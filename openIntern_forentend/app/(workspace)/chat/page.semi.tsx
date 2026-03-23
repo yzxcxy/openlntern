@@ -101,8 +101,23 @@ type EnabledAgentOption = {
   name: string;
   description?: string;
   agent_type: "single" | "supervisor";
+  avatar_url?: string;
+  chat_background_json?: string;
   default_model_id?: string;
   example_questions?: string[];
+};
+
+const parseBackgroundImageURL = (rawJSON: string | undefined): string => {
+  const trimmed = (rawJSON || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed.image_url || "";
+  } catch {
+    return "";
+  }
 };
 
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
@@ -1342,12 +1357,18 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         color: "teal",
       },
       assistant: {
-        name: "AI助手",
-        avatar: buildTextAvatarDataUrl("AI", { background: "#6366F1" }),
+        name:
+          conversationMode === "agent" && selectedAgentOption?.name
+            ? selectedAgentOption.name
+            : "AI助手",
+        avatar:
+          conversationMode === "agent" && selectedAgentOption?.avatar_url
+            ? selectedAgentOption.avatar_url
+            : buildTextAvatarDataUrl("AI", { background: "#6366F1" }),
         color: "indigo",
       },
     }),
-    [userAvatar, userName]
+    [userAvatar, userName, conversationMode, selectedAgentOption]
   );
 
   const renderDialogueContentItem = useChatDialogueRenderers(renderActivityMessage);
@@ -1706,12 +1727,27 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     agent.abortRun();
   }, [agent]);
 
+  const chatBackgroundStyle = useMemo(() => {
+    if (conversationMode !== "agent" || !selectedAgentOption?.chat_background_json) {
+      return undefined;
+    }
+    const bg = parseBackgroundImageURL(selectedAgentOption.chat_background_json);
+    if (!bg) {
+      return undefined;
+    }
+    return {
+      backgroundImage: `linear-gradient(rgba(255,255,255,0.80), rgba(255,255,255,0.84)), url(${bg})`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    } as const;
+  }, [conversationMode, selectedAgentOption]);
+
   return (
     <>
       <div className="chat-page chat-stage-surface flex h-full w-full flex-col p-0">
         <div className="motion-safe-fade-in relative z-[1] flex h-full min-h-0 w-full flex-col gap-0">
           <div className="chat-shell-surface motion-safe-lift flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border backdrop-blur-sm">
-            <div className="flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.36),rgba(248,250,252,0.18))] px-2 py-2 md:px-3 md:py-3">
+            <div className="flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.36),rgba(248,250,252,0.18))] px-2 py-2 md:px-3 md:py-3" style={chatBackgroundStyle}>
               {showHistorySkeleton ? (
                 <div className="flex h-full flex-col gap-4 px-4 py-5">
                   <div className="flex justify-start">
