@@ -76,6 +76,16 @@ func (s *Service) resolveRuntimeToolSet(ctx context.Context, runtimeConfig *Agen
 	}
 	resolved.cleanup = sandboxCleanup
 	resolved.staticTools = append(resolved.staticTools, sandboxTools...)
+	if runtimeConfig != nil && len(runtimeConfig.KnowledgeBaseNames) > 0 {
+		knowledgeBaseTools, err := builtinTool.GetKnowledgeBaseTools(ctx, runtimeConfig.KnowledgeBaseNames)
+		if err != nil {
+			if resolved.cleanup != nil {
+				resolved.cleanup()
+			}
+			return nil, fmt.Errorf("load builtin knowledge base tool failed: %w", err)
+		}
+		resolved.staticTools = append(resolved.staticTools, knowledgeBaseTools...)
+	}
 
 	if runtimeConfig == nil {
 		return finalizeRuntimeToolSet(ctx, resolved)

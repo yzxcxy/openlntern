@@ -207,7 +207,7 @@ func (c *agentModeCompiler) buildModel(detail *AgentDetailView, allowRuntimeMode
 }
 
 func (c *agentModeCompiler) buildTools(detail *AgentDetailView, depth int) ([]einoTool.BaseTool, func(), error) {
-	resolvedTools, cleanup, err := c.buildBuiltinTools()
+	resolvedTools, cleanup, err := c.buildBuiltinTools(detail.KnowledgeBaseNames)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -251,8 +251,8 @@ func (c *agentModeCompiler) buildTools(detail *AgentDetailView, depth int) ([]ei
 	return dedupedTools, cleanup, nil
 }
 
-func (c *agentModeCompiler) buildBuiltinTools() ([]einoTool.BaseTool, func(), error) {
-	// Agent 模式默认只注入沙箱工具；A2UI/COS 通过内建插件显式绑定后再进入运行时。
+func (c *agentModeCompiler) buildBuiltinTools(knowledgeBaseNames []string) ([]einoTool.BaseTool, func(), error) {
+	// Agent 模式默认注入沙箱工具；知识库读取工具仅在当前 agent 绑定知识库时追加。
 	sandboxTools, sandboxCleanup, err := builtinTool.GetSandboxMCPTools(c.ctx, c.state.sandboxBaseURL)
 	if err != nil {
 		if sandboxCleanup != nil {
@@ -260,7 +260,18 @@ func (c *agentModeCompiler) buildBuiltinTools() ([]einoTool.BaseTool, func(), er
 		}
 		return nil, nil, err
 	}
-	return append([]einoTool.BaseTool{}, sandboxTools...), sandboxCleanup, nil
+	resolvedTools := append([]einoTool.BaseTool{}, sandboxTools...)
+	if len(knowledgeBaseNames) > 0 {
+		knowledgeBaseTools, err := builtinTool.GetKnowledgeBaseTools(c.ctx, knowledgeBaseNames)
+		if err != nil {
+			if sandboxCleanup != nil {
+				sandboxCleanup()
+			}
+			return nil, nil, err
+		}
+		resolvedTools = append(resolvedTools, knowledgeBaseTools...)
+	}
+	return resolvedTools, sandboxCleanup, nil
 }
 
 func (c *agentModeCompiler) buildPluginTools(toolIDs []string) ([]einoTool.BaseTool, func(), error) {

@@ -114,7 +114,8 @@ type AgentRuntimeConfig struct {
 		Mode            string
 		SelectedToolIDs []string
 	}
-	Features map[string]any
+	KnowledgeBaseNames []string
+	Features           map[string]any
 }
 
 type forwardedPropsChainContext struct {
@@ -247,13 +248,14 @@ func (h contextSelectionsForwardedPropsHandler) Handle(ctx *forwardedPropsChainC
 	if selection == nil {
 		return nil
 	}
+	ctx.runtimeConfig.KnowledgeBaseNames = collectKnowledgeBaseNames(selection.KnowledgeBases)
 
 	userText, userIndex := findLastUserMessageTextAndIndex(ctx.input.Messages)
 	if len(selection.KnowledgeBases) > 0 && userText != "" {
 		content, err := kbsvc.KnowledgeBase.BuildContextMessage(
 			ctx.requestCtx,
 			userText,
-			collectKnowledgeBaseNames(selection.KnowledgeBases),
+			ctx.runtimeConfig.KnowledgeBaseNames,
 			knowledgeSearchLimitPerKB,
 		)
 		if err != nil {
