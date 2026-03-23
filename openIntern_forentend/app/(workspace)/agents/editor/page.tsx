@@ -1,15 +1,63 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createA2UIMessageRenderer } from "@copilotkit/a2ui-renderer";
+import {
+  CopilotKitProvider,
+  useRenderActivityMessage,
+} from "@copilotkit/react-core/v2";
+import type { Message as AguiMessage } from "@ag-ui/client";
+import { AIChatDialogue, AIChatInput } from "@douyinfe/semi-ui-19";
+import type { Message as SemiMessage } from "@douyinfe/semi-ui-19/lib/es/aiChatDialogue/interface";
+import type {
+  Content as AIChatInputContent,
+  MessageContent,
+} from "@douyinfe/semi-ui-19/lib/es/aiChatInput/interface";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+  type ReactNode,
+} from "react";
 import { UiButton } from "../../../components/ui/UiButton";
 import { UiInput } from "../../../components/ui/UiInput";
 import { UiModal } from "../../../components/ui/UiModal";
 import { UiSelect } from "../../../components/ui/UiSelect";
 import { UiTextarea } from "../../../components/ui/UiTextarea";
-import { getUserIdFromToken, readValidToken } from "../../auth";
+import { theme } from "../../../theme";
 import {
-  type AgentDebugMessage,
+  buildAuthHeaders,
+  getUserIdFromToken,
+  readStoredUser,
+  readValidToken,
+  type StoredUser,
+} from "../../auth";
+import { ChatComposerAssist } from "../../chat/ChatComposerAssist";
+import { ChatInputActionArea } from "../../chat/ChatInputActionArea";
+import {
+  ACTIVITY_CONTENT_TYPE,
+  ACTIVITY_EVENT_DELTA,
+  ACTIVITY_EVENT_SNAPSHOT,
+  TOOL_RESULT_TYPE,
+  buildAguiUserContent,
+  buildTextAvatarDataUrl,
+  createMessageId,
+  createThreadId,
+  extractInputPlainText,
+  extractToolResultText,
+  groupAssistantProcessItems,
+  mapActivityContent,
+  mapAguiUserContentToSemi,
+  toEditorParagraphHtml,
+} from "../../chat/chat-helpers";
+import { useChatDialogueRenderers } from "../../chat/useChatDialogueRenderers";
+import { usePendingUploads } from "../../chat/usePendingUploads";
+import {
   type AgentDetail,
   type AgentPayload,
   type AgentType,
@@ -47,8 +95,45 @@ type AgentFormState = {
   sub_agent_ids: string[];
 };
 
-type BindingPickerType = "tool_ids" | "skill_names" | "knowledge_base_names" | "sub_agent_ids";
+type BindingPickerType =
+  | "tool_ids"
+  | "skill_names"
+  | "knowledge_base_names"
+  | "sub_agent_ids";
+
+type AgentEditorContentProps = {
+  token: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+};
+
+type DebugEventPayload = Record<string, unknown> & {
+  type?: string;
+  delta?: string;
+  id?: unknown;
+  toolCallId?: unknown;
+  toolCall?: { id?: unknown } | null;
+  toolCallName?: string;
+  encryptedValue?: unknown;
+  activityType?: string;
+  content?: unknown;
+  result?: unknown;
+  patch?: unknown;
+  replace?: boolean;
+  status?: string;
+  timestamp?: number;
+};
+
+type MessageItemRecord = Record<string, unknown> & {
+  content?: Array<Record<string, unknown>>;
+  summary?: Array<Record<string, unknown>>;
+  arguments?: string;
+};
+
 const SITE_DEFAULT_AVATAR_URL = "/OpenIntern.png";
+const A2UI_MESSAGE_RENDERER = createA2UIMessageRenderer({ theme });
+const ACTIVITY_RENDERERS = [A2UI_MESSAGE_RENDERER];
 
 const EMPTY_FORM: AgentFormState = {
   name: "",
@@ -88,84 +173,56 @@ const parseBackgroundImageURL = (rawJSON: string | undefined): string => {
   return "";
 };
 
-const resolveDebugEventMessageID = (event: unknown): string => {
-  const payload = event as { messageId?: string; message_id?: string } | null;
-  if (!payload) {
-    return "";
-  }
-  return String(payload.messageId || payload.message_id || "").trim();
+const normalizeEventID = (value: unknown) =>
+  typeof value === "string" || typeof value === "number"
+    ? String(value).trim()
+    : "";
+
+const resolveRunId = (event: unknown) => {
+  const payload = event as
+    | {
+        runId?: unknown;
+        run_id?: unknown;
+        data?: { runId?: unknown; run_id?: unknown };
+      }
+    | null;
+  return normalizeEventID(
+    payload?.runId ?? payload?.run_id ?? payload?.data?.runId ?? payload?.data?.run_id
+  );
 };
 
-const extractRuntimeMessageText = (content: unknown): string => {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === "string") {
-          return part;
-        }
-        if (!part || typeof part !== "object") {
-          return "";
-        }
-        const typedPart = part as {
-          type?: unknown;
-          text?: unknown;
-          content?: unknown;
-        };
-        const partType = String(typedPart.type || "").toLowerCase();
-        if (typeof typedPart.text === "string" && (!partType || partType.includes("text"))) {
-          return typedPart.text;
-        }
-        if (typedPart.content !== undefined) {
-          return extractRuntimeMessageText(typedPart.content);
-        }
-        return "";
-      })
-      .join("");
-  }
-  if (content && typeof content === "object") {
-    const typedContent = content as { text?: unknown; content?: unknown };
-    if (typeof typedContent.text === "string") {
-      return typedContent.text;
-    }
-    if (typedContent.content !== undefined) {
-      return extractRuntimeMessageText(typedContent.content);
-    }
-  }
-  return "";
+const resolveMessageId = (event: unknown) => {
+  const payload = event as
+    | {
+        messageId?: unknown;
+        message_id?: unknown;
+        data?: { messageId?: unknown; message_id?: unknown };
+      }
+    | null;
+  return normalizeEventID(
+    payload?.messageId ??
+      payload?.message_id ??
+      payload?.data?.messageId ??
+      payload?.data?.message_id
+  );
 };
 
-const mapAgentRuntimeMessagesToDebug = (
-  messages: Array<{ id?: string; role?: string; content?: unknown }>
-): AgentDebugMessage[] => {
-  const seen = new Set<string>();
-  const result: AgentDebugMessage[] = [];
-  for (const item of messages) {
-    if (!item) {
-      continue;
-    }
-    const role = String(item.role || "").trim() as AgentDebugMessage["role"];
-    if (!["user", "assistant", "system"].includes(role)) {
-      continue;
-    }
-    const id = String(item.id || `${role}-${Date.now()}`).trim();
-    if (!id || seen.has(id)) {
-      continue;
-    }
-    const text = extractRuntimeMessageText(item.content).trim();
-    if (!text) {
-      continue;
-    }
-    seen.add(id);
-    result.push({
-      id,
-      role,
-      content: text,
-    });
-  }
-  return result;
+const resolveActivityMessageId = (event: unknown) => {
+  const payload = event as
+    | {
+        id?: unknown;
+        messageId?: unknown;
+        message_id?: unknown;
+        data?: { messageId?: unknown; message_id?: unknown };
+      }
+    | null;
+  return normalizeEventID(
+    payload?.messageId ??
+      payload?.message_id ??
+      payload?.id ??
+      payload?.data?.messageId ??
+      payload?.data?.message_id
+  );
 };
 
 // toPayload converts editor-only form fields into backend agent payload shape.
@@ -205,16 +262,22 @@ const fromDetail = (detail: AgentDetail): AgentFormState => ({
   background_image_url: parseBackgroundImageURL(detail.chat_background_json),
   tool_ids: Array.isArray(detail.tool_ids) ? detail.tool_ids : [],
   skill_names: Array.isArray(detail.skill_names) ? detail.skill_names : [],
-  knowledge_base_names: Array.isArray(detail.knowledge_base_names) ? detail.knowledge_base_names : [],
+  knowledge_base_names: Array.isArray(detail.knowledge_base_names)
+    ? detail.knowledge_base_names
+    : [],
   sub_agent_ids: Array.isArray(detail.sub_agent_ids) ? detail.sub_agent_ids : [],
 });
 
-export default function AgentEditorPage() {
+function AgentEditorContent({
+  token,
+  userId,
+  userName,
+  userAvatar,
+}: AgentEditorContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = readValidToken(router);
-  const userId = getUserIdFromToken(token);
   const editingAgentId = (searchParams.get("agent_id") || "").trim();
+  const { renderActivityMessage } = useRenderActivityMessage();
 
   const requestContext = useMemo(
     () => ({
@@ -235,7 +298,8 @@ export default function AgentEditorPage() {
   const [kbOptions, setKbOptions] = useState<ResourceOption[]>([]);
   const [subAgentOptions, setSubAgentOptions] = useState<ResourceOption[]>([]);
 
-  const [bindingPickerType, setBindingPickerType] = useState<BindingPickerType | null>(null);
+  const [bindingPickerType, setBindingPickerType] =
+    useState<BindingPickerType | null>(null);
   const [bindingSearch, setBindingSearch] = useState("");
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
@@ -245,20 +309,26 @@ export default function AgentEditorPage() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [chatMessages, setChatMessages] = useState<AgentDebugMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatRunning, setChatRunning] = useState(false);
-  const [chatError, setChatError] = useState("");
-  const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const visibleChatMessages = useMemo(
-    () =>
-      chatMessages.filter((message) =>
-        message.role === "assistant" ? message.content.trim().length > 0 : true
-      ),
-    [chatMessages]
+  const inputRef = useRef<{ setContent: (content: string) => void } | null>(null);
+  const dialogueWrapperRef = useRef<HTMLDivElement | null>(null);
+  const currentRunIdRef = useRef("");
+  const textMessageMapRef = useRef(new Map<string, { runId: string; index: number }>());
+  const toolCallMapRef = useRef(new Map<string, { runId: string; index: number }>());
+  const reasoningMessageMapRef = useRef(
+    new Map<string, { runId: string; index: number }>()
+  );
+  const activityMessageMapRef = useRef(
+    new Map<string, { runId: string; index: number }>()
   );
 
-  const effectiveAvatarURL = (form.avatar_url || "").trim() || SITE_DEFAULT_AVATAR_URL;
+  const [threadId, setThreadId] = useState(() => createThreadId());
+  const [conversationMessages, setConversationMessages] = useState<AguiMessage[]>([]);
+  const [semiMessages, setSemiMessages] = useState<SemiMessage[]>([]);
+  const [chatRunning, setChatRunning] = useState(false);
+  const [chatError, setChatError] = useState("");
+
+  const effectiveAvatarURL =
+    (form.avatar_url || "").trim() || SITE_DEFAULT_AVATAR_URL;
   const chatBackgroundStyle = useMemo(() => {
     const bg = (form.background_image_url || "").trim();
     if (!bg) {
@@ -271,21 +341,515 @@ export default function AgentEditorPage() {
     } as CSSProperties;
   }, [form.background_image_url]);
 
-  useEffect(() => {
-    if (!token) {
-      return;
+  const setComposerText = useCallback((text: string) => {
+    inputRef.current?.setContent(toEditorParagraphHtml(text));
+  }, []);
+
+  const {
+    uploadInputRef,
+    pendingUploads,
+    uploading,
+    uploadError,
+    handleOpenUploadPicker,
+    handleUploadInputChange,
+    removePendingUpload,
+    clearUploadError,
+    clearPendingUploads,
+    resetUploads,
+    restorePendingUploads,
+  } = usePendingUploads({
+    threadId,
+    router,
+    userId,
+    uploadsBlocked: chatRunning,
+  });
+
+  const handleComposerContentChange = useCallback(() => {
+    if (chatError) {
+      setChatError("");
     }
+  }, [chatError]);
+
+  const clearRuntimeMaps = useCallback(() => {
+    currentRunIdRef.current = "";
+    textMessageMapRef.current.clear();
+    toolCallMapRef.current.clear();
+    reasoningMessageMapRef.current.clear();
+    activityMessageMapRef.current.clear();
+  }, []);
+
+  const updateRunMessage = useCallback(
+    (runId: string, updater: (message: SemiMessage) => SemiMessage) => {
+      if (!runId) {
+        return;
+      }
+      setSemiMessages((prev) => {
+        const next = [...prev];
+        const index = next.findIndex(
+          (message) => message.id === runId && message.role === "assistant"
+        );
+        const baseMessage =
+          index === -1
+            ? {
+                id: runId,
+                role: "assistant",
+                content: [],
+                status: "in_progress",
+                createdAt: Date.now(),
+              }
+            : (next[index] as SemiMessage);
+        const normalizedMessage = {
+          ...baseMessage,
+          content: Array.isArray(baseMessage.content)
+            ? [...baseMessage.content]
+            : [],
+        } as SemiMessage;
+        const updated = updater(normalizedMessage);
+        if (index === -1) {
+          next.push(updated);
+        } else {
+          next[index] = updated;
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  // 调试历史只保留前端会话快照，下一轮把已完成的 user/assistant 消息重新送回后端。
+  const upsertAssistantHistoryText = useCallback(
+    (
+      runId: string,
+      updater: (previousText: string) => string,
+      options?: { removeIfEmpty?: boolean }
+    ) => {
+      if (!runId) {
+        return;
+      }
+      setConversationMessages((current) => {
+        const next = [...current];
+        const index = next.findIndex(
+          (message) => message.id === runId && message.role === "assistant"
+        );
+        const currentText =
+          index >= 0 && typeof next[index]?.content === "string"
+            ? next[index].content
+            : "";
+        const nextText = updater(currentText);
+        if (!nextText && options?.removeIfEmpty) {
+          if (index >= 0) {
+            next.splice(index, 1);
+          }
+          return next;
+        }
+        const nextMessage: AguiMessage = {
+          id: runId,
+          role: "assistant",
+          content: nextText,
+        };
+        if (index >= 0) {
+          next[index] = nextMessage;
+        } else {
+          next.push(nextMessage);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const completeReasoningItems = useCallback(
+    (runId: string) => {
+      if (!runId) return;
+      updateRunMessage(runId, (message) => {
+        const content = Array.isArray(message.content) ? [...message.content] : [];
+        let changed = false;
+        const nextContent = content.map((item) => {
+          if (item?.type !== "reasoning" || item.status === "completed") {
+            return item;
+          }
+          changed = true;
+          return {
+            ...item,
+            status: "completed",
+          };
+        });
+        if (!changed) {
+          return message;
+        }
+        return {
+          ...message,
+          content: nextContent,
+        };
+      });
+      reasoningMessageMapRef.current.forEach((mapping, messageId) => {
+        if (mapping.runId === runId) {
+          reasoningMessageMapRef.current.delete(messageId);
+        }
+      });
+    },
+    [updateRunMessage]
+  );
+
+  const handleDebugEvent = useCallback(
+    ({ event }: { event: unknown }) => {
+      const rawEvent = event as DebugEventPayload;
+      const eventType = String(rawEvent?.type ?? "");
+      if (!eventType) {
+        return;
+      }
+
+      if (eventType === "RUN_STARTED") {
+        const runId = resolveRunId(rawEvent);
+        if (runId) {
+          currentRunIdRef.current = runId;
+          updateRunMessage(runId, (message) => message);
+        }
+        return;
+      }
+
+      if (eventType === "RUN_FINISHED") {
+        const runId = resolveRunId(rawEvent) || currentRunIdRef.current;
+        if (runId) {
+          completeReasoningItems(runId);
+          updateRunMessage(runId, (message) => ({
+            ...message,
+            status: "completed",
+          }));
+          upsertAssistantHistoryText(runId, (text) => text, {
+            removeIfEmpty: true,
+          });
+        }
+        clearRuntimeMaps();
+        return;
+      }
+
+      if (eventType === "REASONING_END") {
+        const runId = resolveRunId(rawEvent) || currentRunIdRef.current;
+        if (runId) {
+          completeReasoningItems(runId);
+        }
+        return;
+      }
+
+      if (eventType === "TEXT_MESSAGE_START") {
+        const runId = currentRunIdRef.current;
+        const messageId = resolveMessageId(rawEvent);
+        if (!runId || !messageId) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const index = content.length;
+          content.push({
+            type: "message",
+            content: [{ type: "output_text", text: "" }],
+            status: "in_progress",
+          });
+          textMessageMapRef.current.set(messageId, { runId, index });
+          return { ...message, content };
+        });
+        upsertAssistantHistoryText(runId, (text) => text);
+        return;
+      }
+
+      if (eventType === "TEXT_MESSAGE_CONTENT") {
+        const messageId = resolveMessageId(rawEvent);
+        if (!messageId) return;
+        const mapping = textMessageMapRef.current.get(messageId);
+        if (!mapping) return;
+        const delta = String(rawEvent?.delta ?? "");
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as MessageItemRecord | undefined;
+          if (!target || !Array.isArray(target.content)) {
+            return message;
+          }
+          const items = [...target.content];
+          const first = items[0] as { text?: unknown } | undefined;
+          if (typeof first?.text === "string") {
+            items[0] = { ...first, text: `${first.text}${delta}` };
+          }
+          content[mapping.index] = {
+            ...target,
+            content: items,
+          };
+          return { ...message, content };
+        });
+        upsertAssistantHistoryText(mapping.runId, (text) => `${text}${delta}`);
+        return;
+      }
+
+      if (eventType === "TEXT_MESSAGE_END") {
+        const messageId = resolveMessageId(rawEvent);
+        if (!messageId) return;
+        const mapping = textMessageMapRef.current.get(messageId);
+        if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index];
+          if (!target) {
+            return message;
+          }
+          content[mapping.index] = { ...target, status: "completed" };
+          return { ...message, content };
+        });
+        textMessageMapRef.current.delete(messageId);
+        return;
+      }
+
+      if (eventType === "REASONING_MESSAGE_START") {
+        const runId = currentRunIdRef.current;
+        const messageId = resolveMessageId(rawEvent);
+        if (!runId || !messageId) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const index = content.length;
+          content.push({
+            type: "reasoning",
+            id: messageId,
+            summary: [{ type: "summary_text", text: "" }],
+            status: "in_progress",
+          });
+          reasoningMessageMapRef.current.set(messageId, { runId, index });
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (eventType === "REASONING_MESSAGE_CONTENT") {
+        const messageId = resolveMessageId(rawEvent);
+        if (!messageId) return;
+        const mapping = reasoningMessageMapRef.current.get(messageId);
+        if (!mapping) return;
+        const delta = String(rawEvent?.delta ?? "");
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as MessageItemRecord | undefined;
+          if (!target || !Array.isArray(target.summary)) {
+            return message;
+          }
+          const items = [...target.summary];
+          const first = items[0] as { text?: unknown } | undefined;
+          if (typeof first?.text === "string") {
+            items[0] = { ...first, text: `${first.text}${delta}` };
+          }
+          content[mapping.index] = {
+            ...target,
+            summary: items,
+          };
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (eventType === "REASONING_MESSAGE_END") {
+        const messageId = resolveMessageId(rawEvent);
+        if (!messageId) return;
+        const mapping = reasoningMessageMapRef.current.get(messageId);
+        if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index];
+          if (!target) {
+            return message;
+          }
+          content[mapping.index] = { ...target, status: "completed" };
+          return { ...message, content };
+        });
+        reasoningMessageMapRef.current.delete(messageId);
+        return;
+      }
+
+      if (eventType === "REASONING_ENCRYPTED_VALUE") {
+        const messageId = resolveMessageId(rawEvent);
+        if (!messageId) return;
+        const mapping = reasoningMessageMapRef.current.get(messageId);
+        if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as MessageItemRecord | undefined;
+          if (!target) return message;
+          content[mapping.index] = {
+            ...target,
+            encryptedValue: rawEvent?.encryptedValue,
+          };
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (eventType === "TOOL_CALL_START") {
+        const runId = currentRunIdRef.current;
+        const toolCallId = normalizeEventID(
+          rawEvent?.toolCallId ?? rawEvent?.toolCall?.id ?? rawEvent?.id
+        );
+        if (!runId || !toolCallId) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const index = content.length;
+          content.push({
+            type: "function_call",
+            id: toolCallId,
+            call_id: toolCallId,
+            name: rawEvent?.toolCallName,
+            status: "in_progress",
+            arguments: "",
+          });
+          toolCallMapRef.current.set(toolCallId, { runId, index });
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (eventType === "TOOL_CALL_ARGS") {
+        const toolCallId = normalizeEventID(
+          rawEvent?.toolCallId ?? rawEvent?.toolCall?.id ?? rawEvent?.id
+        );
+        if (!toolCallId) return;
+        const mapping = toolCallMapRef.current.get(toolCallId);
+        if (!mapping) return;
+        const delta = String(rawEvent?.delta ?? "");
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index] as MessageItemRecord | undefined;
+          if (!target) return message;
+          content[mapping.index] = {
+            ...target,
+            arguments: `${target.arguments ?? ""}${delta}`,
+          };
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (eventType === "TOOL_CALL_END") {
+        const toolCallId = normalizeEventID(
+          rawEvent?.toolCallId ?? rawEvent?.toolCall?.id ?? rawEvent?.id
+        );
+        if (!toolCallId) return;
+        const mapping = toolCallMapRef.current.get(toolCallId);
+        if (!mapping) return;
+        updateRunMessage(mapping.runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const target = content[mapping.index];
+          if (!target) return message;
+          content[mapping.index] = { ...target, status: "completed" };
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (eventType === "TOOL_CALL_RESULT") {
+        const runId = currentRunIdRef.current;
+        if (!runId) return;
+        const outputText = extractToolResultText(
+          rawEvent?.result ?? rawEvent?.content
+        );
+        if (!outputText) return;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          content.push({
+            type: TOOL_RESULT_TYPE,
+            id: createMessageId(),
+            text: outputText,
+            status: "completed",
+          });
+          return { ...message, content };
+        });
+        return;
+      }
+
+      if (
+        eventType === ACTIVITY_EVENT_SNAPSHOT ||
+        eventType === ACTIVITY_EVENT_DELTA
+      ) {
+        const runId = resolveRunId(rawEvent) || currentRunIdRef.current;
+        const activityType =
+          typeof rawEvent?.activityType === "string" ? rawEvent.activityType : "";
+        const activityMessageId = resolveActivityMessageId(rawEvent);
+        if (!runId || !activityType || !activityMessageId) {
+          return;
+        }
+        const activityEventType =
+          eventType === ACTIVITY_EVENT_DELTA
+            ? ACTIVITY_EVENT_DELTA
+            : ACTIVITY_EVENT_SNAPSHOT;
+        updateRunMessage(runId, (message) => {
+          const content = Array.isArray(message.content) ? [...message.content] : [];
+          const mapped = activityMessageMapRef.current.get(activityMessageId);
+          let index =
+            mapped && mapped.runId === runId ? mapped.index : -1;
+          if (
+            index < 0 ||
+            index >= content.length ||
+            (content[index] as { activityMessageId?: string })?.activityMessageId !==
+              activityMessageId
+          ) {
+            index = content.findIndex(
+              (item) =>
+                (item as { type?: string }).type === ACTIVITY_CONTENT_TYPE &&
+                (item as { activityMessageId?: string }).activityMessageId ===
+                  activityMessageId
+            );
+          }
+          const previousItem =
+            index === -1 ? null : (content[index] as MessageItemRecord);
+          const mappedContent = mapActivityContent({
+            activityType,
+            eventType: activityEventType,
+            content: rawEvent?.content,
+            patch: rawEvent?.patch,
+            replace: rawEvent?.replace,
+            previousContent: previousItem?.content,
+          });
+          const activityItem = {
+            ...(previousItem ?? {}),
+            id: activityMessageId,
+            type: ACTIVITY_CONTENT_TYPE,
+            activityMessageId,
+            activityType,
+            activityEventType,
+            content: mappedContent,
+            status:
+              rawEvent?.status ??
+              (activityEventType === ACTIVITY_EVENT_DELTA
+                ? "in_progress"
+                : "completed"),
+            timestamp: rawEvent?.timestamp ?? Date.now(),
+          };
+          if (index === -1) {
+            index = content.length;
+            content.push(activityItem);
+          } else {
+            content[index] = activityItem;
+          }
+          activityMessageMapRef.current.set(activityMessageId, {
+            runId,
+            index,
+          });
+          return { ...message, content };
+        });
+      }
+    },
+    [
+      clearRuntimeMaps,
+      completeReasoningItems,
+      updateRunMessage,
+      upsertAssistantHistoryText,
+    ]
+  );
+
+  useEffect(() => {
     let cancelled = false;
     const loadOptions = async () => {
-      // Load all binding candidates once, then use a searchable picker for selection.
       try {
-        const [modelsRes, pluginsRes, skillsRes, kbsRes, subAgentsRes] = await Promise.all([
-          listModelOptions(requestContext),
-          listPluginOptions(requestContext),
-          listSkillOptions(requestContext),
-          listKnowledgeBaseOptions(requestContext),
-          listEnabledAgentOptions(requestContext),
-        ]);
+        const [modelsRes, pluginsRes, skillsRes, kbsRes, subAgentsRes] =
+          await Promise.all([
+            listModelOptions(requestContext),
+            listPluginOptions(requestContext),
+            listSkillOptions(requestContext),
+            listKnowledgeBaseOptions(requestContext),
+            listEnabledAgentOptions(requestContext),
+          ]);
         if (cancelled) {
           return;
         }
@@ -311,17 +875,20 @@ export default function AgentEditorPage() {
               )
             : []
         );
-        const skills = Array.isArray(skillsRes.data?.data) ? skillsRes.data.data : [];
+        const skills = Array.isArray(skillsRes.data?.data)
+          ? skillsRes.data.data
+          : [];
         setSkillOptions(
           skills
             .map((item) => {
-              const name = typeof item.name === "string" && item.name.trim()
-                ? item.name.trim()
-                : typeof item.skillName === "string" && item.skillName.trim()
-                  ? item.skillName.trim()
-                  : typeof item.path === "string" && item.path.trim()
-                    ? item.path.trim().split("/").filter(Boolean).pop() || ""
-                    : "";
+              const name =
+                typeof item.name === "string" && item.name.trim()
+                  ? item.name.trim()
+                  : typeof item.skillName === "string" && item.skillName.trim()
+                    ? item.skillName.trim()
+                    : typeof item.path === "string" && item.path.trim()
+                      ? item.path.trim().split("/").filter(Boolean).pop() || ""
+                      : "";
               return name
                 ? {
                     id: name,
@@ -349,12 +916,13 @@ export default function AgentEditorPage() {
                 .map((item) => ({
                   id: item.agent_id,
                   label: item.name,
-                  description: item.agent_type === "supervisor" ? "Supervisor" : "Single",
+                  description:
+                    item.agent_type === "supervisor" ? "Supervisor" : "Single",
                 }))
             : []
         );
-      } catch (err) {
-        setPageError(err instanceof Error ? err.message : "加载资源候选失败");
+      } catch (error) {
+        setPageError(error instanceof Error ? error.message : "加载资源候选失败");
       }
     };
     void loadOptions();
@@ -364,7 +932,7 @@ export default function AgentEditorPage() {
   }, [editingAgentId, requestContext, token]);
 
   useEffect(() => {
-    if (!token || !editingAgentId) {
+    if (!editingAgentId) {
       return;
     }
     let cancelled = false;
@@ -377,9 +945,9 @@ export default function AgentEditorPage() {
           return;
         }
         setForm(fromDetail(detail.data as AgentDetail));
-      } catch (err) {
+      } catch (error) {
         if (!cancelled) {
-          setPageError(err instanceof Error ? err.message : "加载 Agent 详情失败");
+          setPageError(error instanceof Error ? error.message : "加载 Agent 详情失败");
         }
       } finally {
         if (!cancelled) {
@@ -391,19 +959,105 @@ export default function AgentEditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [editingAgentId, requestContext, token]);
+  }, [editingAgentId, requestContext]);
 
-  useEffect(() => {
-    if (!chatScrollRef.current) {
+  const chats = useMemo<SemiMessage[]>(
+    () =>
+      semiMessages.map((message, index) => ({
+        ...message,
+        content:
+          message.role === "assistant"
+            ? groupAssistantProcessItems(message.content)
+            : message.content,
+        id: message.id ?? `${message.role}-${index}`,
+      })),
+    [semiMessages]
+  );
+
+  useLayoutEffect(() => {
+    if (chats.length === 0) {
       return;
     }
-    chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-  }, [chatMessages]);
+    const dialogueContainer =
+      dialogueWrapperRef.current?.querySelector<HTMLElement>(
+        ".semi-ai-chat-dialogue-list"
+      ) ?? null;
+    if (!dialogueContainer) {
+      return;
+    }
+    dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+    let secondFrameId = 0;
+    const firstFrameId = window.requestAnimationFrame(() => {
+      dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+      secondFrameId = window.requestAnimationFrame(() => {
+        dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [chats.length]);
+
+  const roleConfig = useMemo(
+    () => ({
+      user: {
+        name: userName || "用户",
+        avatar:
+          userAvatar ||
+          buildTextAvatarDataUrl(userName || "用户", {
+            background: "#2DD4BF",
+          }),
+        color: "teal",
+      },
+      assistant: {
+        name: form.name.trim() || "当前 Agent",
+        avatar:
+          effectiveAvatarURL ||
+          buildTextAvatarDataUrl(form.name.trim() || "AI", {
+            background: "#6366F1",
+          }),
+        color: "indigo",
+      },
+    }),
+    [effectiveAvatarURL, form.name, userAvatar, userName]
+  );
+
+  const renderDialogueContentItem = useChatDialogueRenderers(renderActivityMessage);
+
+  const renderActionArea = useCallback(
+    (props: { menuItem: ReactNode[]; className: string }) => (
+      <ChatInputActionArea
+        className={props.className}
+        menuItem={props.menuItem}
+        conversationMode="agent"
+        selectedModelOption={null}
+        availableModels={[]}
+        selectedModelId=""
+        onModelChange={() => undefined}
+        onOpenUploadPicker={handleOpenUploadPicker}
+        uploadDisabled={chatRunning || uploading}
+        pendingUploadCount={pendingUploads.length}
+      />
+    ),
+    [chatRunning, handleOpenUploadPicker, pendingUploads.length, uploading]
+  );
+
+  const emptyStatePrompts = useMemo(
+    () =>
+      form.example_questions_text
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 4),
+    [form.example_questions_text]
+  );
+
+  const showEmptyState = !chatRunning && chats.length === 0;
 
   const handleSave = useCallback(async () => {
-    if (!token) {
-      return;
-    }
     setSaving(true);
     setPageError("");
     try {
@@ -414,12 +1068,12 @@ export default function AgentEditorPage() {
         await createAgent(payload, requestContext);
       }
       router.push("/agents");
-    } catch (err) {
-      setPageError(err instanceof Error ? err.message : "保存 Agent 失败");
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "保存 Agent 失败");
     } finally {
       setSaving(false);
     }
-  }, [editingAgentId, form, requestContext, router, token]);
+  }, [editingAgentId, form, requestContext, router]);
 
   const uploadAvatar = useCallback(
     async (file: File) => {
@@ -431,8 +1085,8 @@ export default function AgentEditorPage() {
           ...current,
           avatar_url: uploaded.url,
         }));
-      } catch (err) {
-        setPageError(err instanceof Error ? err.message : "上传头像失败");
+      } catch (error) {
+        setPageError(error instanceof Error ? error.message : "上传头像失败");
       } finally {
         setUploadingAvatar(false);
       }
@@ -450,8 +1104,8 @@ export default function AgentEditorPage() {
           ...current,
           background_image_url: uploaded.url,
         }));
-      } catch (err) {
-        setPageError(err instanceof Error ? err.message : "上传聊天背景失败");
+      } catch (error) {
+        setPageError(error instanceof Error ? error.message : "上传聊天背景失败");
       } finally {
         setUploadingBackground(false);
       }
@@ -459,95 +1113,94 @@ export default function AgentEditorPage() {
     [requestContext]
   );
 
-  const runTestChat = useCallback(async () => {
-    const inputText = chatInput.trim();
-    if (!inputText) {
-      return;
-    }
+  const handleClearChat = useCallback(() => {
+    clearRuntimeMaps();
+    setConversationMessages([]);
+    setSemiMessages([]);
     setChatError("");
-    setChatRunning(true);
-    const userMessage: AgentDebugMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: inputText,
-    };
-    const nextMessages = [...chatMessages, userMessage];
-    setChatMessages(nextMessages);
-    setChatInput("");
+    clearUploadError();
+    resetUploads();
+    setThreadId(createThreadId());
+    setComposerText("");
+  }, [clearRuntimeMaps, clearUploadError, resetUploads, setComposerText]);
 
-    try {
-      // Keep test history entirely on the client and only send plain chat messages to backend.
-      await runAgentDebugSession(toPayload(form), nextMessages, requestContext, {
-        onTextMessageStartEvent: ({ event }) => {
-          const messageID = resolveDebugEventMessageID(event);
-          if (!messageID) {
-            return;
+  const handleMessageSend = useCallback(
+    (payload: MessageContent) => {
+      if (chatRunning) {
+        return;
+      }
+      if (uploading) {
+        setChatError("附件上传中，请稍候");
+        return;
+      }
+
+      const inputContents = payload?.inputContents ?? [];
+      const text = extractInputPlainText(inputContents as AIChatInputContent[]);
+      const textExists = text.trim().length > 0;
+      if (!textExists && pendingUploads.length === 0) {
+        setChatError("请输入内容或上传附件");
+        return;
+      }
+
+      const uploadedAssets = [...pendingUploads];
+      const userMessage: AguiMessage = {
+        id: createMessageId(),
+        role: "user",
+        content: buildAguiUserContent(text, uploadedAssets),
+      };
+      const nextConversationMessages = [...conversationMessages, userMessage];
+
+      setChatRunning(true);
+      setChatError("");
+      clearUploadError();
+      clearRuntimeMaps();
+      setConversationMessages(nextConversationMessages);
+      setSemiMessages((prev) => [
+        ...prev,
+        {
+          id: userMessage.id,
+          role: "user",
+          content: mapAguiUserContentToSemi(userMessage.content),
+          status: "completed",
+          createdAt: Date.now(),
+        },
+      ]);
+      clearPendingUploads();
+      setComposerText("");
+
+      void runAgentDebugSession(
+        toPayload(form),
+        nextConversationMessages,
+        requestContext,
+        {
+          onEvent: handleDebugEvent,
+        }
+      )
+        .catch((error) => {
+          if (uploadedAssets.length > 0) {
+            restorePendingUploads(uploadedAssets);
           }
-          setChatMessages((current) => {
-            if (current.some((item) => item.id === messageID)) {
-              return current;
-            }
-            return [
-              ...current,
-              {
-                id: messageID,
-                role: "assistant",
-                content: "",
-              },
-            ];
-          });
-        },
-        onTextMessageContentEvent: ({ event, textMessageBuffer }) => {
-          const messageID = resolveDebugEventMessageID(event);
-          if (!messageID) {
-            return;
-          }
-          setChatMessages((current) => {
-            if (!current.some((item) => item.id === messageID)) {
-              return [
-                ...current,
-                {
-                  id: messageID,
-                  role: "assistant",
-                  content: textMessageBuffer,
-                },
-              ];
-            }
-            return current.map((item) =>
-              item.id === messageID
-                ? {
-                    ...item,
-                    content: textMessageBuffer,
-                  }
-                : item
-            );
-          });
-        },
-        onMessagesChanged: ({ messages }) => {
-          const normalized = mapAgentRuntimeMessagesToDebug(
-            messages as Array<{ id?: string; role?: string; content?: unknown }>
-          );
-          if (normalized.length === 0) {
-            return;
-          }
-          setChatMessages((current) => {
-            const currentMap = new Map(current.map((item) => [item.id, item] as const));
-            for (const message of normalized) {
-              currentMap.set(message.id, message);
-            }
-            return Array.from(currentMap.values());
-          });
-        },
-        onRunErrorEvent: ({ event }) => {
-          setChatError(event.message || "测试运行失败");
-        },
-      });
-    } catch (err) {
-      setChatError(err instanceof Error ? err.message : "测试运行失败");
-    } finally {
-      setChatRunning(false);
-    }
-  }, [chatInput, chatMessages, form, requestContext]);
+          setChatError(error instanceof Error ? error.message : "测试运行失败");
+        })
+        .finally(() => {
+          setChatRunning(false);
+        });
+    },
+    [
+      chatRunning,
+      clearPendingUploads,
+      clearRuntimeMaps,
+      clearUploadError,
+      conversationMessages,
+      form,
+      handleDebugEvent,
+      pendingUploads,
+      requestContext,
+      restorePendingUploads,
+      setComposerText,
+      uploading,
+    ]
+  );
 
   const bindingOptions = useMemo(() => {
     switch (bindingPickerType) {
@@ -580,7 +1233,9 @@ export default function AgentEditorPage() {
       const exists = current[type].includes(value);
       return {
         ...current,
-        [type]: exists ? current[type].filter((item) => item !== value) : [...current[type], value],
+        [type]: exists
+          ? current[type].filter((item) => item !== value)
+          : [...current[type], value],
       };
     });
   }, []);
@@ -626,7 +1281,7 @@ export default function AgentEditorPage() {
                 {form.agent_type === "supervisor" ? "Supervisor 模式" : "Single 模式"}
               </span>
               <span className="rounded-[8px] border border-[var(--color-border-default)] bg-white px-2 py-1 text-xs text-[var(--color-text-secondary)]">
-                自动保存于本地草稿
+                测试会话仅保存在当前页面
               </span>
             </div>
           </div>
@@ -652,8 +1307,11 @@ export default function AgentEditorPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    agent_type: (event.target.value === "supervisor" ? "supervisor" : "single") as AgentType,
-                    sub_agent_ids: event.target.value === "supervisor" ? current.sub_agent_ids : [],
+                    agent_type: (
+                      event.target.value === "supervisor" ? "supervisor" : "single"
+                    ) as AgentType,
+                    sub_agent_ids:
+                      event.target.value === "supervisor" ? current.sub_agent_ids : [],
                   }))
                 }
               >
@@ -663,20 +1321,27 @@ export default function AgentEditorPage() {
               <UiTextarea
                 rows={2}
                 value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, description: event.target.value }))
+                }
                 placeholder="智能体描述"
               />
               <UiTextarea
                 rows={8}
                 value={form.system_prompt}
-                onChange={(event) => setForm((current) => ({ ...current, system_prompt: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, system_prompt: event.target.value }))
+                }
                 placeholder="系统提示词"
               />
               <UiTextarea
                 rows={3}
                 value={form.example_questions_text}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, example_questions_text: event.target.value }))
+                  setForm((current) => ({
+                    ...current,
+                    example_questions_text: event.target.value,
+                  }))
                 }
                 placeholder="示例问法，每行一条"
               />
@@ -770,63 +1435,138 @@ export default function AgentEditorPage() {
 
           <section className="workspace-item-surface rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-base font-semibold text-[var(--color-text-primary)]">智能体对话测试</div>
+              <div className="text-base font-semibold text-[var(--color-text-primary)]">
+                智能体对话测试
+              </div>
               <UiButton
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  setChatMessages([]);
-                  setChatError("");
-                }}
-                disabled={chatRunning || chatMessages.length === 0}
+                onClick={handleClearChat}
+                disabled={chatRunning || (chats.length === 0 && pendingUploads.length === 0)}
               >
                 清空会话
               </UiButton>
             </div>
             <div
-              ref={chatScrollRef}
-              className="mt-3 h-[520px] overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.66)] p-3"
+              className="mt-3 h-[520px] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.66)]"
               style={chatBackgroundStyle}
             >
-              {visibleChatMessages.length === 0 ? (
-                <div className="text-sm text-[var(--color-text-muted)]">测试聊天区，支持多轮对话。</div>
-              ) : (
-                <div className="space-y-3">
-                  {visibleChatMessages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={joinClasses(
-                        "max-w-[88%] rounded-[var(--radius-md)] border px-3 py-2 text-sm whitespace-pre-wrap",
-                        message.role === "user"
-                          ? "ml-auto border-[rgba(37,99,255,0.24)] bg-[rgba(37,99,255,0.08)]"
-                          : "mr-auto border-[var(--color-border-default)] bg-white"
-                      )}
-                    >
-                      {message.content}
+              {showEmptyState ? (
+                <div className="flex h-full items-center justify-center px-6 py-8">
+                  <div className="max-w-xl text-center">
+                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-[18px] border border-[rgba(199,104,67,0.14)] bg-[rgba(255,250,245,0.72)] text-[var(--color-action-primary)]">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-6 w-6"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M8 10h8" />
+                        <path d="M8 14h5" />
+                        <path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 2-2z" />
+                      </svg>
                     </div>
-                  ))}
+                    <div className="mt-4">
+                      <h2 className="text-[24px] font-semibold leading-none tracking-[-0.04em] text-[var(--color-text-primary)]">
+                        {form.name.trim() || "当前 Agent"}
+                      </h2>
+                      {form.description.trim() ? (
+                        <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--color-text-secondary)]">
+                          {form.description.trim()}
+                        </p>
+                      ) : null}
+                    </div>
+                    {emptyStatePrompts.length > 0 ? (
+                      <div className="mt-5 flex flex-wrap justify-center gap-2.5">
+                        {emptyStatePrompts.map((prompt) => (
+                          <button
+                            key={prompt}
+                            type="button"
+                            onClick={() => setComposerText(prompt)}
+                            className="rounded-full border border-[rgba(126,96,69,0.16)] bg-[rgba(255,252,247,0.82)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:border-[rgba(199,104,67,0.24)] hover:bg-[rgba(255,247,240,0.9)] hover:text-[var(--color-text-primary)]"
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div ref={dialogueWrapperRef} className="h-full px-2 py-2 md:px-3 md:py-3">
+                  <AIChatDialogue
+                    align="leftRight"
+                    mode="bubble"
+                    chats={chats}
+                    renderDialogueContentItem={renderDialogueContentItem}
+                    roleConfig={roleConfig}
+                    className="h-full"
+                  />
                 </div>
               )}
             </div>
-            <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-white p-3">
-              <UiTextarea
-                rows={4}
-                value={chatInput}
-                onChange={(event) => setChatInput(event.target.value)}
-                placeholder="输入消息进行调试测试"
-                disabled={chatRunning}
-              />
-              <div className="mt-2 flex justify-end">
-                <UiButton onClick={() => void runTestChat()} disabled={chatRunning}>
-                  {chatRunning ? "测试中..." : "发送"}
-                </UiButton>
+            <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[linear-gradient(180deg,rgba(255,252,247,0.9),rgba(247,237,227,0.96))] p-3">
+              {chatRunning ? (
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.06)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-current" />
+                  AI 正在生成回复
+                </div>
+              ) : null}
+              <div className="relative">
+                <ChatComposerAssist
+                  mentionOpen={false}
+                  mentionCandidates={[]}
+                  mentionTriggerSymbol={null}
+                  mentionActiveIndex={0}
+                  onMentionHover={() => undefined}
+                  onMentionSelect={() => undefined}
+                  selectedMentions={[]}
+                  onRemoveMention={() => undefined}
+                  uploadInputRef={uploadInputRef}
+                  onUploadInputChange={handleUploadInputChange}
+                  pendingUploads={pendingUploads}
+                  uploading={uploading}
+                  onRemovePendingUpload={removePendingUpload}
+                />
+                <AIChatInput
+                  ref={inputRef as unknown as Ref<unknown>}
+                  className="chat-composer-input"
+                  keepSkillAfterSend={false}
+                  placeholder="输入消息进行调试测试"
+                  onContentChange={handleComposerContentChange}
+                  onMessageSend={handleMessageSend}
+                  generating={chatRunning}
+                  canSend={!chatRunning && !uploading}
+                  showUploadButton={false}
+                  showUploadFile={false}
+                  showReference={false}
+                  round
+                  immediatelyRender={false}
+                  renderActionArea={renderActionArea}
+                />
               </div>
+              {chatError ? (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
+                >
+                  {chatError}
+                </div>
+              ) : null}
+              {uploadError ? (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.08)] px-3 py-2 text-xs text-[var(--color-state-error)]"
+                >
+                  {uploadError}
+                </div>
+              ) : null}
             </div>
-            {chatError ? (
-              <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(220,38,38,0.14)] bg-[rgba(255,255,255,0.7)] px-3 py-2 text-sm text-[var(--color-danger)]">
-                {chatError}
-              </div>
-            ) : null}
           </section>
         </div>
       </div>
@@ -858,7 +1598,10 @@ export default function AgentEditorPage() {
               variant="ghost"
               size="sm"
               onClick={() => {
-                setForm((current) => ({ ...current, avatar_url: SITE_DEFAULT_AVATAR_URL }));
+                setForm((current) => ({
+                  ...current,
+                  avatar_url: SITE_DEFAULT_AVATAR_URL,
+                }));
               }}
             >
               使用默认头像
@@ -933,11 +1676,20 @@ export default function AgentEditorPage() {
                       : "border-[var(--color-border-default)]"
                   )}
                 >
-                  <input type="checkbox" checked={checked} onChange={() => toggleBinding(type, item.id)} className="mt-1" />
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBinding(type, item.id)}
+                    className="mt-1"
+                  />
                   <span className="min-w-0">
-                    <span className="block font-medium text-[var(--color-text-primary)]">{item.label}</span>
+                    <span className="block font-medium text-[var(--color-text-primary)]">
+                      {item.label}
+                    </span>
                     {item.description ? (
-                      <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">{item.description}</span>
+                      <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                        {item.description}
+                      </span>
                     ) : null}
                   </span>
                 </label>
@@ -947,6 +1699,89 @@ export default function AgentEditorPage() {
         </div>
       </UiModal>
     </div>
+  );
+}
+
+export default function AgentEditorPage() {
+  const router = useRouter();
+  const [token, setToken] = useState("");
+  const [userInfo, setUserInfo] = useState<StoredUser | null>(null);
+
+  const refreshUserInfo = useCallback(() => {
+    setUserInfo(readStoredUser());
+  }, []);
+
+  useEffect(() => {
+    const currentToken = readValidToken(router);
+    if (!currentToken) {
+      router.push("/login");
+      return;
+    }
+    setToken(currentToken);
+    refreshUserInfo();
+  }, [refreshUserInfo, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "user") {
+        refreshUserInfo();
+      }
+    };
+    const handleFocus = () => {
+      refreshUserInfo();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [refreshUserInfo]);
+
+  const userName = useMemo(() => {
+    const name =
+      typeof userInfo?.username === "string" ? userInfo.username.trim() : "";
+    return name || "用户";
+  }, [userInfo]);
+
+  const userAvatar = useMemo(() => {
+    const avatar =
+      typeof userInfo?.avatar === "string" ? userInfo.avatar.trim() : "";
+    return avatar;
+  }, [userInfo]);
+
+  const userId = useMemo(() => {
+    if (!token) return "";
+    const storedId = userInfo?.user_id;
+    if (storedId !== undefined && storedId !== null) {
+      return String(storedId);
+    }
+    return getUserIdFromToken(token);
+  }, [token, userInfo]);
+
+  const copilotHeaders = useMemo(
+    () => buildAuthHeaders(token, userId),
+    [token, userId]
+  );
+
+  if (!token) {
+    return null;
+  }
+
+  return (
+    <CopilotKitProvider
+      runtimeUrl="/api/copilotkit"
+      renderActivityMessages={ACTIVITY_RENDERERS}
+      headers={copilotHeaders}
+    >
+      <AgentEditorContent
+        token={token}
+        userId={userId}
+        userName={userName}
+        userAvatar={userAvatar}
+      />
+    </CopilotKitProvider>
   );
 }
 
@@ -976,9 +1811,9 @@ function ImageUploadCard({
         )}
       </div>
       <div className="mt-2 flex gap-2">
-            <UiButton variant="secondary" size="sm" onClick={onPick} disabled={uploading}>
-              {uploading ? "上传中..." : "上传图片"}
-            </UiButton>
+        <UiButton variant="secondary" size="sm" onClick={onPick} disabled={uploading}>
+          {uploading ? "上传中..." : "上传图片"}
+        </UiButton>
         {imageURL ? (
           <UiButton variant="ghost" size="sm" onClick={onClear}>
             清空
@@ -1030,7 +1865,11 @@ function BindingSection({
               className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-default)] bg-[rgba(255,255,255,0.75)] px-3 py-1 text-xs"
             >
               <span>{optionMap.get(value)?.label || value}</span>
-              <button type="button" onClick={() => onRemove(value)} className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)]">
+              <button
+                type="button"
+                onClick={() => onRemove(value)}
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
+              >
                 ×
               </button>
             </span>

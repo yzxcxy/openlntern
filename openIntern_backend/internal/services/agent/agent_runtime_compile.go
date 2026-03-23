@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"openIntern/internal/dao"
+	builtinTool "openIntern/internal/services/builtin_tool"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	pluginsvc "openIntern/internal/services/plugin"
 	skillsvc "openIntern/internal/services/skill"
@@ -251,9 +252,28 @@ func (c *agentModeCompiler) buildTools(detail *AgentDetailView, depth int) ([]ei
 }
 
 func (c *agentModeCompiler) buildBuiltinTools() ([]einoTool.BaseTool, func(), error) {
-	// Agent 模式仅注入显式绑定资源（插件、skill、sub-agent）。
-	// 不再默认注入内置工具，避免模型误调未绑定能力（如 upload_to_cos）。
-	return nil, nil, nil
+	// Agent 模式仍需注入平台级内建能力，保证 A2UI、文件上传和沙箱执行在
+	// 正式会话与编辑页测试链路中保持一致；Skill 相关工具仍然只按显式绑定注入。
+	a2uiTools, err := builtinTool.GetA2UITools(c.ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	cosTools, err := builtinTool.GetCOSTools(c.ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	sandboxTools, sandboxCleanup, err := builtinTool.GetSandboxMCPTools(c.ctx, c.state.sandboxBaseURL)
+	if err != nil {
+		if sandboxCleanup != nil {
+			sandboxCleanup()
+		}
+		return nil, nil, err
+	}
+	tools := make([]einoTool.BaseTool, 0, len(a2uiTools)+len(cosTools)+len(sandboxTools))
+	tools = append(tools, a2uiTools...)
+	tools = append(tools, cosTools...)
+	tools = append(tools, sandboxTools...)
+	return tools, sandboxCleanup, nil
 }
 
 func (c *agentModeCompiler) buildPluginTools(toolIDs []string) ([]einoTool.BaseTool, func(), error) {

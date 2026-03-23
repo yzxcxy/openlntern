@@ -63,12 +63,6 @@ export type AgentPayload = {
   sub_agent_ids: string[];
 };
 
-export type AgentDebugMessage = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-};
-
 export type AgentPage<T> = {
   data: T[];
   total: number;
@@ -223,7 +217,7 @@ export const listKnowledgeBaseOptions = async (ctx: RequestContext) =>
 
 export const runAgentDebugSession = async (
   definition: AgentPayload,
-  messages: AgentDebugMessage[],
+  messages: AguiMessage[],
   ctx: RequestContext,
   subscriber?: AgentSubscriber
 ) => {
@@ -235,7 +229,7 @@ export const runAgentDebugSession = async (
     url: "/api/backend/v1/agents/debug/sse",
     headers: buildAuthHeaders(token, ctx.userId),
   });
-  agent.setMessages(messages as AguiMessage[]);
+  agent.setMessages(messages);
   return agent.runAgent(
     {
       forwardedProps: {
