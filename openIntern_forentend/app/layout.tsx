@@ -8,6 +8,7 @@ import "./styles/motion.css";
 import "@copilotkit/react-core/v2/styles.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
+import { OPENINTERN_DEFAULT_AVATAR_URL } from "./shared/avatar";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
   title: "openIntern",
   description: "统一管理聊天、Agent、模型、插件与知识库。",
   icons: {
-    icon: "/OpenIntern.png",
+    icon: OPENINTERN_DEFAULT_AVATAR_URL,
   },
 };
 

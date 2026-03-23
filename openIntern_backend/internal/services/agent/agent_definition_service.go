@@ -32,7 +32,8 @@ const (
 	AgentBindingSubAgent = "sub_agent"
 
 	maxAgentCompileDepth = 3
-	defaultAgentAvatarURL = "/OpenIntern.png"
+	// Keep backend-created agent avatars aligned with the frontend default avatar.
+	defaultAgentAvatarURL = "https://open-intern-1307855818.cos.ap-guangzhou.myqcloud.com/avatar/openIntern%40200%C3%97200.jpg"
 )
 
 type AgentDefinitionService struct{}

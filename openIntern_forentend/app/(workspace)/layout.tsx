@@ -9,6 +9,7 @@ import { UiButton } from "../components/ui/UiButton";
 import { UiInput } from "../components/ui/UiInput";
 import { UiConfirmDialog as ConfirmDialog } from "../components/ui/UiConfirmDialog";
 import { UiModal as Modal } from "../components/ui/UiModal";
+import { OPENINTERN_DEFAULT_AVATAR_URL } from "../shared/avatar";
 import {
   THREAD_HISTORY_UPSERT_EVENT,
   type ThreadHistoryItem,
@@ -510,7 +511,6 @@ export default function WorkspaceLayout({
 
   const displayName = userInfo?.username || userInfo?.email || "未登录用户";
   const displayEmail = userInfo?.email || "";
-  const avatarLabel = displayName ? displayName.slice(0, 1) : "U";
   const isA2ui = pathname === "/a2ui";
   const isChat = pathname === "/chat";
   const isAgent = pathname.startsWith("/agents");
@@ -548,7 +548,11 @@ export default function WorkspaceLayout({
                   )}
                 >
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-[rgba(126,96,69,0.14)] bg-[linear-gradient(145deg,rgba(255,252,247,0.98),rgba(246,233,220,0.92))] shadow-[0_16px_30px_rgba(48,32,16,0.1)]">
-                    <img src="/OpenIntern.png" alt="openIntern" className="h-8 w-8 rounded-full" />
+                    <img
+                      src={OPENINTERN_DEFAULT_AVATAR_URL}
+                      alt="openIntern"
+                      className="h-8 w-8 rounded-full"
+                    />
                   </div>
                   {!isSidebarCollapsed && (
                     <div className="min-w-0">
@@ -1066,17 +1070,11 @@ export default function WorkspaceLayout({
                     onClick={handleUserManage}
                     className="motion-safe-highlight flex min-w-0 flex-1 items-center gap-3 rounded-[20px] px-2 py-2 text-left hover:bg-[rgba(255,252,247,0.8)]"
                   >
-                    {userInfo?.avatar ? (
-                      <img
-                        src={userInfo.avatar}
-                        alt={displayName}
-                        className="h-9 w-9 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,252,247,0.88)] text-sm font-semibold text-[var(--color-text-secondary)]">
-                        {avatarLabel}
-                      </div>
-                    )}
+                    <img
+                      src={userInfo?.avatar || OPENINTERN_DEFAULT_AVATAR_URL}
+                      alt={displayName}
+                      className="h-9 w-9 rounded-full object-cover"
+                    />
                     <div className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-sm font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
                         {displayName}

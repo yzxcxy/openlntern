@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
+import { OPENINTERN_DEFAULT_AVATAR_URL } from "../../shared/avatar";
 import { readStoredUser, readValidToken, requestBackend } from "../auth";
 
 type UserInfo = {
@@ -219,7 +220,6 @@ export default function UserPage() {
   };
 
   const displayName = userInfo?.username || userInfo?.email || "用户";
-  const avatarLabel = displayName ? displayName.slice(0, 1) : "U";
   const profileCompletion = Math.round(
     (
       [userInfo?.username, userInfo?.email, userInfo?.phone, userInfo?.avatar].filter(Boolean)
@@ -234,17 +234,11 @@ export default function UserPage() {
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]">
           <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-              {userInfo?.avatar ? (
-                <img
-                  src={userInfo.avatar}
-                  alt={displayName}
-                  className="h-16 w-16 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-bg-page)] text-xl font-semibold text-[var(--color-text-secondary)]">
-                  {avatarLabel}
-                </div>
-              )}
+              <img
+                src={userInfo?.avatar || OPENINTERN_DEFAULT_AVATAR_URL}
+                alt={displayName}
+                className="h-16 w-16 rounded-full object-cover"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">

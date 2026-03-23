@@ -50,6 +50,7 @@ import {
   type ChatPluginOption,
 } from "./chat-plugin-config";
 import { theme } from "../../theme";
+import { OPENINTERN_DEFAULT_AVATAR_URL } from "../../shared/avatar";
 import {
   type BackendEnvelope,
   buildAuthHeaders,
@@ -69,7 +70,6 @@ import {
   TOOL_RESULT_TYPE,
   buildAguiUserContent,
   buildAssistantMessageKey,
-  buildTextAvatarDataUrl,
   CHAT_ASSISTANT_KEY,
   createMessageId,
   createThreadId,
@@ -574,10 +574,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     () => enabledAgents.find((item) => item.agent_id === selectedAgentId) ?? null,
     [enabledAgents, selectedAgentId]
   );
-  const defaultAssistantAvatar = useMemo(
-    () => buildTextAvatarDataUrl("AI", { background: "#6366F1" }),
-    []
-  );
+  const defaultAssistantAvatar = OPENINTERN_DEFAULT_AVATAR_URL;
   const currentAssistantKey = useMemo(
     () => buildAssistantMessageKey(conversationMode, selectedAgentId),
     [conversationMode, selectedAgentId]
@@ -1372,11 +1369,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     () => ({
       user: {
         name: userName || "用户",
-        avatar:
-          userAvatar ||
-          buildTextAvatarDataUrl(userName || "用户", {
-            background: "#2DD4BF",
-          }),
+        avatar: userAvatar || OPENINTERN_DEFAULT_AVATAR_URL,
         color: "teal",
       },
       assistant: {

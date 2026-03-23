@@ -30,6 +30,7 @@ import { UiModal } from "../../../components/ui/UiModal";
 import { UiSelect } from "../../../components/ui/UiSelect";
 import { UiTextarea } from "../../../components/ui/UiTextarea";
 import { theme } from "../../../theme";
+import { OPENINTERN_DEFAULT_AVATAR_URL } from "../../../shared/avatar";
 import {
   buildAuthHeaders,
   getUserIdFromToken,
@@ -45,7 +46,6 @@ import {
   ACTIVITY_EVENT_SNAPSHOT,
   TOOL_RESULT_TYPE,
   buildAguiUserContent,
-  buildTextAvatarDataUrl,
   createMessageId,
   createThreadId,
   extractInputPlainText,
@@ -131,7 +131,6 @@ type MessageItemRecord = Record<string, unknown> & {
   arguments?: string;
 };
 
-const SITE_DEFAULT_AVATAR_URL = "/OpenIntern.png";
 const A2UI_MESSAGE_RENDERER = createA2UIMessageRenderer({ theme });
 const ACTIVITY_RENDERERS = [A2UI_MESSAGE_RENDERER];
 
@@ -328,7 +327,7 @@ function AgentEditorContent({
   const [chatError, setChatError] = useState("");
 
   const effectiveAvatarURL =
-    (form.avatar_url || "").trim() || SITE_DEFAULT_AVATAR_URL;
+    (form.avatar_url || "").trim() || OPENINTERN_DEFAULT_AVATAR_URL;
   const chatBackgroundStyle = useMemo(() => {
     const bg = (form.background_image_url || "").trim();
     if (!bg) {
@@ -1005,20 +1004,12 @@ function AgentEditorContent({
     () => ({
       user: {
         name: userName || "用户",
-        avatar:
-          userAvatar ||
-          buildTextAvatarDataUrl(userName || "用户", {
-            background: "#2DD4BF",
-          }),
+        avatar: userAvatar || OPENINTERN_DEFAULT_AVATAR_URL,
         color: "teal",
       },
       assistant: {
         name: form.name.trim() || "当前 Agent",
-        avatar:
-          effectiveAvatarURL ||
-          buildTextAvatarDataUrl(form.name.trim() || "AI", {
-            background: "#6366F1",
-          }),
+        avatar: effectiveAvatarURL,
         color: "indigo",
       },
     }),
@@ -1600,7 +1591,7 @@ function AgentEditorContent({
               onClick={() => {
                 setForm((current) => ({
                   ...current,
-                  avatar_url: SITE_DEFAULT_AVATAR_URL,
+                  avatar_url: OPENINTERN_DEFAULT_AVATAR_URL,
                 }));
               }}
             >
