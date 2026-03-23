@@ -158,5 +158,6 @@ func (d *KnowledgeBaseDAO) DeleteEntry(ctx context.Context, uri string, recursiv
 }
 
 func (d *KnowledgeBaseDAO) ReadContent(ctx context.Context, uri string) (string, error) {
-	return readContent(ctx, uri, "/api/v1/fs/cat")
+	// Knowledge base entries are OpenViking resources, so content must be read via the content API.
+	return readContent(ctx, uri, "/api/v1/content/read")
 }
