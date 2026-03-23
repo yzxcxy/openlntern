@@ -153,6 +153,19 @@ export default function WorkspaceLayout({
   const readUserFromStorage = useCallback((): UserInfo => readStoredUser(), []);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        router.push(`/chat?threadId=${createThreadId()}&new=1`);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [router]);
+
+  useEffect(() => {
     const token = readValidToken(router);
     if (!token) {
       router.push("/login");

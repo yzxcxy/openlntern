@@ -102,6 +102,7 @@ type EnabledAgentOption = {
   description?: string;
   agent_type: "single" | "supervisor";
   default_model_id?: string;
+  example_questions?: string[];
 };
 
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
@@ -1290,12 +1291,33 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const showHistorySkeleton = historyLoading && chats.length === 0;
   const showEmptyState =
     !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
-  const emptyStatePrompts = [
-    "介绍一下你能做什么",
-    "帮我总结一份文档",
-    "帮我分析一个报错",
-    "给我写一个接口设计",
-  ];
+
+  // Agent 模式下根据选择的 agent 显示动态内容
+  const emptyStateTitle = useMemo(() => {
+    if (conversationMode === "agent" && selectedAgentOption?.name) {
+      return selectedAgentOption.name;
+    }
+    return "开始新对话";
+  }, [conversationMode, selectedAgentOption]);
+
+  const emptyStateDescription = useMemo(() => {
+    if (conversationMode === "agent" && selectedAgentOption?.description?.trim()) {
+      return selectedAgentOption.description.trim();
+    }
+    return "输入一个任务，或者直接使用下面的快捷提示。";
+  }, [conversationMode, selectedAgentOption]);
+
+  const emptyStatePrompts = useMemo(() => {
+    if (conversationMode === "agent" && selectedAgentOption?.example_questions?.length) {
+      return selectedAgentOption.example_questions.slice(0, 4);
+    }
+    return [
+      "介绍一下你能做什么",
+      "帮我总结一份文档",
+      "帮我分析一个报错",
+      "给我写一个接口设计",
+    ];
+  }, [conversationMode, selectedAgentOption]);
   const openComposerExpandModal = useCallback(() => {
     setComposerExpandDraft(composerDraft);
     setComposerExpandOpen(true);
@@ -1733,10 +1755,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                     </div>
                     <div className="mt-4">
                       <h2 className="text-[24px] font-semibold leading-none tracking-[-0.04em] text-[var(--color-text-primary)]">
-                        开始新对话
+                        {emptyStateTitle}
                       </h2>
                       <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--color-text-secondary)]">
-                        输入一个任务，或者直接使用下面的快捷提示。
+                        {emptyStateDescription}
                       </p>
                     </div>
                     <div className="mt-5 flex flex-wrap justify-center gap-2.5">

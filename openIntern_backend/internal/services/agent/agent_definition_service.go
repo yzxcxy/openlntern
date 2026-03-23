@@ -105,14 +105,15 @@ type AgentDetailView struct {
 }
 
 type EnabledAgentOption struct {
-	AgentID          string `json:"agent_id"`
-	Name             string `json:"name"`
-	Description      string `json:"description"`
-	AgentType        string `json:"agent_type"`
-	Status           string `json:"status"`
-	AvatarURL        string `json:"avatar_url"`
-	DefaultModelID   string `json:"default_model_id"`
-	DefaultModelName string `json:"default_model_name"`
+	AgentID           string   `json:"agent_id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	AgentType         string   `json:"agent_type"`
+	Status            string   `json:"status"`
+	AvatarURL         string   `json:"avatar_url"`
+	DefaultModelID    string   `json:"default_model_id"`
+	DefaultModelName  string   `json:"default_model_name"`
+	ExampleQuestions  []string `json:"example_questions"`
 }
 
 var AgentDefinition = new(AgentDefinitionService)
@@ -321,6 +322,7 @@ func (s *AgentDefinitionService) ListEnabledOptions(ownerID string) ([]EnabledAg
 			AvatarURL:        normalizeAgentAvatarURL(item.AvatarURL),
 			DefaultModelID:   item.DefaultModelID,
 			DefaultModelName: modelNames[item.DefaultModelID],
+			ExampleQuestions: parseExampleQuestions(item.ExampleQuestionsJSON),
 		})
 	}
 	return result, nil
