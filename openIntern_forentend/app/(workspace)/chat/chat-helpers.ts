@@ -10,6 +10,7 @@ export const PROCESS_PANEL_TYPE = "process_panel";
 export const ACTIVITY_EVENT_SNAPSHOT = "ACTIVITY_SNAPSHOT";
 export const ACTIVITY_EVENT_DELTA = "ACTIVITY_DELTA";
 export const A2UI_SURFACE_ACTIVITY_TYPE = "a2ui-surface";
+export const SUB_AGENT_ACTIVITY_TYPE = "sub-agent-panel";
 export const CHAT_ASSISTANT_KEY = "chat";
 export const AGENT_ASSISTANT_KEY_PREFIX = "agent:";
 

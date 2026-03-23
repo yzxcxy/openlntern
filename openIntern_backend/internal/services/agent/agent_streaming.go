@@ -14,16 +14,16 @@ import (
 )
 
 // streamMessageVariant 根据消息角色分发到对应的流式处理器。
-func streamMessageVariant(sender *agui.AccumulatingSender, mv *adk.MessageVariant) error {
+func streamMessageVariant(sender *agui.AccumulatingSender, mv *adk.MessageVariant, hooks agui.MessageHooks) error {
 	if mv == nil || mv.MessageStream == nil {
 		return nil
 	}
 	defer mv.MessageStream.Close()
 	switch mv.Role {
 	case schema.Assistant:
-		return streamAssistantMessage(sender, mv.MessageStream)
+		return streamAssistantMessage(sender, mv.MessageStream, hooks)
 	case schema.Tool:
-		return streamToolMessage(sender, mv.MessageStream)
+		return streamToolMessage(sender, mv.MessageStream, hooks)
 	default:
 		for {
 			_, err := mv.MessageStream.Recv()
@@ -38,7 +38,7 @@ func streamMessageVariant(sender *agui.AccumulatingSender, mv *adk.MessageVarian
 }
 
 // streamAssistantMessage 处理 assistant 流式输出，兼容 tool call 与 reasoning 片段。
-func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.StreamReader[*schema.Message]) error {
+func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.StreamReader[*schema.Message], hooks agui.MessageHooks) error {
 	messageID := ""
 	messageStarted := false
 	reasoningMessageStarted := false
@@ -124,6 +124,9 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 				// 流式解析可能先发出带 name 的 chunk，再发出仅带 partial args 的 chunk（name 为空），
 				// 若对 name 为空的 chunk 调用 StartToolCall 会触发 "toolCallName field is required" 校验失败。
 				if call.Function.Name != "" && !toolCallStarted[callID] {
+					if hooks != nil {
+						hooks.OnToolCallStart(callID, call.Function.Name)
+					}
 					if err := sender.StartToolCall(callID, call.Function.Name); err != nil {
 						return err
 					}
@@ -199,7 +202,7 @@ func streamAssistantMessage(sender *agui.AccumulatingSender, stream *schema.Stre
 }
 
 // streamToolMessage 聚合 tool 流式内容并回传单次 tool result 事件。
-func streamToolMessage(sender *agui.AccumulatingSender, stream *schema.StreamReader[*schema.Message]) error {
+func streamToolMessage(sender *agui.AccumulatingSender, stream *schema.StreamReader[*schema.Message], hooks agui.MessageHooks) error {
 	var contentBuilder strings.Builder
 	toolCallID := ""
 	for {
@@ -222,6 +225,15 @@ func streamToolMessage(sender *agui.AccumulatingSender, stream *schema.StreamRea
 	}
 	if toolCallID == "" {
 		toolCallID = events.GenerateToolCallID()
+	}
+	if hooks != nil {
+		handled, err := hooks.OnToolCallResult(toolCallID, contentBuilder.String())
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
 	}
 	return sender.ToolCallResult(events.GenerateMessageID(), toolCallID, contentBuilder.String())
 }

@@ -105,6 +105,7 @@ func (s *Service) runDebugAgentModeStreaming(ctx context.Context, sender *agui.A
 	if compiled.cleanup != nil {
 		defer compiled.cleanup()
 	}
+	subAgentBridge := newSubAgentActivityBridge(sender)
 	iter := compiled.runner.Run(ctx, messages)
 	for {
 		event, ok := iter.Next()
@@ -117,12 +118,18 @@ func (s *Service) runDebugAgentModeStreaming(ctx context.Context, sender *agui.A
 		if event.Err != nil {
 			return event.Err
 		}
+		if len(event.RunPath) > 1 {
+			if err := subAgentBridge.HandleNestedEvent(event); err != nil {
+				return err
+			}
+			continue
+		}
 		if event.Output == nil || event.Output.MessageOutput == nil {
 			continue
 		}
 		mv := event.Output.MessageOutput
 		if mv.IsStreaming {
-			if err := streamMessageVariant(sender, mv); err != nil {
+			if err := streamMessageVariant(sender, mv, subAgentBridge); err != nil {
 				return err
 			}
 			continue
@@ -134,7 +141,7 @@ func (s *Service) runDebugAgentModeStreaming(ctx context.Context, sender *agui.A
 		if msg == nil {
 			continue
 		}
-		if err := agui.SendEinoMessagesAsAGUI(sender, []*schema.Message{msg}); err != nil {
+		if err := agui.SendEinoMessagesAsAGUIWithHooks(sender, []*schema.Message{msg}, subAgentBridge); err != nil {
 			return err
 		}
 	}

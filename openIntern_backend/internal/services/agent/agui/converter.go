@@ -55,7 +55,16 @@ func AGUIRunInputToEinoMessages(input *types.RunAgentInput) ([]*schema.Message, 
 	return result, nil
 }
 
+type MessageHooks interface {
+	OnToolCallStart(toolCallID, toolName string)
+	OnToolCallResult(toolCallID, content string) (bool, error)
+}
+
 func SendEinoMessagesAsAGUI(sender *AccumulatingSender, messages []*schema.Message) error {
+	return SendEinoMessagesAsAGUIWithHooks(sender, messages, nil)
+}
+
+func SendEinoMessagesAsAGUIWithHooks(sender *AccumulatingSender, messages []*schema.Message, hooks MessageHooks) error {
 	for _, msg := range messages {
 		if msg == nil {
 			continue
@@ -64,6 +73,9 @@ func SendEinoMessagesAsAGUI(sender *AccumulatingSender, messages []*schema.Messa
 		case schema.Assistant:
 			if len(msg.ToolCalls) > 0 {
 				for _, call := range msg.ToolCalls {
+					if hooks != nil {
+						hooks.OnToolCallStart(call.ID, call.Function.Name)
+					}
 					if err := sender.StartToolCall(call.ID, call.Function.Name); err != nil {
 						return err
 					}
@@ -112,6 +124,15 @@ func SendEinoMessagesAsAGUI(sender *AccumulatingSender, messages []*schema.Messa
 			content := msg.Content
 			if content == "" {
 				content = concatInputText(msg.UserInputMultiContent)
+			}
+			if hooks != nil {
+				handled, err := hooks.OnToolCallResult(toolCallID, content)
+				if err != nil {
+					return err
+				}
+				if handled {
+					continue
+				}
 			}
 			if err := sender.ToolCallResult(msgID, toolCallID, content); err != nil {
 				return err

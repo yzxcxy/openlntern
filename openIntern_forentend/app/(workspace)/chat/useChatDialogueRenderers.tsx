@@ -13,6 +13,7 @@ import { IconLoading } from "@douyinfe/semi-icons";
 import {
   ACTIVITY_CONTENT_TYPE,
   PROCESS_PANEL_TYPE,
+  SUB_AGENT_ACTIVITY_TYPE,
   TOOL_RESULT_TYPE,
   createMessageId,
   toRecord,
@@ -357,6 +358,110 @@ function ProcessPanelCollapse({ items, status, collapseOnOutput }: ProcessPanelI
   );
 }
 
+function SubAgentActivityPanel({
+  agentName,
+  status,
+  outputText,
+  processItems,
+}: {
+  agentName?: string;
+  status?: string;
+  outputText?: string;
+  processItems?: Array<Record<string, any>>;
+}) {
+  const normalizedStatus = status === "completed" ? "completed" : "in_progress";
+  const normalizedItems = Array.isArray(processItems) ? processItems : [];
+  const normalizedOutput = typeof outputText === "string" ? outputText.trim() : "";
+  const hasOutput = normalizedOutput.length > 0;
+  const shouldAutoCollapse =
+    normalizedStatus === "completed" &&
+    (normalizedOutput.length > 280 || normalizedItems.length > 6);
+  const [isOpen, setIsOpen] = useState(!shouldAutoCollapse);
+
+  useEffect(() => {
+    if (normalizedStatus !== "completed") {
+      setIsOpen(true);
+      return;
+    }
+    if (shouldAutoCollapse) {
+      setIsOpen(false);
+    }
+  }, [normalizedStatus, shouldAutoCollapse]);
+
+  const processSummary = useMemo(() => {
+    const toolCount = normalizedItems.filter((item) => item?.type === "function_call").length;
+    const reasoningCount = normalizedItems.filter((item) => item?.type === "reasoning").length;
+    const labels = [];
+    if (reasoningCount > 0) {
+      labels.push(`${reasoningCount} 个思考`);
+    }
+    if (toolCount > 0) {
+      labels.push(`${toolCount} 个工具`);
+    }
+    return labels.join("，");
+  }, [normalizedItems]);
+
+  const outputPreview = useMemo(() => {
+    if (!hasOutput) {
+      return "";
+    }
+    const singleLine = normalizedOutput.replace(/\s+/g, " ").trim();
+    if (singleLine.length <= 96) {
+      return singleLine;
+    }
+    return `${singleLine.slice(0, 96)}...`;
+  }, [hasOutput, normalizedOutput]);
+
+  return (
+    <div className="motion-safe-slide-up my-2 overflow-hidden rounded-[var(--radius-xl)] border border-[rgba(199,104,67,0.18)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(255,248,240,0.95))] shadow-[var(--shadow-md)]">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-3 border-b border-[rgba(199,104,67,0.14)] bg-[linear-gradient(90deg,rgba(199,104,67,0.10),rgba(209,157,86,0.06))] px-4 py-3 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-quaternary,#94A3B8)]">
+            子任务
+          </div>
+          <div className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
+            {agentName?.trim() || "Sub Agent"}
+          </div>
+          {!isOpen && (processSummary || outputPreview) ? (
+            <div className="mt-1 truncate text-xs text-[var(--color-text-secondary)]">
+              {[processSummary, outputPreview].filter(Boolean).join(" · ")}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded-full border border-[rgba(199,104,67,0.16)] bg-white/70 px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)]">
+            {normalizedStatus === "completed" ? "已完成" : "执行中"}
+          </span>
+          <span className="text-xs text-[var(--color-text-quaternary,#94A3B8)]">
+            {isOpen ? "收起" : "展开"}
+          </span>
+        </div>
+      </button>
+      {isOpen ? (
+        <div className="space-y-3 p-3">
+          {normalizedItems.length > 0 ? (
+            <ProcessPanelCollapse items={normalizedItems} status={normalizedStatus} />
+          ) : null}
+          {hasOutput ? (
+            <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white/80">
+              <div className="border-b border-[var(--color-border-default)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)]">
+                子任务输出
+              </div>
+              <div className="whitespace-pre-wrap px-3 py-3 text-sm leading-7 text-[var(--color-text-primary)]">
+                {normalizedOutput}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function useChatDialogueRenderers(
   renderActivityMessage: (message: ActivityMessage) => ReactNode
 ) {
@@ -391,6 +496,20 @@ export function useChatDialogueRenderers(
         content?: unknown;
       }) => {
         if (!item?.activityType) return null;
+        if (item.activityType === SUB_AGENT_ACTIVITY_TYPE) {
+          const payload =
+            item.content && typeof item.content === "object"
+              ? (item.content as Record<string, any>)
+              : {};
+          return (
+            <SubAgentActivityPanel
+              agentName={typeof payload.agentName === "string" ? payload.agentName : ""}
+              status={typeof payload.status === "string" ? payload.status : ""}
+              outputText={typeof payload.outputText === "string" ? payload.outputText : ""}
+              processItems={Array.isArray(payload.processItems) ? payload.processItems : []}
+            />
+          );
+        }
         const activityMessage: ActivityMessage = {
           id: String(item.activityMessageId ?? item.id ?? createMessageId()),
           role: "activity",

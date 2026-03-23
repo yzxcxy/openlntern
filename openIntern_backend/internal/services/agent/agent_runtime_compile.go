@@ -344,7 +344,17 @@ func (c *agentModeCompiler) buildSubAgentTools(subAgentIDs []string, depth int) 
 			mergeToolCleanup(cleanups...)()
 			return nil, nil, err
 		}
-		tools = append(tools, adk.NewAgentTool(c.ctx, node.agent))
+		agentTool, ok := adk.NewAgentTool(c.ctx, node.agent).(einoTool.InvokableTool)
+		if !ok {
+			mergeToolCleanup(append(cleanups, node.cleanup)...)()
+			return nil, nil, fmt.Errorf("sub agent tool must implement invokable tool")
+		}
+		renamedTool, err := newRenamedInvokableTool(c.ctx, agentTool, buildSubAgentToolName(subAgentID))
+		if err != nil {
+			mergeToolCleanup(append(cleanups, node.cleanup)...)()
+			return nil, nil, err
+		}
+		tools = append(tools, renamedTool)
 		cleanups = append(cleanups, node.cleanup)
 	}
 	return tools, mergeToolCleanup(cleanups...), nil
