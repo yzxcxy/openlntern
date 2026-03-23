@@ -137,27 +137,7 @@ export default function SkillsPage() {
       <div className="workspace-panel-card rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5">
         <div className="workspace-page-stack">
           <section className="workspace-filter-panel">
-            <div className="workspace-section-title">
-              <div>
-                <h1>Skill 管理</h1>
-                <p>搜索、上传和查看可用 Skill。</p>
-              </div>
-              <div className="workspace-stat-row">
-                <div className="workspace-stat-chip">
-                  <strong>{total}</strong>
-                  <span>数量</span>
-                </div>
-                <div className="workspace-stat-chip">
-                  <strong>{pageSize}</strong>
-                  <span>每页</span>
-                </div>
-                <div className="workspace-stat-chip">
-                  <strong>{totalPages}</strong>
-                  <span>页数</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <UiInput
                 className="w-full max-w-sm"
                 placeholder="搜索名称或描述"
@@ -223,23 +203,14 @@ export default function SkillsPage() {
           </section>
 
           <section>
-            <div className="workspace-section-title">
-              <div>
-                <h2>Skill 卡片</h2>
-                <p>查看 Skill 名称、描述和详情入口。</p>
-              </div>
-            </div>
-
             <div className="mt-4">
               {loading ? (
                 <div className="workspace-empty-state">
-                  <strong>正在加载 Skill 列表</strong>
-                  <span>请稍候。</span>
+                  <span>加载中...</span>
                 </div>
               ) : cards.length === 0 ? (
                 <div className="workspace-empty-state">
-                  <strong>当前没有可展示的 Skill</strong>
-                  <span>你可以先上传一个 zip 包，或者调整关键字重新搜索。</span>
+                  <span>暂无 Skill</span>
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
