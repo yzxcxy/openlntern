@@ -13,7 +13,8 @@ var AgentBinding = new(AgentBindingDAO)
 
 func (d *AgentBindingDAO) ReplaceByAgentID(agentID string, bindings []models.AgentBinding) error {
 	return database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("agent_id = ?", agentID).Delete(&models.AgentBinding{}).Error; err != nil {
+		// Bindings are fully replaced on each save, so stale rows must be hard-deleted to release the unique key.
+		if err := tx.Unscoped().Where("agent_id = ?", agentID).Delete(&models.AgentBinding{}).Error; err != nil {
 			return err
 		}
 		if len(bindings) == 0 {
@@ -24,7 +25,8 @@ func (d *AgentBindingDAO) ReplaceByAgentID(agentID string, bindings []models.Age
 }
 
 func (d *AgentBindingDAO) DeleteByAgentID(agentID string) error {
-	return database.DB.Where("agent_id = ?", agentID).Delete(&models.AgentBinding{}).Error
+	// Agent bindings are disposable association rows and should not be retained as soft-deleted history.
+	return database.DB.Unscoped().Where("agent_id = ?", agentID).Delete(&models.AgentBinding{}).Error
 }
 
 func (d *AgentBindingDAO) ListByAgentID(agentID string) ([]models.AgentBinding, error) {
@@ -49,9 +51,9 @@ func (d *AgentBindingDAO) ListByAgentIDs(agentIDs []string) ([]models.AgentBindi
 
 func (d *AgentBindingDAO) ListReferencingSubAgents(ownerID string, targetAgentID string, enabledOnly bool) ([]models.Agent, error) {
 	query := database.DB.Table("agent").
-		Select("agent.*").
+		Select("DISTINCT agent.*").
 		Joins("JOIN agent_binding ON agent.agent_id = agent_binding.agent_id").
-		Where("agent.owner_id = ? AND agent_binding.binding_type = ? AND agent_binding.binding_target_id = ?", ownerID, "sub_agent", targetAgentID)
+		Where("agent.owner_id = ? AND agent_binding.binding_type = ? AND agent_binding.binding_target_id = ? AND agent_binding.deleted_at IS NULL", ownerID, "sub_agent", targetAgentID)
 	if enabledOnly {
 		query = query.Where("agent.status = ?", "enabled")
 	}
