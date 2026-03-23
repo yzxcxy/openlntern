@@ -145,6 +145,7 @@ export default function WorkspaceLayout({
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState("");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isShortcutsCollapsed, setIsShortcutsCollapsed] = useState(true);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -631,9 +632,29 @@ export default function WorkspaceLayout({
               <div className="motion-safe-fade-in sidebar-scrollbar-hidden flex-1 overflow-auto px-4 pb-4 pt-4">
                 <div className="space-y-3">
                   <div className={sidebarPanelClass}>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                    <button
+                      onClick={() => setIsShortcutsCollapsed(!isShortcutsCollapsed)}
+                      className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-[var(--color-text-primary)]"
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg
+                          className="h-4 w-4 text-[var(--color-text-muted)]"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+                          <rect x="13" y="4" width="7" height="7" rx="1.5" />
+                          <rect x="4" y="13" width="7" height="7" rx="1.5" />
+                          <rect x="13" y="13" width="7" height="7" rx="1.5" />
+                        </svg>
+                        快捷入口
+                      </span>
                       <svg
-                        className="h-4 w-4 text-[var(--color-text-muted)]"
+                        className={`h-4 w-4 text-[var(--color-text-muted)] transition-transform duration-200 ${isShortcutsCollapsed ? "" : "rotate-180"}`}
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -641,13 +662,10 @@ export default function WorkspaceLayout({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
-                        <rect x="4" y="4" width="7" height="7" rx="1.5" />
-                        <rect x="13" y="4" width="7" height="7" rx="1.5" />
-                        <rect x="4" y="13" width="7" height="7" rx="1.5" />
-                        <rect x="13" y="13" width="7" height="7" rx="1.5" />
+                        <path d="M6 9l6 6 6-6" />
                       </svg>
-                      快捷入口
-                    </div>
+                    </button>
+                    {!isShortcutsCollapsed && (
                     <div className="mt-2.5 space-y-1.5 text-sm">
                       <button
                         onClick={() => router.push("/a2ui")}
@@ -863,6 +881,7 @@ export default function WorkspaceLayout({
                         </span>
                       </button>
                     </div>
+                    )}
                   </div>
 
                   <div className={sidebarPanelClass}>
