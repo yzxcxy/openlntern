@@ -20,6 +20,7 @@ import {
 import {
   AIChatDialogue,
   AIChatInput,
+  Avatar,
 } from "@douyinfe/semi-ui-19";
 import type { Message as SemiMessage } from "@douyinfe/semi-ui-19/lib/es/aiChatDialogue/interface";
 import type { Message as AguiMessage } from "@ag-ui/client";
@@ -64,9 +65,12 @@ import {
   ACTIVITY_CONTENT_TYPE,
   ACTIVITY_EVENT_DELTA,
   ACTIVITY_EVENT_SNAPSHOT,
+  AGENT_ASSISTANT_KEY_PREFIX,
   TOOL_RESULT_TYPE,
   buildAguiUserContent,
+  buildAssistantMessageKey,
   buildTextAvatarDataUrl,
+  CHAT_ASSISTANT_KEY,
   createMessageId,
   createThreadId,
   extractInputPlainText,
@@ -79,6 +83,7 @@ import {
   toEditorParagraphHtml,
   type BackendMessagePage,
   type BackendThreadItem,
+  type ChatMessage,
   type KnowledgeBaseOption,
   type MentionTargetOption,
   type ModelCatalogOption,
@@ -94,6 +99,11 @@ type ChatContentProps = {
   userId: string;
   userName: string;
   userAvatar: string;
+};
+
+type ThreadConversationState = {
+  conversationMode: "chat" | "agent";
+  selectedAgentId: string;
 };
 
 type EnabledAgentOption = {
@@ -120,6 +130,28 @@ const parseBackgroundImageURL = (rawJSON: string | undefined): string => {
   }
 };
 
+const inferThreadConversationState = (
+  messages: ChatMessage[]
+): ThreadConversationState => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const item = messages[index];
+    if (!item) {
+      continue;
+    }
+    const assistantKey = item.assistantKey?.trim() || CHAT_ASSISTANT_KEY;
+    if (assistantKey.startsWith(AGENT_ASSISTANT_KEY_PREFIX)) {
+      return {
+        conversationMode: "agent",
+        selectedAgentId: assistantKey.slice(AGENT_ASSISTANT_KEY_PREFIX.length),
+      };
+    }
+  }
+  return {
+    conversationMode: "chat",
+    selectedAgentId: "",
+  };
+};
+
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -131,6 +163,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const titleSyncTokenRef = useRef(0);
   const titleSyncTimerRef = useRef<number | null>(null);
   const shouldScrollHistoryToBottomRef = useRef(false);
+  const threadConversationStateRef = useRef(
+    new Map<string, ThreadConversationState>()
+  );
   const textMessageMapRef = useRef(new Map<string, { runId: string; index: number }>());
   const toolCallMapRef = useRef(new Map<string, { runId: string; index: number }>());
   const reasoningMessageMapRef = useRef(
@@ -151,7 +186,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [composerExpandOpen, setComposerExpandOpen] = useState(false);
   const [composerExpandDraft, setComposerExpandDraft] = useState("");
   const [threadId, setThreadId] = useState("");
-  const [semiMessages, setSemiMessages] = useState<SemiMessage[]>([]);
+  const [semiMessages, setSemiMessages] = useState<ChatMessage[]>([]);
   const [conversationMode, setConversationMode] = useState<"chat" | "agent">("chat");
   const [availableModels, setAvailableModels] = useState<ModelCatalogOption[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
@@ -539,6 +574,14 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     () => enabledAgents.find((item) => item.agent_id === selectedAgentId) ?? null,
     [enabledAgents, selectedAgentId]
   );
+  const defaultAssistantAvatar = useMemo(
+    () => buildTextAvatarDataUrl("AI", { background: "#6366F1" }),
+    []
+  );
+  const currentAssistantKey = useMemo(
+    () => buildAssistantMessageKey(conversationMode, selectedAgentId),
+    [conversationMode, selectedAgentId]
+  );
   const selectedToolIdSet = useMemo(
     () => new Set(selectedToolIds),
     [selectedToolIds]
@@ -687,6 +730,16 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   const [historyLoading, setHistoryLoading] = useState(false);
   const requestedThreadId = searchParams.get("threadId")?.trim() ?? "";
 
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    threadConversationStateRef.current.set(threadId, {
+      conversationMode,
+      selectedAgentId,
+    });
+  }, [conversationMode, selectedAgentId, threadId]);
+
   // 根据 query 参数或生成新 thread_id
   const resolvedThreadId = useMemo(() => {
     if (requestedThreadId) {
@@ -702,10 +755,17 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
   useEffect(() => {
     if (!agent) return;
     if (resolvedThreadId !== threadId) {
+      const nextThreadState =
+        threadConversationStateRef.current.get(resolvedThreadId) ?? {
+          conversationMode: "chat" as const,
+          selectedAgentId: "",
+        };
       clearThreadTitleSync();
       // 历史会话首屏消息加载后补一次滚到底，覆盖组件首次滚动时机过早的问题。
       shouldScrollHistoryToBottomRef.current = requestedThreadId.length > 0;
       setThreadId(resolvedThreadId);
+      setConversationMode(nextThreadState.conversationMode);
+      setSelectedAgentId(nextThreadState.selectedAgentId);
       agent.threadId = resolvedThreadId;
       agent.setMessages([]);
       setInputError("");
@@ -771,6 +831,10 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       }
       // 后端返回 data.data 才是消息列表
       const mapped = mapHistoryMessages(data.data?.data ?? []);
+      const inferredThreadState = inferThreadConversationState(mapped);
+      threadConversationStateRef.current.set(threadId, inferredThreadState);
+      setConversationMode(inferredThreadState.conversationMode);
+      setSelectedAgentId(inferredThreadState.selectedAgentId);
       shouldScrollHistoryToBottomRef.current =
         requestedThreadId.length > 0 && mapped.length > 0;
       setSemiMessages(mapped);
@@ -792,7 +856,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
 
   // 按 run_id 定位或创建 assistant SemiMessage
   const updateRunMessage = useCallback(
-    (runId: string, updater: (message: SemiMessage) => SemiMessage) => {
+    (runId: string, updater: (message: ChatMessage) => ChatMessage) => {
       setSemiMessages((prev) => {
         const next = [...prev];
         const index = next.findIndex(
@@ -803,17 +867,19 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
             ? {
                 id: runId,
                 role: "assistant",
+                assistantKey: currentAssistantKey,
                 content: [],
                 status: "in_progress",
                 createdAt: Date.now(),
               }
-            : (next[index] as SemiMessage);
+            : (next[index] as ChatMessage);
         const normalizedMessage = {
           ...baseMessage,
+          assistantKey: baseMessage.assistantKey || currentAssistantKey,
           content: Array.isArray(baseMessage.content)
             ? [...baseMessage.content]
             : [],
-        } as SemiMessage;
+        } as ChatMessage;
         const updated = updater(normalizedMessage);
         if (index === -1) {
           next.push(updated);
@@ -823,7 +889,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         return next;
       });
     },
-    []
+    [currentAssistantKey]
   );
 
   const completeReasoningItems = useCallback(
@@ -1264,49 +1330,6 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
     };
   }, [agent, completeReasoningItems, startThreadTitleSync, threadId, updateRunMessage]);
 
-  const chats = useMemo<SemiMessage[]>(
-    () =>
-      semiMessages.map((message, index) => ({
-        ...message,
-        content:
-          message.role === "assistant"
-            ? groupAssistantProcessItems(message.content)
-            : message.content,
-        id: message.id ?? `${message.role}-${index}`,
-      })),
-    [semiMessages]
-  );
-  useLayoutEffect(() => {
-    if (!shouldScrollHistoryToBottomRef.current || historyLoading || chats.length === 0) {
-      return;
-    }
-    const dialogueContainer =
-      dialogueWrapperRef.current?.querySelector<HTMLElement>(
-        ".semi-ai-chat-dialogue-list"
-      ) ?? null;
-    if (!dialogueContainer) {
-      return;
-    }
-    dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
-    let secondFrameId = 0;
-    const firstFrameId = window.requestAnimationFrame(() => {
-      dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
-      secondFrameId = window.requestAnimationFrame(() => {
-        dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
-        shouldScrollHistoryToBottomRef.current = false;
-      });
-    });
-    return () => {
-      window.cancelAnimationFrame(firstFrameId);
-      if (secondFrameId) {
-        window.cancelAnimationFrame(secondFrameId);
-      }
-    };
-  }, [chats.length, historyLoading]);
-  const showHistorySkeleton = historyLoading && chats.length === 0;
-  const showEmptyState =
-    !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
-
   // Agent 模式下根据选择的 agent 显示动态内容
   const emptyStateTitle = useMemo(() => {
     if (conversationMode === "agent" && selectedAgentOption?.name) {
@@ -1357,19 +1380,116 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
         color: "teal",
       },
       assistant: {
-        name:
-          conversationMode === "agent" && selectedAgentOption?.name
-            ? selectedAgentOption.name
-            : "AI助手",
-        avatar:
-          conversationMode === "agent" && selectedAgentOption?.avatar_url
-            ? selectedAgentOption.avatar_url
-            : buildTextAvatarDataUrl("AI", { background: "#6366F1" }),
+        name: "AI助手",
+        avatar: defaultAssistantAvatar,
         color: "indigo",
       },
     }),
-    [userAvatar, userName, conversationMode, selectedAgentOption]
+    [defaultAssistantAvatar, userAvatar, userName]
   );
+
+  const resolveAssistantDisplay = useCallback(
+    (assistantKey?: string) => {
+      const normalizedKey =
+        typeof assistantKey === "string" && assistantKey.trim()
+          ? assistantKey.trim()
+          : CHAT_ASSISTANT_KEY;
+      if (!normalizedKey.startsWith(AGENT_ASSISTANT_KEY_PREFIX)) {
+        return {
+          assistantAvatar: defaultAssistantAvatar,
+          assistantName: "AI助手",
+        };
+      }
+      const agentId = normalizedKey.slice(AGENT_ASSISTANT_KEY_PREFIX.length);
+      const matchedAgent = enabledAgents.find((item) => item.agent_id === agentId);
+      return {
+        assistantAvatar: matchedAgent?.avatar_url || defaultAssistantAvatar,
+        assistantName: matchedAgent?.name || "Agent",
+      };
+    },
+    [defaultAssistantAvatar, enabledAgents]
+  );
+
+  const dialogueRenderConfig = useMemo(
+    () => ({
+      renderDialogueAvatar: (props: { defaultAvatar?: ReactNode; message?: SemiMessage }) => {
+        const message = props.message as ChatMessage | undefined;
+        if (message?.role !== "assistant") {
+          return props.defaultAvatar;
+        }
+        const assistantAvatar = message.assistantAvatar?.trim();
+        if (!assistantAvatar) {
+          return props.defaultAvatar;
+        }
+        return (
+          <Avatar
+            className="semi-ai-chat-dialogue-avatar"
+            src={assistantAvatar}
+            size="extra-small"
+          />
+        );
+      },
+      renderDialogueTitle: (props: { defaultTitle?: ReactNode; message?: SemiMessage }) => {
+        const message = props.message as ChatMessage | undefined;
+        if (message?.role !== "assistant") {
+          return props.defaultTitle;
+        }
+        const assistantName = message.assistantName?.trim();
+        if (!assistantName) {
+          return props.defaultTitle;
+        }
+        return <span className="semi-ai-chat-dialogue-title">{assistantName}</span>;
+      },
+    }),
+    []
+  );
+
+  const chats = useMemo<ChatMessage[]>(
+    () =>
+      semiMessages.map((message, index) => ({
+        ...message,
+        ...(message.role === "assistant"
+          ? resolveAssistantDisplay(message.assistantKey)
+          : null),
+        content:
+          message.role === "assistant"
+            ? groupAssistantProcessItems(message.content)
+            : message.content,
+        id: message.id ?? `${message.role}-${index}`,
+      })),
+    [resolveAssistantDisplay, semiMessages]
+  );
+
+  useLayoutEffect(() => {
+    if (!shouldScrollHistoryToBottomRef.current || historyLoading || chats.length === 0) {
+      return;
+    }
+    const dialogueContainer =
+      dialogueWrapperRef.current?.querySelector<HTMLElement>(
+        ".semi-ai-chat-dialogue-list"
+      ) ?? null;
+    if (!dialogueContainer) {
+      return;
+    }
+    dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+    let secondFrameId = 0;
+    const firstFrameId = window.requestAnimationFrame(() => {
+      dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+      secondFrameId = window.requestAnimationFrame(() => {
+        dialogueContainer.scrollTop = dialogueContainer.scrollHeight;
+        shouldScrollHistoryToBottomRef.current = false;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [chats.length, historyLoading]);
+  const showHistorySkeleton = historyLoading && chats.length === 0;
+  const showEmptyState =
+    !historyLoading && !agent.isRunning && chats.length === 0 && !inputError;
 
   const renderDialogueContentItem = useChatDialogueRenderers(renderActivityMessage);
 
@@ -1817,6 +1937,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                     align="leftRight"
                     mode="bubble"
                     chats={chats}
+                    dialogueRenderConfig={dialogueRenderConfig}
                     renderDialogueContentItem={renderDialogueContentItem}
                     roleConfig={roleConfig}
                     className="h-full"

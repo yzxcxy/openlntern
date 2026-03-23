@@ -11,8 +11,13 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	chatAssistantKey        = "chat"
+	agentAssistantKeyPrefix = "agent:"
+)
+
 // buildUserLastMessageModel 构建本次输入中的最后一条 user 消息模型。
-func buildUserLastMessageModel(threadID, runID string, messages []types.Message) (*models.Message, error) {
+func buildUserLastMessageModel(threadID, runID, assistantKey string, messages []types.Message) (*models.Message, error) {
 	if len(messages) == 0 {
 		return nil, nil
 	}
@@ -37,6 +42,15 @@ func buildUserLastMessageModel(threadID, runID string, messages []types.Message)
 	if err != nil {
 		return nil, err
 	}
+	metadata := ""
+	if strings.TrimSpace(assistantKey) != "" {
+		meta := map[string]any{
+			"assistant_key": strings.TrimSpace(assistantKey),
+		}
+		if metadataBytes, marshalErr := json.Marshal(meta); marshalErr == nil {
+			metadata = string(metadataBytes)
+		}
+	}
 	return &models.Message{
 		MsgID:    msgID,
 		ThreadID: threadID,
@@ -44,11 +58,12 @@ func buildUserLastMessageModel(threadID, runID string, messages []types.Message)
 		Type:     "text",
 		Content:  string(b),
 		Status:   "completed",
+		Metadata: metadata,
 	}, nil
 }
 
 // buildAccumulatedMessageModels 构建流式累计消息的持久化模型集合。
-func buildAccumulatedMessageModels(threadID, runID string, messages []agui.AccumulatedMessage) ([]models.Message, error) {
+func buildAccumulatedMessageModels(threadID, runID string, messages []agui.AccumulatedMessage, assistantKey string) ([]models.Message, error) {
 	if len(messages) == 0 {
 		return nil, nil
 	}
@@ -58,7 +73,7 @@ func buildAccumulatedMessageModels(threadID, runID string, messages []agui.Accum
 	modelsMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
 		msg.MsgID = normalizeMsgID(msg.MsgID)
-		content, metadata := buildMessageContentAndMetadata(msg)
+		content, metadata := buildMessageContentAndMetadata(msg, assistantKey)
 		if content == "" {
 			continue
 		}
@@ -92,7 +107,7 @@ func normalizeMsgID(input string) string {
 }
 
 // buildMessageContentAndMetadata 将累计消息转换为存储层 content/metadata 格式。
-func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string) {
+func buildMessageContentAndMetadata(msg agui.AccumulatedMessage, assistantKey string) (string, string) {
 	message := types.Message{ID: msg.MsgID}
 	switch msg.Type {
 	case "text":
@@ -157,6 +172,10 @@ func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string
 	for k, v := range msg.Metadata {
 		meta[k] = v
 	}
+	// assistant_key 只保存稳定身份，避免把名称和头像冗余落库。
+	if strings.TrimSpace(assistantKey) != "" {
+		meta["assistant_key"] = strings.TrimSpace(assistantKey)
+	}
 	metadata := ""
 	if len(meta) > 0 {
 		if b, err := json.Marshal(meta); err == nil {
@@ -164,4 +183,16 @@ func buildMessageContentAndMetadata(msg agui.AccumulatedMessage) (string, string
 		}
 	}
 	return content, metadata
+}
+
+// buildAssistantKey 为一次 run 生成稳定的 assistant 身份标识。
+func buildAssistantKey(runtimeConfig *AgentRuntimeConfig) string {
+	if !isAgentConversationMode(runtimeConfig) {
+		return chatAssistantKey
+	}
+	selectedAgentID := selectedAgentIDFromRuntimeConfig(runtimeConfig)
+	if selectedAgentID == "" {
+		return chatAssistantKey
+	}
+	return agentAssistantKeyPrefix + selectedAgentID
 }

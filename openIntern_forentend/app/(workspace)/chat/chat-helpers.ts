@@ -10,6 +10,14 @@ export const PROCESS_PANEL_TYPE = "process_panel";
 export const ACTIVITY_EVENT_SNAPSHOT = "ACTIVITY_SNAPSHOT";
 export const ACTIVITY_EVENT_DELTA = "ACTIVITY_DELTA";
 export const A2UI_SURFACE_ACTIVITY_TYPE = "a2ui-surface";
+export const CHAT_ASSISTANT_KEY = "chat";
+export const AGENT_ASSISTANT_KEY_PREFIX = "agent:";
+
+export type ChatMessage = SemiMessage & {
+  assistantAvatar?: string;
+  assistantKey?: string;
+  assistantName?: string;
+};
 
 export type BackendMessageItem = {
   msg_id: string;
@@ -22,6 +30,10 @@ export type BackendMessageItem = {
   metadata?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+type BackendMessageMetadata = {
+  assistant_key?: string;
 };
 
 export type BackendMessagePage = {
@@ -117,6 +129,26 @@ export const createMessageId = () => {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+// assistant_key 只保存稳定身份，便于历史消息在切换 agent 后仍能正确归属。
+export const buildAssistantMessageKey = (
+  conversationMode: "chat" | "agent",
+  agentId?: string
+) => {
+  const normalizedAgentID = typeof agentId === "string" ? agentId.trim() : "";
+  if (conversationMode === "agent" && normalizedAgentID) {
+    return `${AGENT_ASSISTANT_KEY_PREFIX}${normalizedAgentID}`;
+  }
+  return CHAT_ASSISTANT_KEY;
+};
+
+export const parseAssistantKey = (value: unknown) => {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) {
+    return CHAT_ASSISTANT_KEY;
+  }
+  return normalized;
 };
 
 // 基于文字生成头像，避免无图时对话头信息空白
@@ -532,12 +564,25 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       // 后端列表接口按倒序返回；同时间戳时反转原始索引，恢复正向时间线。
       return right.index - left.index;
     });
-  const result: SemiMessage[] = [];
+  const result: ChatMessage[] = [];
   const runIndexMap = new Map<string, number>();
   const messageOrderKeys: number[] = [];
+  const runAssistantKeyMap = new Map<string, string>();
+
+  const resolveAssistantKey = (item: BackendMessageItem) => {
+    const metadata = safeParseJson<BackendMessageMetadata>(item.metadata || "");
+    const assistantKey = parseAssistantKey(metadata?.assistant_key);
+    if (item.run_id && assistantKey) {
+      runAssistantKeyMap.set(item.run_id, assistantKey);
+    }
+    return item.run_id
+      ? runAssistantKeyMap.get(item.run_id) ?? assistantKey
+      : assistantKey;
+  };
 
   const ensureAssistantMessage = (
     runId: string,
+    assistantKey: string,
     status?: string,
     createdAt?: number,
     updatedAt?: number,
@@ -548,6 +593,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       result.push({
         id: runId,
         role: "assistant",
+        assistantKey,
         content: [],
         status,
         createdAt,
@@ -562,12 +608,20 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
         orderKey
       );
     }
+    const existingMessage = result[runIndex];
+    if (assistantKey && existingMessage && !existingMessage.assistantKey) {
+      result[runIndex] = {
+        ...existingMessage,
+        assistantKey,
+      };
+    }
     return runIndex;
   };
 
   sorted.forEach(({ item, index }) => {
     const aguiMessage = safeParseJson<any>(item.content);
     const role = aguiMessage?.role;
+    const assistantKey = resolveAssistantKey(item);
     const createdAt =
       toTimestamp(item.created_at) ?? toTimestamp(item.updated_at);
     const updatedAt =
@@ -578,6 +632,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       result.push({
         id: item.msg_id,
         role: "user",
+        assistantKey,
         content: mapAguiUserContentToSemi(aguiMessage?.content),
         status: item.status,
         createdAt,
@@ -601,12 +656,13 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       const runId = item.run_id || `history-activity-${item.msg_id}`;
       const runIndex = ensureAssistantMessage(
         runId,
+        assistantKey,
         item.status,
         createdAt,
         updatedAt,
         toSequence(item.sequence) ?? index
       );
-      const target = result[runIndex] as SemiMessage;
+      const target = result[runIndex] as ChatMessage;
       const content = Array.isArray(target.content) ? [...target.content] : [];
       const existingIndex = content.findIndex(
         (contentItem) =>
@@ -645,7 +701,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
         content,
         createdAt: mergeCreatedAt(target.createdAt, createdAt),
         updatedAt: updatedAt ?? target.updatedAt,
-      } as SemiMessage;
+      } as ChatMessage;
       return;
     }
 
@@ -656,12 +712,13 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
 
     const runIndex = ensureAssistantMessage(
       item.run_id,
+      assistantKey,
       item.status,
       createdAt,
       updatedAt,
       toSequence(item.sequence) ?? index
     );
-    const target = result[runIndex] as SemiMessage;
+    const target = result[runIndex] as ChatMessage;
     const content = Array.isArray(target.content) ? target.content : [];
     const nextContent = [...content];
 
@@ -721,7 +778,7 @@ export const mapHistoryMessages = (items: BackendMessageItem[]) => {
       content: nextContent,
       createdAt: mergeCreatedAt(target.createdAt, createdAt),
       updatedAt: updatedAt ?? target.updatedAt,
-    } as SemiMessage;
+    } as ChatMessage;
   });
 
   return result

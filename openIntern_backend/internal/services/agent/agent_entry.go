@@ -117,7 +117,8 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 
 	flushed := acc.Flush()
 	persistedMessages := make([]models.Message, 0, len(flushed)+1)
-	userMessage, err := buildUserLastMessageModel(threadID, runID, input.Messages)
+	assistantKey := buildAssistantKey(runtimeConfig)
+	userMessage, err := buildUserLastMessageModel(threadID, runID, assistantKey, input.Messages)
 	if err != nil {
 		log.Printf("RunAgent build user message failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
@@ -125,7 +126,12 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	if userMessage != nil {
 		persistedMessages = append(persistedMessages, *userMessage)
 	}
-	accumulatedMessages, err := buildAccumulatedMessageModels(threadID, runID, flushed)
+	accumulatedMessages, err := buildAccumulatedMessageModels(
+		threadID,
+		runID,
+		flushed,
+		assistantKey,
+	)
 	if err != nil {
 		log.Printf("RunAgent build persisted messages failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
