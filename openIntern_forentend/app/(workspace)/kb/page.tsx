@@ -611,28 +611,7 @@ export default function KnowledgeBasePage() {
     <div className="kb-page workspace-gradient-surface workspace-gradient-surface--kb h-full overflow-auto p-0">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <div className="workspace-panel-card motion-safe-fade-in rounded-[var(--radius-xl)] border border-[var(--color-border-default)] p-5 backdrop-blur-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-3">
-              <div>
-                <Typography.Title heading={4} className="mb-0">
-                  知识库管理
-                </Typography.Title>
-                <div className="mt-1 text-sm text-[var(--color-text-muted)]">
-                  统一管理知识库、文件树和上传操作
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-[rgba(37,99,255,0.14)] bg-[rgba(37,99,255,0.08)] px-3 py-1 text-xs font-medium text-[var(--color-action-primary)]">
-                  知识库 {kbs.length}
-                </span>
-                <span className="rounded-full border border-[rgba(0,191,165,0.14)] bg-[rgba(0,191,165,0.08)] px-3 py-1 text-xs font-medium text-[#0f766e]">
-                  文件 {kbStats.files}
-                </span>
-                <span className="rounded-full border border-[rgba(148,163,184,0.18)] bg-[rgba(148,163,184,0.08)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
-                  目录 {kbStats.folders}
-                </span>
-              </div>
-            </div>
+          <div className="flex flex-wrap items-start justify-end gap-4">
             <Space wrap>
               <UiButton
                 provider="semi"

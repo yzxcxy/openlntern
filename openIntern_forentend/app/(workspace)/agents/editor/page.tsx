@@ -1264,7 +1264,7 @@ function AgentEditorContent({
             onClick={() => setAvatarModalOpen(true)}
             title="点击更换头像"
           >
-            <img src={effectiveAvatarURL} alt="Agent Avatar" className="h-full w-full object-cover" />
+            <img key={effectiveAvatarURL} src={effectiveAvatarURL} alt="Agent Avatar" className="h-full w-full object-cover" />
             <span className="absolute inset-0 hidden items-center justify-center bg-[rgba(15,23,42,0.38)] text-xs text-white group-hover:flex">
               更换
             </span>
@@ -1583,7 +1583,7 @@ function AgentEditorContent({
       >
         <div className="grid gap-3">
           <div className="mx-auto h-28 w-28 overflow-hidden rounded-[20px] border border-[var(--color-border-default)]">
-            <img src={effectiveAvatarURL} alt="头像预览" className="h-full w-full object-cover" />
+            <img key={effectiveAvatarURL} src={effectiveAvatarURL} alt="头像预览" className="h-full w-full object-cover" />
           </div>
           <div className="flex flex-wrap justify-center gap-2">
             <UiButton

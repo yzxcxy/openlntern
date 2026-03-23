@@ -319,6 +319,7 @@ export default function ModelsPage() {
   const [models, setModels] = useState<ModelItem[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [defaultModelId, setDefaultModelId] = useState("");
+  const [savedDefaultModelId, setSavedDefaultModelId] = useState("");
   const [providerQuery, setProviderQuery] = useState("");
   const [providerForm, setProviderForm] = useState<ProviderFormState>(EMPTY_PROVIDER_FORM);
   const [providerEditId, setProviderEditId] = useState("");
@@ -383,6 +384,7 @@ export default function ModelsPage() {
       setProviders(nextProviders);
       setModels(nextModels);
       setDefaultModelId(nextDefaultModelId);
+      setSavedDefaultModelId(nextDefaultModelId);
       setModelForm((prev) => ({
         ...prev,
         provider_id:
@@ -479,8 +481,8 @@ export default function ModelsPage() {
   }, [selectedProviderModels]);
 
   const currentDefaultModel = useMemo(
-    () => models.find((item) => item.model_id === defaultModelId) ?? null,
-    [defaultModelId, models]
+    () => models.find((item) => item.model_id === savedDefaultModelId) ?? null,
+    [savedDefaultModelId, models]
   );
 
   const resetProviderForm = () => {
@@ -752,20 +754,6 @@ export default function ModelsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="workspace-stat-row">
-                  <div className="workspace-stat-chip">
-                    <strong>{providers.length}</strong>
-                    <span>提供商</span>
-                  </div>
-                  <div className="workspace-stat-chip">
-                    <strong>{models.length}</strong>
-                    <span>模型数</span>
-                  </div>
-                  <div className="workspace-stat-chip">
-                    <strong>{currentDefaultModel ? "1" : "0"}</strong>
-                    <span>默认模型</span>
-                  </div>
-                </div>
                 <UiButton type="button" variant="secondary" onClick={fetchAll} loading={loading}>
                   刷新
                 </UiButton>

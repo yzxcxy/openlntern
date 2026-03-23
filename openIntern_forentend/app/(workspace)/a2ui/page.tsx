@@ -30,6 +30,13 @@ type A2UI = {
   updated_at?: string;
 };
 
+type A2UICard = A2UI & {
+  previewComponents: A2UIViewerProps["components"] | null;
+  previewRoot: string | null;
+  previewData: Record<string, unknown> | undefined;
+  previewError: string;
+};
+
 type UserInfo = {
   user_id?: string | number;
   username?: string;
@@ -58,7 +65,7 @@ export default function A2uiPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<A2UI | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [previewTarget, setPreviewTarget] = useState<A2UI | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<A2UICard | null>(null);
   const router = useRouter();
 
   const getUserId = useCallback((token: string) => {
@@ -243,7 +250,7 @@ export default function A2uiPage() {
     }
   };
 
-  const openPreview = (item: A2UI) => {
+  const openPreview = (item: A2UICard) => {
     setPreviewTarget(item);
   };
 
@@ -251,82 +258,72 @@ export default function A2uiPage() {
     setPreviewTarget(null);
   };
 
-  const previewContent = useMemo(() => {
-    if (!previewTarget) {
-      return {
-        components: null as A2UIViewerProps["components"] | null,
-        root: null as string | null,
-        data: undefined as Record<string, unknown> | undefined,
-        error: "",
-      };
-    }
+  const cards = useMemo(() => {
+    return items.map((item) => {
+      let components: A2UIViewerProps["components"] | null = null;
+      let root: string | null = null;
+      let data: Record<string, unknown> | undefined;
+      let error = "";
 
-    let components: A2UIViewerProps["components"] | null = null;
-    let root: string | null = null;
-    let data: Record<string, unknown> | undefined;
-    let error = "";
-
-    try {
-      const uiText = previewTarget.ui_json?.trim();
-      if (!uiText) {
-        error = "UI JSON 为空";
-      } else {
-        const ui = JSON.parse(uiText);
-        if (Array.isArray(ui)) {
-          components = ui;
-          root = ui[0]?.id ?? null;
-        } else if (ui && typeof ui === "object") {
-          const uiObj = ui as Record<string, unknown>;
-          if (Array.isArray(uiObj.components) && typeof uiObj.root === "string") {
-            components = uiObj.components as A2UIViewerProps["components"];
-            root = uiObj.root as string;
-          } else if (
-            Array.isArray(uiObj.components) &&
-            typeof uiObj.rootId === "string"
-          ) {
-            components = uiObj.components as A2UIViewerProps["components"];
-            root = uiObj.rootId as string;
-          } else if (
-            Array.isArray(uiObj.components) &&
-            typeof (uiObj.root as { id?: string } | undefined)?.id === "string"
-          ) {
-            components = uiObj.components as A2UIViewerProps["components"];
-            root = (uiObj.root as { id?: string }).id ?? null;
-          } else if (
-            Array.isArray(uiObj.nodes) &&
-            typeof uiObj.root === "string"
-          ) {
-            components = uiObj.nodes as A2UIViewerProps["components"];
-            root = uiObj.root as string;
-          } else {
-            error = "UI JSON 格式不符合预览要求";
-          }
+      try {
+        const uiText = item.ui_json?.trim();
+        if (!uiText) {
+          error = "UI JSON 为空";
         } else {
-          error = "UI JSON 格式不正确";
+          const ui = JSON.parse(uiText);
+          if (Array.isArray(ui)) {
+            components = ui;
+            root = ui[0]?.id ?? null;
+          } else if (ui && typeof ui === "object") {
+            const uiObj = ui as Record<string, unknown>;
+            if (Array.isArray(uiObj.components) && typeof uiObj.root === "string") {
+              components = uiObj.components as A2UIViewerProps["components"];
+              root = uiObj.root as string;
+            } else if (Array.isArray(uiObj.components) && typeof uiObj.rootId === "string") {
+              components = uiObj.components as A2UIViewerProps["components"];
+              root = uiObj.rootId as string;
+            } else if (Array.isArray(uiObj.components) && typeof (uiObj.root as { id?: string } | undefined)?.id === "string") {
+              components = uiObj.components as A2UIViewerProps["components"];
+              root = (uiObj.root as { id?: string }).id ?? null;
+            } else if (Array.isArray(uiObj.nodes) && typeof uiObj.root === "string") {
+              components = uiObj.nodes as A2UIViewerProps["components"];
+              root = uiObj.root as string;
+            } else {
+              error = "UI JSON 格式不符合要求";
+            }
+          } else {
+            error = "UI JSON 格式不正确";
+          }
         }
+      } catch {
+        error = "UI JSON 解析失败";
       }
-    } catch {
-      error = "UI JSON 解析失败";
-    }
 
-    try {
-      const dataText = previewTarget.data_json?.trim();
-      if (dataText) {
-        const parsed = JSON.parse(dataText);
-        if (parsed && typeof parsed === "object") {
-          data = parsed as Record<string, unknown>;
+      try {
+        const dataText = item.data_json?.trim();
+        if (dataText) {
+          const parsed = JSON.parse(dataText);
+          if (parsed && typeof parsed === "object") {
+            data = parsed as Record<string, unknown>;
+          }
         }
+      } catch {
+        error = error ? `${error}；数据 JSON 解析失败` : "数据 JSON 解析失败";
       }
-    } catch {
-      error = error ? `${error}；数据 JSON 解析失败` : "数据 JSON 解析失败";
-    }
 
-    if (!error && (!components || !root)) {
-      error = "缺少可渲染的组件或根节点";
-    }
+      if (!error && (!components || !root)) {
+        error = "缺少可渲染的组件";
+      }
 
-    return { components, root, data, error };
-  }, [previewTarget]);
+      return {
+        ...item,
+        previewComponents: components,
+        previewRoot: root,
+        previewData: data,
+        previewError: error,
+      };
+    });
+  }, [items]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -418,105 +415,124 @@ export default function A2uiPage() {
           <div className="mt-4 text-sm text-[var(--color-state-error)]">{error}</div>
         )}
 
-        <div className="mt-4 space-y-3">
-          {loading ? (
-            <div className="text-sm text-[var(--color-text-muted)]">加载中...</div>
-          ) : items.length === 0 ? (
-            <div className="text-sm text-[var(--color-text-muted)]">暂无数据</div>
-          ) : (
-            items.map((item) => {
-              const createdAt = formatDateDisplay(item.created_at);
-              const updatedAt = formatDateDisplay(item.updated_at);
-              return (
-                <div
-                  key={item.a2ui_id}
-                  className="workspace-item-surface workspace-item-surface--lift rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                        {item.name}
-                      </div>
-                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                        {item.description || "暂无描述"}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <UiButton
-                        className="px-3"
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => openPreview(item)}
-                      >
-                        <svg
-                          className="h-3.5 w-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <circle cx="12" cy="12" r="3" />
-                          <path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6z" />
-                        </svg>
-                        预览
-                      </UiButton>
-                      <UiButton
-                        className="px-3"
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => openEdit(item)}
-                      >
-                        <svg
-                          className="h-3.5 w-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </svg>
-                        编辑
-                      </UiButton>
-                      <UiButton
-                        className="px-3"
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        onClick={() => openDelete(item)}
-                      >
-                        <svg
-                          className="h-3.5 w-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M6 6l1 14h10l1-14" />
-                        </svg>
-                        删除
-                      </UiButton>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-muted)]">
-                    <div title={createdAt.full}>创建：{createdAt.label}</div>
-                    <div title={updatedAt.full}>更新：{updatedAt.label}</div>
-                  </div>
+        <section>
+            <div className="mt-4">
+              {loading ? (
+                <div className="workspace-empty-state">
+                  <span>加载中...</span>
                 </div>
-              );
-            })
-          )}
-        </div>
+              ) : cards.length === 0 ? (
+                <div className="workspace-empty-state">
+                  <span>暂无 A2UI</span>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {cards.map((item) => {
+                    const createdAt = formatDateDisplay(item.created_at);
+                    return (
+                      <div
+                        key={item.a2ui_id}
+                        className="workspace-item-surface workspace-item-hover-lift flex h-full flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-default)] text-left shadow-[var(--shadow-sm)] transition hover:-translate-y-1 hover:border-[var(--color-border-strong)]"
+                      >
+                        {/* 卡片主体：渲染后的内容 */}
+                        <div className="min-h-[180px] flex-1 overflow-hidden rounded-t-[var(--radius-lg)] bg-[var(--color-surface-soft)] p-4">
+                          {item.previewError ? (
+                            <div className="flex h-full items-center justify-center text-sm text-[var(--color-text-muted)]">
+                              {item.previewError}
+                            </div>
+                          ) : item.previewComponents && item.previewRoot ? (
+                            <A2UIViewer
+                              root={item.previewRoot}
+                              components={item.previewComponents}
+                              data={item.previewData}
+                              className="h-full w-full"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-sm text-[var(--color-text-muted)]">
+                              暂无内容
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 卡片底部：信息与操作 */}
+                        <div className="border-t border-[var(--color-border-default)] p-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="truncate text-base font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
+                              {item.name}
+                            </div>
+                            <div className="text-xs text-[var(--color-text-muted)]" title={createdAt.full}>
+                              {createdAt.label}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex gap-2">
+                            <UiButton
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => openPreview(item)}
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <circle cx="12" cy="12" r="3" />
+                                <path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6z" />
+                              </svg>
+                              预览
+                            </UiButton>
+                            <UiButton
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => openEdit(item)}
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                              </svg>
+                              编辑
+                            </UiButton>
+                            <UiButton
+                              variant="danger"
+                              size="sm"
+                              onClick={() => openDelete(item)}
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M6 6l1 14h10l1-14" />
+                              </svg>
+                              删除
+                            </UiButton>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
 
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-[rgba(126,96,69,0.14)] pt-4">
           <div className="flex shrink-0 items-center gap-2">
@@ -616,14 +632,14 @@ export default function A2uiPage() {
       >
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
           <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3">
-            {previewContent.error ? (
-              <div className="text-sm text-[var(--color-state-error)]">{previewContent.error}</div>
-            ) : previewContent.components && previewContent.root ? (
+            {previewTarget?.previewError ? (
+              <div className="text-sm text-[var(--color-state-error)]">{previewTarget.previewError}</div>
+            ) : previewTarget?.previewComponents && previewTarget.previewRoot ? (
               <div className="min-h-[220px]">
                 <A2UIViewer
-                  root={previewContent.root}
-                  components={previewContent.components}
-                  data={previewContent.data}
+                  root={previewTarget.previewRoot}
+                  components={previewTarget.previewComponents}
+                  data={previewTarget.previewData}
                   className="w-full"
                 />
               </div>
