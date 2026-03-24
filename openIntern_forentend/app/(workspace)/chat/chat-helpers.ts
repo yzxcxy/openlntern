@@ -354,7 +354,7 @@ export const mapAguiUserContentToSemi = (
 export const extractToolResultText = (content: unknown) => {
   if (typeof content === "string") {
     const parsed = safeParseJson<{ content?: Array<{ text?: string }> }>(content);
-    if (parsed?.content?.length) {
+    if (Array.isArray(parsed?.content)) {
       return parsed.content
         .map((item) => (typeof item.text === "string" ? item.text : ""))
         .filter(Boolean)

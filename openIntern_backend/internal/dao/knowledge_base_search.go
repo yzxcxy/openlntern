@@ -15,6 +15,7 @@ type KnowledgeBaseSearchMatch struct {
 	Score             float64
 	ContextType       string
 	IsLeaf            bool
+	Level             int
 }
 
 type knowledgeBaseSearchResult struct {
@@ -27,6 +28,7 @@ type knowledgeBaseSearchResource struct {
 	Score       float64 `json:"score"`
 	ContextType string  `json:"context_type"`
 	IsLeaf      bool    `json:"is_leaf"`
+	Level       int     `json:"level"`
 }
 
 // SearchInKnowledgeBases 在指定知识库范围内执行 search 检索并返回资源命中。
@@ -107,6 +109,7 @@ func (d *KnowledgeBaseDAO) searchByTargetURI(ctx context.Context, query string, 
 			Score:       item.Score,
 			ContextType: strings.TrimSpace(item.ContextType),
 			IsLeaf:      item.IsLeaf,
+			Level:       item.Level,
 		})
 	}
 	return matches, nil

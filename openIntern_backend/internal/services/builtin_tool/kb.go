@@ -34,7 +34,7 @@ func GetKnowledgeBaseTools(ctx context.Context, knowledgeBaseNames []string) ([]
 	}
 	// 工具闭包持有当前会话允许访问的知识库前缀，避免变成全局任意资源读取入口。
 	readTool, err := utils.InferTool[ReadKnowledgeBaseEntryInput, string](
-		"read_kb_entry",
+		"read_kb_retry",
 		"根据知识库召回结果中的 uri 读取该条目的完整内容。仅允许读取当前会话已绑定知识库下的条目。",
 		func(ctx context.Context, input ReadKnowledgeBaseEntryInput) (string, error) {
 			return readKnowledgeBaseEntryImpl(ctx, input, allowedPrefixes)
