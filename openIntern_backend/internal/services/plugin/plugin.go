@@ -82,6 +82,7 @@ type UpsertPluginInput struct {
 	Enabled     *bool             `json:"enabled"`
 	MCPURL      string            `json:"mcp_url"`
 	MCPProtocol string            `json:"mcp_protocol"`
+	TimeoutMS   int               `json:"timeout_ms"`
 	Tools       []PluginToolInput `json:"tools"`
 }
 
@@ -116,6 +117,7 @@ type PluginView struct {
 	Status      string           `json:"status"`
 	MCPURL      string           `json:"mcp_url"`
 	MCPProtocol string           `json:"mcp_protocol"`
+	TimeoutMS   int              `json:"timeout_ms"`
 	LastSyncAt  *time.Time       `json:"last_sync_at"`
 	ToolCount   int              `json:"tool_count"`
 	Tools       []PluginToolView `json:"tools"`
@@ -485,6 +487,11 @@ func (s *PluginService) prepareDefinition(pluginID string, input UpsertPluginInp
 		}
 		plugin.MCPURL = mcpURL
 		plugin.MCPProtocol = mcpProtocol
+		timeoutMS := input.TimeoutMS
+		if timeoutMS <= 0 {
+			timeoutMS = defaultPluginTimeoutMS
+		}
+		plugin.TimeoutMS = timeoutMS
 		if existing != nil {
 			plugin.LastSyncAt = existing.LastSyncAt
 		}
@@ -748,6 +755,7 @@ func buildPluginView(plugin models.Plugin, tools []models.Tool) PluginView {
 		Status:      plugin.Status,
 		MCPURL:      plugin.MCPURL,
 		MCPProtocol: plugin.MCPProtocol,
+		TimeoutMS:   plugin.TimeoutMS,
 		LastSyncAt:  plugin.LastSyncAt,
 		ToolCount:   len(toolViews),
 		Tools:       toolViews,

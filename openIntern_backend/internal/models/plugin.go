@@ -19,6 +19,7 @@ type Plugin struct {
 	Status      string     `gorm:"index;not null;size:20" json:"status"`
 	MCPURL      string     `gorm:"column:mcp_url;size:255" json:"mcp_url"`
 	MCPProtocol string     `gorm:"column:mcp_protocol;size:40" json:"mcp_protocol"`
+	TimeoutMS   int        `gorm:"column:timeout_ms;default:30000" json:"timeout_ms"`
 	LastSyncAt  *time.Time `gorm:"column:last_sync_at" json:"last_sync_at"`
 
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

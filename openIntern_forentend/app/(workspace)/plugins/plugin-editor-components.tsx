@@ -672,6 +672,27 @@ export function CodeToolEditor({
                 }
               />
             </FormFieldRow>
+            <FormFieldRow label="超时">
+              <div className="flex items-center gap-2">
+                <UiInput
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={String(tool.timeoutMS)}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    onChange({
+                      ...tool,
+                      timeoutMS:
+                        Number.isFinite(nextValue) && nextValue >= 1 ? nextValue : 1,
+                    });
+                  }}
+                />
+                <span className="shrink-0 text-sm text-[var(--color-text-secondary)]">
+                  秒
+                </span>
+              </div>
+            </FormFieldRow>
           </div>
         </div>
 

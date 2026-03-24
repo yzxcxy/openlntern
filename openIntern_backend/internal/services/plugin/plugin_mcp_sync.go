@@ -817,7 +817,17 @@ func (s *PluginService) buildRuntimeMCPTools(ctx context.Context, toolIDs []stri
 			return nil, nil, fmt.Errorf("load mcp plugin %s tools failed: %w", pluginID, err)
 		}
 
-		runtimeTools = append(runtimeTools, pluginTools...)
+		// Use plugin-level timeout for all tools in this plugin
+		timeoutMS := plugin.TimeoutMS
+		if timeoutMS <= 0 {
+			timeoutMS = defaultPluginTimeoutMS
+		}
+
+		// Wrap each tool with timeout
+		for _, tool := range pluginTools {
+			wrappedTool := newMCPToolWithTimeout(tool, timeoutMS)
+			runtimeTools = append(runtimeTools, wrappedTool)
+		}
 		closers = append(closers, cli)
 	}
 

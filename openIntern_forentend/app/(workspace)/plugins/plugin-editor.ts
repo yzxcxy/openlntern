@@ -55,6 +55,7 @@ export type PluginRecord = {
   status?: "enabled" | "disabled";
   mcp_url?: string;
   mcp_protocol?: string;
+  timeout_ms?: number;
   last_sync_at?: string | null;
   tool_count?: number;
   tools?: PluginTool[];
@@ -88,6 +89,7 @@ export type PluginDraft = {
   runtimeType: RuntimeType;
   mcpURL: string;
   mcpProtocol: MCPProtocol;
+  timeoutMS: number;
   tools: ToolDraft[];
 };
 
@@ -150,7 +152,7 @@ export const createToolDraft = (): ToolDraft => ({
   apiRequestType: "GET",
   requestURL: "",
   authConfigRef: "",
-  timeoutMS: 30000,
+  timeoutMS: 30,
   queryFields: [],
   headerFields: [],
   bodyFields: [],
@@ -167,6 +169,7 @@ export const createPluginDraft = (): PluginDraft => ({
   runtimeType: "",
   mcpURL: "",
   mcpProtocol: "sse",
+  timeoutMS: 30,
   tools: [createToolDraft()],
 });
 
@@ -722,6 +725,10 @@ export const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
   if (draft.runtimeType === "mcp") {
     payload.mcp_url = draft.mcpURL.trim();
     payload.mcp_protocol = draft.mcpProtocol;
+    payload.timeout_ms =
+      Number.isFinite(draft.timeoutMS) && draft.timeoutMS >= 1
+        ? draft.timeoutMS * 1000
+        : 30000;
     payload.tools = [];
     return payload;
   }
@@ -742,7 +749,7 @@ export const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
       toolPayload.auth_config_ref = "";
       toolPayload.timeout_ms =
         Number.isFinite(tool.timeoutMS) && tool.timeoutMS >= 1
-          ? tool.timeoutMS
+          ? tool.timeoutMS * 1000
           : 30000;
       toolPayload.query_fields = tool.queryFields.map((field) =>
         toFieldPayload(field)
@@ -760,6 +767,10 @@ export const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
       const codeBodyFields = getEffectiveCodeBodyFields(tool);
       const outputFields = sanitizeOutputFields(tool.outputFields);
       toolPayload.tool_response_mode = "non_streaming";
+      toolPayload.timeout_ms =
+        Number.isFinite(tool.timeoutMS) && tool.timeoutMS >= 1
+          ? tool.timeoutMS * 1000
+          : 30000;
       toolPayload.code_language = tool.codeLanguage.trim();
       toolPayload.code = tool.code;
       toolPayload.body_fields = codeBodyFields.map((field) =>

@@ -217,9 +217,9 @@ export default function PluginsPage() {
       requestURL: tool.request_url ?? "",
       authConfigRef: tool.auth_config_ref ?? "",
       timeoutMS:
-        typeof tool.timeout_ms === "number" && tool.timeout_ms >= 1
-          ? tool.timeout_ms
-          : 30000,
+        typeof tool.timeout_ms === "number" && tool.timeout_ms >= 1000
+          ? Math.round(tool.timeout_ms / 1000)
+          : 30,
       queryFields: parseFields(tool.query_fields),
       headerFields: parseFields(tool.header_fields),
       bodyFields: parseFields(tool.body_fields),
@@ -239,6 +239,10 @@ export default function PluginsPage() {
       runtimeType,
       mcpURL: plugin.mcp_url ?? "",
       mcpProtocol: normalizeMCPProtocolValue(plugin.mcp_protocol),
+      timeoutMS:
+        typeof plugin.timeout_ms === "number" && plugin.timeout_ms >= 1000
+          ? Math.round(plugin.timeout_ms / 1000)
+          : 30,
       tools: ensureRuntimeTools(draftTools, runtimeType),
     });
     setWizardToolIndex(0);
@@ -1373,7 +1377,7 @@ export default function PluginsPage() {
                                 }}
                               />
                               <span className="shrink-0 text-sm text-[var(--color-text-secondary)]">
-                                毫秒
+                                秒
                               </span>
                             </div>
                           </FormFieldRow>
@@ -1441,6 +1445,27 @@ export default function PluginsPage() {
                               {mcpProtocolLabel.streamableHttp}
                             </option>
                           </UiSelect>
+                        </FormFieldRow>
+                        <FormFieldRow label="工具超时">
+                          <div className="flex items-center gap-2">
+                            <UiInput
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={String(draft.timeoutMS)}
+                              onChange={(event) => {
+                                const nextValue = Number(event.target.value);
+                                setDraft((current) => ({
+                                  ...current,
+                                  timeoutMS:
+                                    Number.isFinite(nextValue) && nextValue >= 1 ? nextValue : 1,
+                                }));
+                              }}
+                            />
+                            <span className="shrink-0 text-sm text-[var(--color-text-secondary)]">
+                              秒
+                            </span>
+                          </div>
                         </FormFieldRow>
                       </div>
                     )}
