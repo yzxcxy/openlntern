@@ -29,7 +29,7 @@ func main() {
 	database.InitContextStore(cfg.Tools.OpenViking)
 	memorysvc.InitMemory(cfg.Tools)
 	memorysvc.InitMemorySync()
-	shutdown, err := agentsvc.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.ContextCompression, cfg.APMPlus)
+	shutdown, err := agentsvc.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.Agent, cfg.ContextCompression, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)
 	}

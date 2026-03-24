@@ -72,6 +72,7 @@ type runtimeState struct {
 	agentHandlers       []adk.ChatModelAgentMiddleware
 	bootstrapChatConfig config.LLMConfig
 	contextCompression  contextCompressionSettings
+	maxIterations       int
 }
 
 type Service struct {

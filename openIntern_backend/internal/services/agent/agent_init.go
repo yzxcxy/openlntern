@@ -19,7 +19,7 @@ import (
 )
 
 // InitEino 初始化模型、工具、中间件、运行时依赖和上下文压缩参数。
-func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
+func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, agentCfg config.AgentConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
 	compressionSettings := newContextCompressionSettings(compressionCfg)
 	adk.SetLanguage(adk.LanguageChinese)
@@ -90,6 +90,7 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 		agentHandlers:       []adk.ChatModelAgentMiddleware{patchToolCallsMiddleware, skillMiddleware},
 		bootstrapChatConfig: cfg,
 		contextCompression:  compressionSettings,
+		maxIterations:       agentCfg.MaxIterations,
 	})
 
 	return shutdown, nil

@@ -45,9 +45,10 @@ func (s *Service) buildEinoRunner(ctx context.Context, runtimeConfig *AgentRunti
 	}
 	agent := "openintern agent"
 	agentNode, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name:        "openintern_agent",
-		Description: agent,
-		Model:       chatModel,
+		Name:          "openintern_agent",
+		Description:   agent,
+		Model:         chatModel,
+		MaxIterations: state.maxIterations,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
 				Tools: runtimeTools.staticTools,

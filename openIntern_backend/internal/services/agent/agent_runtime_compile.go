@@ -165,10 +165,11 @@ func (c *agentModeCompiler) compileDetail(detail *AgentDetailView, allowRuntimeM
 	}
 
 	agentNode, err := adk.NewChatModelAgent(c.ctx, &adk.ChatModelAgentConfig{
-		Name:        buildCompiledAgentName(detail),
-		Description: strings.TrimSpace(detail.Description),
-		Instruction: strings.TrimSpace(detail.SystemPrompt),
-		Model:       model,
+		Name:          buildCompiledAgentName(detail),
+		Description:   strings.TrimSpace(detail.Description),
+		Instruction:   strings.TrimSpace(detail.SystemPrompt),
+		Model:         model,
+		MaxIterations: c.state.maxIterations,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
 				Tools: tools,

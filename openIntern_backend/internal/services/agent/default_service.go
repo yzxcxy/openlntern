@@ -56,6 +56,6 @@ func RunDebugAgent(ctx context.Context, w io.Writer, input *types.RunAgentInput)
 }
 
 // InitEino initializes the default agent service runtime dependencies.
-func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
-	return defaultService.InitEino(cfg, summaryCfg, toolsCfg, compressionCfg, apmCfg)
+func InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, agentCfg config.AgentConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
+	return defaultService.InitEino(cfg, summaryCfg, toolsCfg, agentCfg, compressionCfg, apmCfg)
 }

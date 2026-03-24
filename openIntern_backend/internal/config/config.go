@@ -20,6 +20,7 @@ type Config struct {
 	EmbeddingLLM       EmbeddingLLMConfig       `yaml:"embedding_llm"`
 	Milvus             MilvusConfig             `yaml:"milvus"`
 	Tools              ToolsConfig              `yaml:"tools"`
+	Agent              AgentConfig              `yaml:"agent"`
 	ContextCompression ContextCompressionConfig `yaml:"context_compression"`
 	APMPlus            APMPlusConfig            `yaml:"apmplus"`
 }
@@ -114,6 +115,10 @@ type APMPlusConfig struct {
 	AppKey      string `yaml:"app_key"`
 	ServiceName string `yaml:"service_name"`
 	Release     string `yaml:"release"`
+}
+
+type AgentConfig struct {
+	MaxIterations int `yaml:"max_iterations"`
 }
 
 type ContextCompressionConfig struct {
