@@ -10,11 +10,16 @@ import (
 	agentsvc "openIntern/internal/services/agent"
 	memorysvc "openIntern/internal/services/memory"
 	pluginsvc "openIntern/internal/services/plugin"
+	openvikingsvc "openIntern/internal/services/openviking"
 	storagesvc "openIntern/internal/services/storage"
 )
 
 func main() {
 	cfg := config.LoadConfig("config.yaml")
+
+	// 初始化运行时配置
+	config.InitRuntime(cfg, "config.yaml")
+
 	if err := database.Init(cfg.MySQL.DSN); err != nil {
 		log.Fatalf("failed to connect database: %v", err)
 	}
@@ -38,6 +43,19 @@ func main() {
 			_ = shutdown(context.Background())
 		}()
 	}
+
+	// 初始化并启动 OpenViking 服务
+	ovConfig := config.GetOpenVikingServiceConfig()
+	ovManager := openvikingsvc.InitManager(ovConfig, config.GetOpenVikingConfigPath())
+	if err := ovManager.Start(); err != nil {
+		log.Printf("warning: failed to start openviking: %v", err)
+	}
+	defer func() {
+		if err := ovManager.Stop(); err != nil {
+			log.Printf("warning: failed to stop openviking: %v", err)
+		}
+	}()
+
 	r := routers.SetupRouter()
 	r.Run(cfg.Port)
 }
