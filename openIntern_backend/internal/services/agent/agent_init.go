@@ -10,16 +10,19 @@ import (
 	"strings"
 
 	"github.com/cloudwego/eino-ext/callbacks/apmplus"
+	"github.com/cloudwego/eino-ext/components/model/ark"
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
+	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/middlewares/patchtoolcalls"
 	einoSkill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/callbacks"
+	einoModel "github.com/cloudwego/eino/components/model"
 	einoTool "github.com/cloudwego/eino/components/tool"
 )
 
 // InitEino 初始化模型、工具、中间件、运行时依赖和上下文压缩参数。
-func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, agentCfg config.AgentConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
+func (s *Service) InitEino(summaryCfg config.LLMConfig, toolsCfg config.ToolsConfig, agentCfg config.AgentConfig, compressionCfg config.ContextCompressionConfig, apmCfg config.APMPlusConfig) (func(context.Context) error, error) {
 	ctx := context.Background()
 	compressionSettings := newContextCompressionSettings(compressionCfg)
 	adk.SetLanguage(adk.LanguageChinese)
@@ -39,16 +42,13 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 		shutdown = apmShutdown
 	}
 
-	var runtimeSummaryModel *deepseek.ChatModel
+	var runtimeSummaryModel einoModel.ToolCallingChatModel
 	var err error
 	if compressionSettings.Enabled && (strings.TrimSpace(summaryCfg.APIKey) == "" || strings.TrimSpace(summaryCfg.Model) == "") {
 		return nil, fmt.Errorf("summary_llm is required when context compression is enabled")
 	}
 	if strings.TrimSpace(summaryCfg.APIKey) != "" && strings.TrimSpace(summaryCfg.Model) != "" {
-		runtimeSummaryModel, err = deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
-			APIKey: summaryCfg.APIKey,
-			Model:  summaryCfg.Model,
-		})
+		runtimeSummaryModel, err = buildSummaryChatModel(ctx, summaryCfg)
 		if err != nil {
 			return nil, err
 		}
@@ -83,15 +83,44 @@ func (s *Service) InitEino(cfg config.LLMConfig, summaryCfg config.LLMConfig, to
 	allTools := append([]einoTool.BaseTool{}, skillTools...)
 
 	s.setState(runtimeState{
-		apmplusShutdown:     shutdown,
-		summaryModel:        runtimeSummaryModel,
-		sandboxBaseURL:      sandboxBaseURL,
-		staticAgentTools:    allTools,
-		agentHandlers:       []adk.ChatModelAgentMiddleware{patchToolCallsMiddleware, skillMiddleware},
-		bootstrapChatConfig: cfg,
-		contextCompression:  compressionSettings,
-		maxIterations:       agentCfg.MaxIterations,
+		apmplusShutdown:    shutdown,
+		summaryModel:       runtimeSummaryModel,
+		sandboxBaseURL:     sandboxBaseURL,
+		staticAgentTools:   allTools,
+		agentHandlers:      []adk.ChatModelAgentMiddleware{patchToolCallsMiddleware, skillMiddleware},
+		contextCompression: compressionSettings,
+		maxIterations:      agentCfg.MaxIterations,
 	})
 
 	return shutdown, nil
+}
+
+// buildSummaryChatModel 根据配置构建摘要模型
+func buildSummaryChatModel(ctx context.Context, cfg config.LLMConfig) (einoModel.ToolCallingChatModel, error) {
+	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+
+	switch provider {
+	case "ark":
+		return ark.NewChatModel(ctx, &ark.ChatModelConfig{
+			APIKey:  cfg.APIKey,
+			BaseURL: baseURL,
+			Model:   cfg.Model,
+		})
+	case "openai":
+		return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+			APIKey:  cfg.APIKey,
+			BaseURL: baseURL,
+			Model:   cfg.Model,
+		})
+	case "deepseek", "":
+		// 默认使用 deepseek
+		return deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+			APIKey:  cfg.APIKey,
+			BaseURL: baseURL,
+			Model:   cfg.Model,
+		})
+	default:
+		return nil, fmt.Errorf("unsupported summary_llm provider: %s", provider)
+	}
 }

@@ -11,6 +11,7 @@ import { OpenVikingConnectionSettings } from "./components/OpenVikingConnectionS
 import { OpenVikingServiceSettings } from "./components/OpenVikingServiceSettings";
 import { OpenVikingControl } from "./components/OpenVikingControl";
 import { AdvancedSettings } from "./components/AdvancedSettings";
+import { SystemSettings } from "./components/SystemSettings";
 
 type ConfigResponse = {
   agent?: {
@@ -76,9 +77,27 @@ type ConfigResponse = {
       };
     };
   };
+  summary_llm?: {
+    model?: string;
+    api_key?: string;
+    base_url?: string;
+    provider?: string;
+  };
+  cos?: {
+    secret_id?: string;
+    secret_key?: string;
+    bucket?: string;
+    region?: string;
+  };
+  apmplus?: {
+    host?: string;
+    app_key?: string;
+    service_name?: string;
+    release?: string;
+  };
 };
 
-type TabKey = "agent" | "ov-connection" | "ov-service" | "ov-control" | "advanced";
+type TabKey = "agent" | "ov-connection" | "ov-service" | "ov-control" | "advanced" | "system";
 
 const joinClasses = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
@@ -184,6 +203,7 @@ export default function SettingsPage() {
     { key: "ov-service", label: "OpenViking 服务" },
     { key: "ov-control", label: "进程控制" },
     { key: "advanced", label: "高级设置" },
+    { key: "system", label: "系统配置" },
   ];
 
   const renderTabContent = () => {
@@ -219,6 +239,16 @@ export default function SettingsPage() {
           <AdvancedSettings
             config={config?.context_compression}
             onSave={(updates) => handleSave("context_compression", updates)}
+            saving={saving}
+          />
+        );
+      case "system":
+        return (
+          <SystemSettings
+            summaryLLM={config?.summary_llm}
+            cos={config?.cos}
+            apmplus={config?.apmplus}
+            onSave={handleSave}
             saving={saving}
           />
         );

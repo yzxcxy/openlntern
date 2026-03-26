@@ -192,17 +192,17 @@ func (c *agentModeCompiler) compileDetail(detail *AgentDetailView, allowRuntimeM
 
 func (c *agentModeCompiler) buildModel(detail *AgentDetailView, allowRuntimeModelOverride bool) (einoModel.ToolCallingChatModel, error) {
 	if allowRuntimeModelOverride && c.runtimeConfig != nil && strings.TrimSpace(c.runtimeConfig.Model.ModelID) != "" {
-		return c.service.buildRuntimeChatModel(c.ctx, c.runtimeConfig, c.state)
+		return c.service.buildRuntimeChatModel(c.ctx, c.runtimeConfig)
 	}
 	if strings.TrimSpace(detail.DefaultModelID) == "" {
-		return c.service.buildBootstrapChatModel(c.ctx, c.state)
+		return nil, fmt.Errorf("no model configured for agent")
 	}
 	selection, err := c.service.deps.ModelCatalogResolver.ResolveRuntimeSelection(detail.DefaultModelID, "")
 	if err != nil {
 		return nil, err
 	}
 	if selection == nil {
-		return c.service.buildBootstrapChatModel(c.ctx, c.state)
+		return nil, fmt.Errorf("model %s not found", detail.DefaultModelID)
 	}
 	return c.service.buildChatModel(c.ctx, selection.Provider, selection.Model)
 }

@@ -27,6 +27,9 @@ type UpdateConfigRequest struct {
 	Tools              map[string]interface{} `json:"tools,omitempty"`
 	ContextCompression map[string]interface{} `json:"context_compression,omitempty"`
 	Plugin             map[string]interface{} `json:"plugin,omitempty"`
+	SummaryLLM         map[string]interface{} `json:"summary_llm,omitempty"`
+	COS                map[string]interface{} `json:"cos,omitempty"`
+	APMPlus            map[string]interface{} `json:"apmplus,omitempty"`
 }
 
 // UpdateConfig 更新配置
@@ -49,6 +52,15 @@ func UpdateConfig(c *gin.Context) {
 	}
 	if req.Plugin != nil {
 		updates["plugin"] = req.Plugin
+	}
+	if req.SummaryLLM != nil {
+		updates["summary_llm"] = req.SummaryLLM
+	}
+	if req.COS != nil {
+		updates["cos"] = req.COS
+	}
+	if req.APMPlus != nil {
+		updates["apmplus"] = req.APMPlus
 	}
 
 	if len(updates) == 0 {

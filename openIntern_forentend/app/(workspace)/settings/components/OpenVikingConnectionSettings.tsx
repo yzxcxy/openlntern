@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UiButton } from "../../../components/ui/UiButton";
 import { UiInput } from "../../../components/ui/UiInput";
 
@@ -24,13 +24,21 @@ type Props = {
 };
 
 export function OpenVikingConnectionSettings({ config, onSave, saving }: Props) {
-  const [baseUrl, setBaseUrl] = useState(config?.base_url ?? "");
+  const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [skillsRoot, setSkillsRoot] = useState(config?.skills_root ?? "");
-  const [toolsRoot, setToolsRoot] = useState(config?.tools_root ?? "");
-  const [timeoutSeconds, setTimeoutSeconds] = useState(
-    config?.timeout_seconds?.toString() ?? "600"
-  );
+  const [skillsRoot, setSkillsRoot] = useState("");
+  const [toolsRoot, setToolsRoot] = useState("");
+  const [timeoutSeconds, setTimeoutSeconds] = useState("600");
+
+  // 当 config prop 更新时，同步到 state
+  useEffect(() => {
+    if (config) {
+      if (config.base_url !== undefined) setBaseUrl(config.base_url);
+      if (config.skills_root !== undefined) setSkillsRoot(config.skills_root);
+      if (config.tools_root !== undefined) setToolsRoot(config.tools_root);
+      if (config.timeout_seconds !== undefined) setTimeoutSeconds(config.timeout_seconds.toString());
+    }
+  }, [config]);
 
   const handleSave = () => {
     const updates: Record<string, unknown> = {

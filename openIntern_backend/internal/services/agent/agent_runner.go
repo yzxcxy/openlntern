@@ -30,7 +30,7 @@ type runtimeToolSet struct {
 
 // buildEinoRunner 基于当前运行时配置组装可流式执行的 runner。
 func (s *Service) buildEinoRunner(ctx context.Context, runtimeConfig *AgentRuntimeConfig, state runtimeState) (*adk.Runner, func(), error) {
-	chatModel, err := s.buildRuntimeChatModel(ctx, runtimeConfig, state)
+	chatModel, err := s.buildRuntimeChatModel(ctx, runtimeConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -282,29 +282,19 @@ func mergeToolCleanup(cleanups ...func()) func() {
 	}
 }
 
-// buildRuntimeChatModel 优先使用 runtime 指定模型，否则回退到默认模型。
-func (s *Service) buildRuntimeChatModel(ctx context.Context, runtimeConfig *AgentRuntimeConfig, state runtimeState) (einoModel.ToolCallingChatModel, error) {
-	if runtimeConfig != nil {
-		selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(runtimeConfig.Model.ModelID, runtimeConfig.Model.ProviderID)
-		if err != nil {
-			return nil, err
-		}
-		if selection != nil {
-			return s.buildChatModel(ctx, selection.Provider, selection.Model)
-		}
+// buildRuntimeChatModel 使用 runtime 指定模型构建聊天模型。
+func (s *Service) buildRuntimeChatModel(ctx context.Context, runtimeConfig *AgentRuntimeConfig) (einoModel.ToolCallingChatModel, error) {
+	if runtimeConfig == nil {
+		return nil, fmt.Errorf("no model configured")
 	}
-	return s.buildBootstrapChatModel(ctx, state)
-}
-
-// buildBootstrapChatModel 使用系统默认配置构建聊天模型。
-func (s *Service) buildBootstrapChatModel(ctx context.Context, state runtimeState) (einoModel.ToolCallingChatModel, error) {
-	if strings.TrimSpace(state.bootstrapChatConfig.APIKey) == "" || strings.TrimSpace(state.bootstrapChatConfig.Model) == "" {
-		return nil, fmt.Errorf("no default chat model configured")
+	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(runtimeConfig.Model.ModelID, runtimeConfig.Model.ProviderID)
+	if err != nil {
+		return nil, err
 	}
-	return ark.NewChatModel(ctx, &ark.ChatModelConfig{
-		APIKey: state.bootstrapChatConfig.APIKey,
-		Model:  state.bootstrapChatConfig.Model,
-	})
+	if selection == nil {
+		return nil, fmt.Errorf("no model configured")
+	}
+	return s.buildChatModel(ctx, selection.Provider, selection.Model)
 }
 
 // buildChatModel 根据 provider 类型构建对应的底层聊天模型实现。

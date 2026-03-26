@@ -2,15 +2,14 @@ package agent
 
 import (
 	"context"
-	"openIntern/internal/config"
 	"openIntern/internal/models"
 	builtinTool "openIntern/internal/services/builtin_tool"
 	memorycontracts "openIntern/internal/services/memory/contracts"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
 	"sync"
 
-	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/adk"
+	einoModel "github.com/cloudwego/eino/components/model"
 	einoTool "github.com/cloudwego/eino/components/tool"
 )
 
@@ -66,11 +65,10 @@ type Dependencies struct {
 
 type runtimeState struct {
 	apmplusShutdown     func(context.Context) error
-	summaryModel        *deepseek.ChatModel
+	summaryModel        einoModel.ToolCallingChatModel
 	sandboxBaseURL      string
 	staticAgentTools    []einoTool.BaseTool
 	agentHandlers       []adk.ChatModelAgentMiddleware
-	bootstrapChatConfig config.LLMConfig
 	contextCompression  contextCompressionSettings
 	maxIterations       int
 }

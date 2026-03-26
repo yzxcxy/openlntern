@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UiButton } from "../../../components/ui/UiButton";
 import { UiInput } from "../../../components/ui/UiInput";
 
@@ -15,9 +15,14 @@ type Props = {
 };
 
 export function AgentSettings({ config, onSave, saving }: Props) {
-  const [maxIterations, setMaxIterations] = useState(
-    config?.max_iterations?.toString() ?? "10"
-  );
+  const [maxIterations, setMaxIterations] = useState("10");
+
+  // 当 config prop 更新时，同步到 state
+  useEffect(() => {
+    if (config?.max_iterations !== undefined) {
+      setMaxIterations(config.max_iterations.toString());
+    }
+  }, [config?.max_iterations]);
 
   const handleSave = () => {
     const iterations = parseInt(maxIterations, 10);

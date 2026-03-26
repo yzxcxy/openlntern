@@ -10,7 +10,7 @@ import (
 	"openIntern/internal/models"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
-	"github.com/cloudwego/eino-ext/components/model/deepseek"
+	einoModel "github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -46,7 +46,7 @@ func buildContextSummaryMessageContent(summaryText string) string {
 }
 
 // summarizeContextHistory generates a structured compression summary from previous summary and newly removed messages.
-func summarizeContextHistory(ctx context.Context, summaryModel *deepseek.ChatModel, previousSummary string, removedMessages []types.Message) (string, string, int, error) {
+func summarizeContextHistory(ctx context.Context, summaryModel einoModel.ToolCallingChatModel, previousSummary string, removedMessages []types.Message) (string, string, int, error) {
 	previous := strings.TrimSpace(previousSummary)
 	source := buildSummarySourceFromMessages(removedMessages)
 	if previous == "" && source == "" {
@@ -230,7 +230,7 @@ func truncateByRunes(raw string, maxRunes int) string {
 }
 
 // buildAndPersistThreadSummary merges removed messages into snapshot summary and persists a new snapshot record.
-func (s *Service) buildAndPersistThreadSummary(ctx context.Context, threadID string, removedMessages []types.Message, previousSnapshot *models.ThreadContextSnapshot, summaryModel *deepseek.ChatModel) (*models.ThreadContextSnapshot, string, error) {
+func (s *Service) buildAndPersistThreadSummary(ctx context.Context, threadID string, removedMessages []types.Message, previousSnapshot *models.ThreadContextSnapshot, summaryModel einoModel.ToolCallingChatModel) (*models.ThreadContextSnapshot, string, error) {
 	if strings.TrimSpace(threadID) == "" {
 		return nil, "", nil
 	}

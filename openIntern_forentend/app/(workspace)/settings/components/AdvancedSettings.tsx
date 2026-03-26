@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UiButton } from "../../../components/ui/UiButton";
 import { UiInput } from "../../../components/ui/UiInput";
 
@@ -20,22 +20,24 @@ type Props = {
 };
 
 export function AdvancedSettings({ config, onSave, saving }: Props) {
-  const [enabled, setEnabled] = useState(config?.enabled ?? true);
-  const [softLimit, setSoftLimit] = useState(
-    config?.soft_limit_tokens?.toString() ?? "100000"
-  );
-  const [hardLimit, setHardLimit] = useState(
-    config?.hard_limit_tokens?.toString() ?? "120000"
-  );
-  const [outputReserve, setOutputReserve] = useState(
-    config?.output_reserve_tokens?.toString() ?? "4000"
-  );
-  const [maxRecent, setMaxRecent] = useState(
-    config?.max_recent_messages?.toString() ?? "3"
-  );
-  const [charsPerToken, setCharsPerToken] = useState(
-    config?.estimated_chars_per_token?.toString() ?? "1"
-  );
+  const [enabled, setEnabled] = useState(true);
+  const [softLimit, setSoftLimit] = useState("100000");
+  const [hardLimit, setHardLimit] = useState("120000");
+  const [outputReserve, setOutputReserve] = useState("4000");
+  const [maxRecent, setMaxRecent] = useState("3");
+  const [charsPerToken, setCharsPerToken] = useState("1");
+
+  // 当 config prop 更新时，同步到 state
+  useEffect(() => {
+    if (config) {
+      if (config.enabled !== undefined) setEnabled(config.enabled);
+      if (config.soft_limit_tokens !== undefined) setSoftLimit(config.soft_limit_tokens.toString());
+      if (config.hard_limit_tokens !== undefined) setHardLimit(config.hard_limit_tokens.toString());
+      if (config.output_reserve_tokens !== undefined) setOutputReserve(config.output_reserve_tokens.toString());
+      if (config.max_recent_messages !== undefined) setMaxRecent(config.max_recent_messages.toString());
+      if (config.estimated_chars_per_token !== undefined) setCharsPerToken(config.estimated_chars_per_token.toString());
+    }
+  }, [config]);
 
   const handleSave = () => {
     onSave({

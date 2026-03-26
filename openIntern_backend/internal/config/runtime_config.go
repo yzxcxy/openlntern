@@ -13,10 +13,13 @@ import (
 
 // RuntimeConfig 运行时可修改配置
 type RuntimeConfig struct {
-	Agent            AgentConfig              `json:"agent" yaml:"agent"`
-	Tools            ToolsConfig              `json:"tools" yaml:"tools"`
+	Agent              AgentConfig              `json:"agent" yaml:"agent"`
+	Tools              ToolsConfig              `json:"tools" yaml:"tools"`
 	ContextCompression ContextCompressionConfig `json:"context_compression" yaml:"context_compression"`
-	Plugin           PluginConfig             `json:"plugin" yaml:"plugin"`
+	Plugin             PluginConfig             `json:"plugin" yaml:"plugin"`
+	SummaryLLM         LLMConfig                `json:"summary_llm" yaml:"summary_llm"`
+	COS                COSConfig                `json:"cos" yaml:"cos"`
+	APMPlus            APMPlusConfig            `json:"apmplus" yaml:"apmplus"`
 }
 
 // OpenVikingServiceConfig OpenViking服务配置（来自 ov.conf）
@@ -127,11 +130,38 @@ type OpenVikingRerankConfig struct {
 
 // RuntimeConfigResponse 前端配置响应（敏感字段脱敏）
 type RuntimeConfigResponse struct {
-	Agent            AgentConfig              `json:"agent"`
-	Tools            ToolsConfigResponse      `json:"tools"`
+	Agent              AgentConfig              `json:"agent"`
+	Tools              ToolsConfigResponse      `json:"tools"`
 	ContextCompression ContextCompressionConfig `json:"context_compression"`
-	Plugin           PluginConfig             `json:"plugin"`
-	OpenVikingService OpenVikingServiceConfigResponse `json:"openviking_service"`
+	Plugin             PluginConfig             `json:"plugin"`
+	SummaryLLM         LLMConfigResponse        `json:"summary_llm"`
+	COS                COSConfigResponse        `json:"cos"`
+	APMPlus            APMPlusConfigResponse    `json:"apmplus"`
+	OpenVikingService  OpenVikingServiceConfigResponse `json:"openviking_service"`
+}
+
+// LLMConfigResponse LLM配置响应（敏感字段脱敏）
+type LLMConfigResponse struct {
+	Model    string `json:"model"`
+	APIKey   string `json:"api_key,omitempty"`
+	BaseURL  string `json:"base_url"`
+	Provider string `json:"provider"`
+}
+
+// COSConfigResponse COS配置响应（敏感字段脱敏）
+type COSConfigResponse struct {
+	SecretID  string `json:"secret_id,omitempty"`
+	SecretKey string `json:"secret_key,omitempty"`
+	Bucket    string `json:"bucket"`
+	Region    string `json:"region"`
+}
+
+// APMPlusConfigResponse APMPlus配置响应（敏感字段脱敏）
+type APMPlusConfigResponse struct {
+	Host        string `json:"host"`
+	AppKey      string `json:"app_key,omitempty"`
+	ServiceName string `json:"service_name"`
+	Release     string `json:"release"`
 }
 
 // ToolsConfigResponse 工具配置响应（敏感字段脱敏）
@@ -261,6 +291,9 @@ func InitRuntime(cfg *Config, cfgPath string) {
 		Tools:              cfg.Tools,
 		ContextCompression: cfg.ContextCompression,
 		Plugin:             cfg.Plugin,
+		SummaryLLM:         cfg.SummaryLLM,
+		COS:                cfg.COS,
+		APMPlus:            cfg.APMPlus,
 	}
 
 	// 设置 OpenViking 配置路径（和 config.yaml 同级目录）
@@ -322,6 +355,18 @@ func UpdateRuntimeConfig(updates map[string]interface{}) error {
 		updatePluginConfig(&globalRuntime.Plugin, pluginUpdates)
 		globalConfig.Plugin = globalRuntime.Plugin
 	}
+	if summaryLLMUpdates, ok := updates["summary_llm"].(map[string]interface{}); ok {
+		updateLLMConfig(&globalRuntime.SummaryLLM, summaryLLMUpdates)
+		globalConfig.SummaryLLM = globalRuntime.SummaryLLM
+	}
+	if cosUpdates, ok := updates["cos"].(map[string]interface{}); ok {
+		updateCOSConfig(&globalRuntime.COS, cosUpdates)
+		globalConfig.COS = globalRuntime.COS
+	}
+	if apmPlusUpdates, ok := updates["apmplus"].(map[string]interface{}); ok {
+		updateAPMPlusConfig(&globalRuntime.APMPlus, apmPlusUpdates)
+		globalConfig.APMPlus = globalRuntime.APMPlus
+	}
 
 	// 写回配置文件
 	return saveConfigToFile()
@@ -357,9 +402,6 @@ func UpdateOpenVikingServiceConfig(updates map[string]interface{}) error {
 			}
 		}
 	}
-	if feishuUpdates, ok := updates["feishu"].(map[string]interface{}); ok {
-		updateFeishuConfig(globalOpenViking, feishuUpdates)
-	}
 	if rerankUpdates, ok := updates["rerank"].(map[string]interface{}); ok {
 		updateRerankConfig(globalOpenViking, rerankUpdates)
 	}
@@ -394,7 +436,197 @@ func saveOpenVikingConfigToFile() error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(globalOpenViking, "", "  ")
+	// 构建只包含有效配置的 map，避免序列化空结构体
+	configMap := make(map[string]interface{})
+
+	// Storage
+	if globalOpenViking.Storage.Workspace != "" || globalOpenViking.Storage.VectorDB.Name != "" || globalOpenViking.Storage.AGFS.Backend != "" {
+		storageMap := make(map[string]interface{})
+		if globalOpenViking.Storage.Workspace != "" {
+			storageMap["workspace"] = globalOpenViking.Storage.Workspace
+		}
+		if globalOpenViking.Storage.VectorDB.Name != "" || globalOpenViking.Storage.VectorDB.Backend != "" {
+			vdbMap := make(map[string]interface{})
+			if globalOpenViking.Storage.VectorDB.Name != "" {
+				vdbMap["name"] = globalOpenViking.Storage.VectorDB.Name
+			}
+			if globalOpenViking.Storage.VectorDB.Backend != "" {
+				vdbMap["backend"] = globalOpenViking.Storage.VectorDB.Backend
+			}
+			storageMap["vectordb"] = vdbMap
+		}
+		if globalOpenViking.Storage.AGFS.Backend != "" || globalOpenViking.Storage.AGFS.Port != 0 || globalOpenViking.Storage.AGFS.LogLevel != "" {
+			agfsMap := make(map[string]interface{})
+			if globalOpenViking.Storage.AGFS.Port != 0 {
+				agfsMap["port"] = globalOpenViking.Storage.AGFS.Port
+			}
+			if globalOpenViking.Storage.AGFS.LogLevel != "" {
+				agfsMap["log_level"] = globalOpenViking.Storage.AGFS.LogLevel
+			}
+			if globalOpenViking.Storage.AGFS.Backend != "" {
+				agfsMap["backend"] = globalOpenViking.Storage.AGFS.Backend
+			}
+			storageMap["agfs"] = agfsMap
+		}
+		configMap["storage"] = storageMap
+	}
+
+	// Log
+	if globalOpenViking.Log.Level != "" || globalOpenViking.Log.Output != "" {
+		logMap := make(map[string]interface{})
+		if globalOpenViking.Log.Level != "" {
+			logMap["level"] = globalOpenViking.Log.Level
+		}
+		if globalOpenViking.Log.Output != "" {
+			logMap["output"] = globalOpenViking.Log.Output
+		}
+		configMap["log"] = logMap
+	}
+
+	// Embedding - 只保存 dense，跳过空的 sparse/hybrid
+	if globalOpenViking.Embedding.Dense.Model != "" || globalOpenViking.Embedding.Dense.APIBase != "" || globalOpenViking.Embedding.MaxConcurrent != 0 {
+		embeddingMap := make(map[string]interface{})
+		if globalOpenViking.Embedding.Dense.Model != "" || globalOpenViking.Embedding.Dense.APIBase != "" {
+			denseMap := make(map[string]interface{})
+			if globalOpenViking.Embedding.Dense.APIBase != "" {
+				denseMap["api_base"] = globalOpenViking.Embedding.Dense.APIBase
+			}
+			if globalOpenViking.Embedding.Dense.APIKey != "" {
+				denseMap["api_key"] = globalOpenViking.Embedding.Dense.APIKey
+			}
+			if globalOpenViking.Embedding.Dense.Provider != "" {
+				denseMap["provider"] = globalOpenViking.Embedding.Dense.Provider
+			}
+			if globalOpenViking.Embedding.Dense.Dimension != 0 {
+				denseMap["dimension"] = globalOpenViking.Embedding.Dense.Dimension
+			}
+			if globalOpenViking.Embedding.Dense.Model != "" {
+				denseMap["model"] = globalOpenViking.Embedding.Dense.Model
+			}
+			if globalOpenViking.Embedding.Dense.Input != "" {
+				denseMap["input"] = globalOpenViking.Embedding.Dense.Input
+			}
+			if globalOpenViking.Embedding.Dense.BatchSize != 0 {
+				denseMap["batch_size"] = globalOpenViking.Embedding.Dense.BatchSize
+			}
+			if globalOpenViking.Embedding.Dense.QueryParam != "" {
+				denseMap["query_param"] = globalOpenViking.Embedding.Dense.QueryParam
+			}
+			if globalOpenViking.Embedding.Dense.DocumentParam != "" {
+				denseMap["document_param"] = globalOpenViking.Embedding.Dense.DocumentParam
+			}
+			if len(globalOpenViking.Embedding.Dense.ExtraHeaders) > 0 {
+				denseMap["extra_headers"] = globalOpenViking.Embedding.Dense.ExtraHeaders
+			}
+			if globalOpenViking.Embedding.Dense.AK != "" {
+				denseMap["ak"] = globalOpenViking.Embedding.Dense.AK
+			}
+			if globalOpenViking.Embedding.Dense.SK != "" {
+				denseMap["sk"] = globalOpenViking.Embedding.Dense.SK
+			}
+			if globalOpenViking.Embedding.Dense.Region != "" {
+				denseMap["region"] = globalOpenViking.Embedding.Dense.Region
+			}
+			embeddingMap["dense"] = denseMap
+		}
+		// 只有当 sparse 有 model 时才保存
+		if globalOpenViking.Embedding.Sparse.Model != "" {
+			sparseMap := make(map[string]interface{})
+			if globalOpenViking.Embedding.Sparse.APIBase != "" {
+				sparseMap["api_base"] = globalOpenViking.Embedding.Sparse.APIBase
+			}
+			if globalOpenViking.Embedding.Sparse.APIKey != "" {
+				sparseMap["api_key"] = globalOpenViking.Embedding.Sparse.APIKey
+			}
+			if globalOpenViking.Embedding.Sparse.Provider != "" {
+				sparseMap["provider"] = globalOpenViking.Embedding.Sparse.Provider
+			}
+			sparseMap["model"] = globalOpenViking.Embedding.Sparse.Model
+			embeddingMap["sparse"] = sparseMap
+		}
+		// 只有当 hybrid 有 model 时才保存
+		if globalOpenViking.Embedding.Hybrid.Model != "" {
+			hybridMap := make(map[string]interface{})
+			if globalOpenViking.Embedding.Hybrid.APIBase != "" {
+				hybridMap["api_base"] = globalOpenViking.Embedding.Hybrid.APIBase
+			}
+			if globalOpenViking.Embedding.Hybrid.APIKey != "" {
+				hybridMap["api_key"] = globalOpenViking.Embedding.Hybrid.APIKey
+			}
+			if globalOpenViking.Embedding.Hybrid.Provider != "" {
+				hybridMap["provider"] = globalOpenViking.Embedding.Hybrid.Provider
+			}
+			hybridMap["model"] = globalOpenViking.Embedding.Hybrid.Model
+			if globalOpenViking.Embedding.Hybrid.Dimension != 0 {
+				hybridMap["dimension"] = globalOpenViking.Embedding.Hybrid.Dimension
+			}
+			embeddingMap["hybrid"] = hybridMap
+		}
+		if globalOpenViking.Embedding.MaxConcurrent != 0 {
+			embeddingMap["max_concurrent"] = globalOpenViking.Embedding.MaxConcurrent
+		}
+		configMap["embedding"] = embeddingMap
+	}
+
+	// VLM
+	if globalOpenViking.VLM.Model != "" || globalOpenViking.VLM.APIBase != "" {
+		vlmMap := make(map[string]interface{})
+		if globalOpenViking.VLM.APIBase != "" {
+			vlmMap["api_base"] = globalOpenViking.VLM.APIBase
+		}
+		if globalOpenViking.VLM.APIKey != "" {
+			vlmMap["api_key"] = globalOpenViking.VLM.APIKey
+		}
+		if globalOpenViking.VLM.Provider != "" {
+			vlmMap["provider"] = globalOpenViking.VLM.Provider
+		}
+		if globalOpenViking.VLM.Model != "" {
+			vlmMap["model"] = globalOpenViking.VLM.Model
+		}
+		if globalOpenViking.VLM.MaxConcurrent != 0 {
+			vlmMap["max_concurrent"] = globalOpenViking.VLM.MaxConcurrent
+		}
+		if globalOpenViking.VLM.Thinking {
+			vlmMap["thinking"] = true
+		}
+		if globalOpenViking.VLM.Stream {
+			vlmMap["stream"] = true
+		}
+		if len(globalOpenViking.VLM.ExtraHeaders) > 0 {
+			vlmMap["extra_headers"] = globalOpenViking.VLM.ExtraHeaders
+		}
+		configMap["vlm"] = vlmMap
+	}
+
+	// Parsers
+	if globalOpenViking.Parsers.Code.CodeSummaryMode != "" {
+		parsersMap := make(map[string]interface{})
+		codeMap := make(map[string]interface{})
+		codeMap["code_summary_mode"] = globalOpenViking.Parsers.Code.CodeSummaryMode
+		parsersMap["code"] = codeMap
+		configMap["parsers"] = parsersMap
+	}
+
+	// Rerank - 只有当有 model 时才保存
+	if globalOpenViking.Rerank.Model != "" {
+		rerankMap := make(map[string]interface{})
+		if globalOpenViking.Rerank.APIBase != "" {
+			rerankMap["api_base"] = globalOpenViking.Rerank.APIBase
+		}
+		if globalOpenViking.Rerank.APIKey != "" {
+			rerankMap["api_key"] = globalOpenViking.Rerank.APIKey
+		}
+		if globalOpenViking.Rerank.Provider != "" {
+			rerankMap["provider"] = globalOpenViking.Rerank.Provider
+		}
+		rerankMap["model"] = globalOpenViking.Rerank.Model
+		if globalOpenViking.Rerank.Threshold != 0 {
+			rerankMap["threshold"] = globalOpenViking.Rerank.Threshold
+		}
+		configMap["rerank"] = rerankMap
+	}
+
+	data, err := json.MarshalIndent(configMap, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -438,6 +670,9 @@ func ReloadConfig() error {
 		Tools:              cfg.Tools,
 		ContextCompression: cfg.ContextCompression,
 		Plugin:             cfg.Plugin,
+		SummaryLLM:         cfg.SummaryLLM,
+		COS:                cfg.COS,
+		APMPlus:            cfg.APMPlus,
 	}
 
 	// 重新加载 OpenViking 配置
@@ -468,6 +703,24 @@ func (r *RuntimeConfig) ToResponse() RuntimeConfigResponse {
 		},
 		ContextCompression: r.ContextCompression,
 		Plugin:             r.Plugin,
+		SummaryLLM: LLMConfigResponse{
+			Model:    r.SummaryLLM.Model,
+			APIKey:   maskAPIKey(r.SummaryLLM.APIKey),
+			BaseURL:  r.SummaryLLM.BaseURL,
+			Provider: r.SummaryLLM.Provider,
+		},
+		COS: COSConfigResponse{
+			SecretID:  maskAPIKey(r.COS.SecretID),
+			SecretKey: maskAPIKey(r.COS.SecretKey),
+			Bucket:    r.COS.Bucket,
+			Region:    r.COS.Region,
+		},
+		APMPlus: APMPlusConfigResponse{
+			Host:        r.APMPlus.Host,
+			AppKey:      maskAPIKey(r.APMPlus.AppKey),
+			ServiceName: r.APMPlus.ServiceName,
+			Release:     r.APMPlus.Release,
+		},
 	}
 }
 
@@ -782,24 +1035,6 @@ func updateStorageConfig(cfg *OpenVikingServiceConfig, updates map[string]interf
 	}
 }
 
-func updateFeishuConfig(cfg *OpenVikingServiceConfig, updates map[string]interface{}) {
-	if v, ok := updates["app_id"].(string); ok {
-		cfg.Feishu.AppID = v
-	}
-	if v, ok := updates["app_secret"].(string); ok && v != "" {
-		cfg.Feishu.AppSecret = v
-	}
-	if v, ok := updates["domain"].(string); ok {
-		cfg.Feishu.Domain = v
-	}
-	if v, ok := updates["max_rows_per_sheet"].(float64); ok {
-		cfg.Feishu.MaxRowsPerSheet = int(v)
-	}
-	if v, ok := updates["max_records_per_table"].(float64); ok {
-		cfg.Feishu.MaxRecordsPerTable = int(v)
-	}
-}
-
 func updateRerankConfig(cfg *OpenVikingServiceConfig, updates map[string]interface{}) {
 	if v, ok := updates["api_base"].(string); ok {
 		cfg.Rerank.APIBase = v
@@ -815,6 +1050,51 @@ func updateRerankConfig(cfg *OpenVikingServiceConfig, updates map[string]interfa
 	}
 	if v, ok := updates["threshold"].(float64); ok {
 		cfg.Rerank.Threshold = v
+	}
+}
+
+func updateLLMConfig(cfg *LLMConfig, updates map[string]interface{}) {
+	if v, ok := updates["model"].(string); ok {
+		cfg.Model = v
+	}
+	if v, ok := updates["api_key"].(string); ok && v != "" {
+		cfg.APIKey = v
+	}
+	if v, ok := updates["base_url"].(string); ok {
+		cfg.BaseURL = v
+	}
+	if v, ok := updates["provider"].(string); ok {
+		cfg.Provider = v
+	}
+}
+
+func updateCOSConfig(cfg *COSConfig, updates map[string]interface{}) {
+	if v, ok := updates["secret_id"].(string); ok && v != "" {
+		cfg.SecretID = v
+	}
+	if v, ok := updates["secret_key"].(string); ok && v != "" {
+		cfg.SecretKey = v
+	}
+	if v, ok := updates["bucket"].(string); ok {
+		cfg.Bucket = v
+	}
+	if v, ok := updates["region"].(string); ok {
+		cfg.Region = v
+	}
+}
+
+func updateAPMPlusConfig(cfg *APMPlusConfig, updates map[string]interface{}) {
+	if v, ok := updates["host"].(string); ok {
+		cfg.Host = v
+	}
+	if v, ok := updates["app_key"].(string); ok && v != "" {
+		cfg.AppKey = v
+	}
+	if v, ok := updates["service_name"].(string); ok {
+		cfg.ServiceName = v
+	}
+	if v, ok := updates["release"].(string); ok {
+		cfg.Release = v
 	}
 }
 

@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/types"
-	"github.com/cloudwego/eino-ext/components/model/deepseek"
+	einoModel "github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
 
 // ensureThreadTitle 在线程无标题时基于最近用户输入生成并写回标题。
-func ensureThreadTitle(ctx context.Context, threadStore ThreadStore, threadID string, messages []types.Message, titleModel *deepseek.ChatModel) error {
+func ensureThreadTitle(ctx context.Context, threadStore ThreadStore, threadID string, messages []types.Message, titleModel einoModel.ToolCallingChatModel) error {
 	if threadID == "" {
 		return nil
 	}
@@ -56,7 +56,7 @@ func extractTitleSource(messages []types.Message) string {
 }
 
 // generateTitle 调用标题模型生成简短标题文本。
-func generateTitle(ctx context.Context, content string, titleModel *deepseek.ChatModel) (string, error) {
+func generateTitle(ctx context.Context, content string, titleModel einoModel.ToolCallingChatModel) (string, error) {
 	if titleModel == nil {
 		return "", nil
 	}

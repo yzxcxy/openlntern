@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
 	"openIntern/internal/config"
 	"openIntern/internal/database"
 	"openIntern/internal/routers"
@@ -12,6 +14,7 @@ import (
 	pluginsvc "openIntern/internal/services/plugin"
 	openvikingsvc "openIntern/internal/services/openviking"
 	storagesvc "openIntern/internal/services/storage"
+	"syscall"
 )
 
 func main() {
@@ -34,7 +37,7 @@ func main() {
 	database.InitContextStore(cfg.Tools.OpenViking)
 	memorysvc.InitMemory(cfg.Tools)
 	memorysvc.InitMemorySync()
-	shutdown, err := agentsvc.InitEino(cfg.LLM, cfg.SummaryLLM, cfg.Tools, cfg.Agent, cfg.ContextCompression, cfg.APMPlus)
+	shutdown, err := agentsvc.InitEino(cfg.SummaryLLM, cfg.Tools, cfg.Agent, cfg.ContextCompression, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)
 	}
@@ -50,10 +53,17 @@ func main() {
 	if err := ovManager.Start(); err != nil {
 		log.Printf("warning: failed to start openviking: %v", err)
 	}
-	defer func() {
+
+	// 设置信号处理，确保子进程被正确清理
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		log.Println("received shutdown signal, stopping openviking...")
 		if err := ovManager.Stop(); err != nil {
 			log.Printf("warning: failed to stop openviking: %v", err)
 		}
+		os.Exit(0)
 	}()
 
 	r := routers.SetupRouter()

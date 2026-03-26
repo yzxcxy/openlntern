@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UiButton } from "../../../components/ui/UiButton";
 import { UiInput } from "../../../components/ui/UiInput";
 import { UiSelect } from "../../../components/ui/UiSelect";
@@ -67,13 +67,6 @@ type OpenVikingServiceConfig = {
     code?: {
       code_summary_mode?: string;
     };
-  };
-  feishu?: {
-    app_id?: string;
-    app_secret?: string;
-    domain?: string;
-    max_rows_per_sheet?: number;
-    max_records_per_table?: number;
   };
   rerank?: {
     api_base?: string;
@@ -245,19 +238,6 @@ export function OpenVikingServiceSettings({
     config?.parsers?.code?.code_summary_mode ?? "ast"
   );
 
-  // Feishu
-  const [feishuAppId, setFeishuAppId] = useState(config?.feishu?.app_id ?? "");
-  const [feishuAppSecret, setFeishuAppSecret] = useState("");
-  const [feishuDomain, setFeishuDomain] = useState(
-    config?.feishu?.domain ?? "https://open.feishu.cn"
-  );
-  const [feishuMaxRows, setFeishuMaxRows] = useState(
-    config?.feishu?.max_rows_per_sheet?.toString() ?? "1000"
-  );
-  const [feishuMaxRecords, setFeishuMaxRecords] = useState(
-    config?.feishu?.max_records_per_table?.toString() ?? "1000"
-  );
-
   // Rerank
   const [rerankApiBase, setRerankApiBase] = useState(
     config?.rerank?.api_base ?? ""
@@ -270,6 +250,64 @@ export function OpenVikingServiceSettings({
   const [rerankThreshold, setRerankThreshold] = useState(
     config?.rerank?.threshold?.toString() ?? ""
   );
+
+  // 当 config prop 更新时，同步到所有 state
+  useEffect(() => {
+    if (config) {
+      // Storage
+      if (config.storage?.workspace !== undefined) setWorkspace(config.storage.workspace);
+      if (config.storage?.vectordb?.name !== undefined) setVectordbName(config.storage.vectordb.name);
+      if (config.storage?.vectordb?.backend !== undefined) setVectordbBackend(config.storage.vectordb.backend);
+      if (config.storage?.agfs?.port !== undefined) setAgfsPort(config.storage.agfs.port.toString());
+      if (config.storage?.agfs?.log_level !== undefined) setAgfsLogLevel(config.storage.agfs.log_level);
+      if (config.storage?.agfs?.backend !== undefined) setAgfsBackend(config.storage.agfs.backend);
+
+      // Log
+      if (config.log?.level !== undefined) setLogLevel(config.log.level);
+      if (config.log?.output !== undefined) setLogOutput(config.log.output);
+
+      // Dense Embedding
+      if (config.embedding?.dense?.api_base !== undefined) setDenseApiBase(config.embedding.dense.api_base);
+      if (config.embedding?.dense?.provider !== undefined) setDenseProvider(config.embedding.dense.provider);
+      if (config.embedding?.dense?.dimension !== undefined) setDenseDimension(config.embedding.dense.dimension.toString());
+      if (config.embedding?.dense?.model !== undefined) setDenseModel(config.embedding.dense.model);
+      if (config.embedding?.dense?.input !== undefined) setDenseInput(config.embedding.dense.input);
+      if (config.embedding?.dense?.batch_size !== undefined) setDenseBatchSize(config.embedding.dense.batch_size.toString());
+      if (config.embedding?.dense?.query_param !== undefined) setDenseQueryParam(config.embedding.dense.query_param);
+      if (config.embedding?.dense?.document_param !== undefined) setDenseDocumentParam(config.embedding.dense.document_param);
+      if (config.embedding?.dense?.region !== undefined) setDenseRegion(config.embedding.dense.region);
+
+      // Sparse Embedding
+      if (config.embedding?.sparse?.api_base !== undefined) setSparseApiBase(config.embedding.sparse.api_base);
+      if (config.embedding?.sparse?.provider !== undefined) setSparseProvider(config.embedding.sparse.provider);
+      if (config.embedding?.sparse?.model !== undefined) setSparseModel(config.embedding.sparse.model);
+
+      // Hybrid Embedding
+      if (config.embedding?.hybrid?.api_base !== undefined) setHybridApiBase(config.embedding.hybrid.api_base);
+      if (config.embedding?.hybrid?.provider !== undefined) setHybridProvider(config.embedding.hybrid.provider);
+      if (config.embedding?.hybrid?.model !== undefined) setHybridModel(config.embedding.hybrid.model);
+      if (config.embedding?.hybrid?.dimension !== undefined) setHybridDimension(config.embedding.hybrid.dimension.toString());
+
+      if (config.embedding?.max_concurrent !== undefined) setEmbeddingMaxConcurrent(config.embedding.max_concurrent.toString());
+
+      // VLM
+      if (config.vlm?.api_base !== undefined) setVlmApiBase(config.vlm.api_base);
+      if (config.vlm?.provider !== undefined) setVlmProvider(config.vlm.provider);
+      if (config.vlm?.model !== undefined) setVlmModel(config.vlm.model);
+      if (config.vlm?.max_concurrent !== undefined) setVlmMaxConcurrent(config.vlm.max_concurrent.toString());
+      if (config.vlm?.thinking !== undefined) setVlmThinking(config.vlm.thinking);
+      if (config.vlm?.stream !== undefined) setVlmStream(config.vlm.stream);
+
+      // Parsers
+      if (config.parsers?.code?.code_summary_mode !== undefined) setCodeSummaryMode(config.parsers.code.code_summary_mode);
+
+      // Rerank
+      if (config.rerank?.api_base !== undefined) setRerankApiBase(config.rerank.api_base);
+      if (config.rerank?.provider !== undefined) setRerankProvider(config.rerank.provider);
+      if (config.rerank?.model !== undefined) setRerankModel(config.rerank.model);
+      if (config.rerank?.threshold !== undefined) setRerankThreshold(config.rerank.threshold.toString());
+    }
+  }, [config]);
 
   const handleSave = () => {
     const updates: Record<string, unknown> = {
@@ -319,12 +357,6 @@ export function OpenVikingServiceSettings({
       parsers: {
         code: { code_summary_mode: codeSummaryMode },
       },
-      feishu: {
-        app_id: feishuAppId,
-        domain: feishuDomain,
-        max_rows_per_sheet: parseInt(feishuMaxRows, 10) || 1000,
-        max_records_per_table: parseInt(feishuMaxRecords, 10) || 1000,
-      },
       rerank: {
         api_base: rerankApiBase,
         provider: rerankProvider,
@@ -361,9 +393,6 @@ export function OpenVikingServiceSettings({
     }
     if (vlmApiKey.trim()) {
       (updates.vlm as Record<string, unknown>).api_key = vlmApiKey.trim();
-    }
-    if (feishuAppSecret.trim()) {
-      (updates.feishu as Record<string, unknown>).app_secret = feishuAppSecret.trim();
     }
     if (rerankApiKey.trim()) {
       (updates.rerank as Record<string, unknown>).api_key = rerankApiKey.trim();
@@ -982,82 +1011,6 @@ export function OpenVikingServiceSettings({
                 { value: "ast_llm", label: "AST + LLM（质量最高）" },
               ]} />
             </UiSelect>
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Feishu */}
-      <CollapsibleSection title="飞书/Lark 配置">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              App ID
-            </label>
-            <div className="mt-2">
-              <UiInput
-                value={feishuAppId}
-                onChange={(e) => setFeishuAppId(e.target.value)}
-                placeholder="cli_xxx"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              App Secret
-            </label>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              当前: {config?.feishu?.app_secret || "未设置"}
-            </p>
-            <div className="mt-2">
-              <UiInput
-                type="password"
-                value={feishuAppSecret}
-                onChange={(e) => setFeishuAppSecret(e.target.value)}
-                placeholder="输入新的 App Secret"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              API 域名
-            </label>
-            <div className="mt-2">
-              <UiSelect
-                value={feishuDomain}
-                onChange={(e) => setFeishuDomain(e.target.value)}
-              >
-                <SelectOptions options={[
-                  { value: "https://open.feishu.cn", label: "飞书 (中国)" },
-                  { value: "https://open.larksuite.com", label: "Lark (国际)" },
-                ]} />
-              </UiSelect>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              每Sheet最大行数
-            </label>
-            <div className="mt-2">
-              <UiInput
-                type="number"
-                value={feishuMaxRows}
-                onChange={(e) => setFeishuMaxRows(e.target.value)}
-                placeholder="1000"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              每表最大记录数
-            </label>
-            <div className="mt-2">
-              <UiInput
-                type="number"
-                value={feishuMaxRecords}
-                onChange={(e) => setFeishuMaxRecords(e.target.value)}
-                placeholder="1000"
-              />
-            </div>
           </div>
         </div>
       </CollapsibleSection>
