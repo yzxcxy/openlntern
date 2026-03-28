@@ -34,27 +34,10 @@
       }
     },
     {
-      "label": "openviking: dev",
-      "type": "shell",
-      "command": "openviking-server",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "isBackground": true,
-      "problemMatcher": [],
-      "presentation": {
-        "panel": "dedicated",
-        "group": "openviking",
-        "reveal": "always",
-        "clear": false
-      }
-    },
-    {
       "label": "dev: start all",
       "dependsOn": [
         "backend: dev",
-        "frontend: dev",
-        "openviking: dev"
+        "frontend: dev"
       ],
       "dependsOrder": "parallel",
       "runOptions": {
