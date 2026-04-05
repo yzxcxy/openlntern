@@ -15,13 +15,13 @@ import (
 // threadCache isolates thread Redis operations so the service can focus on business flow.
 type threadCache struct{}
 
-func (threadCache) getThreadList(page, pageSize int) ([]models.Thread, int64, bool, error) {
+func (threadCache) getThreadList(userID string, page, pageSize int) ([]models.Thread, int64, bool, error) {
 	client := database.GetRedis()
 	if client == nil {
 		return nil, 0, false, nil
 	}
 
-	key := fmt.Sprintf("threads:%d:%d", page, pageSize)
+	key := fmt.Sprintf("threads:%s:%d:%d", userID, page, pageSize)
 	cached, err := client.Get(context.Background(), key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -41,7 +41,7 @@ func (threadCache) getThreadList(page, pageSize int) ([]models.Thread, int64, bo
 	return payload.Items, payload.Total, true, nil
 }
 
-func (threadCache) setThreadList(page, pageSize int, items []models.Thread, total int64) {
+func (threadCache) setThreadList(userID string, page, pageSize int, items []models.Thread, total int64) {
 	client := database.GetRedis()
 	if client == nil {
 		return
@@ -55,17 +55,17 @@ func (threadCache) setThreadList(page, pageSize int, items []models.Thread, tota
 		Total: total,
 	}
 	if raw, err := json.Marshal(payload); err == nil {
-		client.Set(context.Background(), fmt.Sprintf("threads:%d:%d", page, pageSize), raw, 60*time.Second)
+		client.Set(context.Background(), fmt.Sprintf("threads:%s:%d:%d", userID, page, pageSize), raw, 60*time.Second)
 	}
 }
 
-func (threadCache) getThread(threadID string) (*models.Thread, bool, error) {
+func (threadCache) getThread(userID, threadID string) (*models.Thread, bool, error) {
 	client := database.GetRedis()
 	if client == nil {
 		return nil, false, nil
 	}
 
-	cached, err := client.Get(context.Background(), fmt.Sprintf("thread:%s", threadID)).Result()
+	cached, err := client.Get(context.Background(), fmt.Sprintf("thread:%s:%s", userID, threadID)).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, false, nil
@@ -87,11 +87,11 @@ func (threadCache) setThread(thread *models.Thread) {
 	}
 
 	if raw, err := json.Marshal(thread); err == nil {
-		client.Set(context.Background(), fmt.Sprintf("thread:%s", thread.ThreadID), raw, 60*time.Second)
+		client.Set(context.Background(), fmt.Sprintf("thread:%s:%s", thread.UserID, thread.ThreadID), raw, 60*time.Second)
 	}
 }
 
-func (threadCache) invalidate(threadID string) {
+func (threadCache) invalidate(userID, threadID string) {
 	client := database.GetRedis()
 	if client == nil {
 		return
@@ -99,12 +99,12 @@ func (threadCache) invalidate(threadID string) {
 
 	ctx := context.Background()
 	if threadID != "" {
-		client.Del(ctx, fmt.Sprintf("thread:%s", threadID))
+		client.Del(ctx, fmt.Sprintf("thread:%s:%s", userID, threadID))
 	}
 
 	var cursor uint64
 	for {
-		keys, next, err := client.Scan(ctx, cursor, "threads:*", 50).Result()
+		keys, next, err := client.Scan(ctx, cursor, fmt.Sprintf("threads:%s:*", userID), 50).Result()
 		if err != nil {
 			return
 		}

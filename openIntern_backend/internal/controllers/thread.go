@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"openIntern/internal/response"
 	chatsvc "openIntern/internal/services/chat"
@@ -13,10 +14,11 @@ import (
 )
 
 func ListThreads(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
-	threads, total, err := chatsvc.Thread.ListThreads(page, pageSize)
+	threads, total, err := chatsvc.Thread.ListThreads(userID, page, pageSize)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -30,8 +32,9 @@ func ListThreads(c *gin.Context) {
 }
 
 func GetThread(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	threadID := c.Param("thread_id")
-	thread, err := chatsvc.Thread.GetThread(threadID)
+	thread, err := chatsvc.Thread.GetThread(userID, threadID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
@@ -44,6 +47,7 @@ func GetThread(c *gin.Context) {
 }
 
 func UpdateThread(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	threadID := c.Param("thread_id")
 	var req struct {
 		Title string `json:"title"`
@@ -52,7 +56,7 @@ func UpdateThread(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if err := chatsvc.Thread.UpdateThreadTitle(threadID, req.Title); err != nil {
+	if err := chatsvc.Thread.UpdateThreadTitle(userID, threadID, req.Title); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
 			return
@@ -64,8 +68,9 @@ func UpdateThread(c *gin.Context) {
 }
 
 func DeleteThread(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	threadID := c.Param("thread_id")
-	if err := chatsvc.Thread.DeleteThread(threadID); err != nil {
+	if err := chatsvc.Thread.DeleteThread(userID, threadID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "thread not found")
 			return

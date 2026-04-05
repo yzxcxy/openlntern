@@ -35,7 +35,7 @@ func ChatSSE(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	if _, err := chatsvc.Thread.EnsureThread(input.ThreadID, ""); err != nil {
+	if _, err := chatsvc.Thread.EnsureThread(ownerID, input.ThreadID, ""); err != nil {
 		log.Printf("ChatSSE ensure thread failed thread_id=%s client_ip=%s err=%v", input.ThreadID, c.ClientIP(), err)
 		response.InternalError(c)
 		return

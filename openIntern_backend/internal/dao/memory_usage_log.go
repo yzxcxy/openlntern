@@ -22,12 +22,25 @@ func (d *MemoryUsageLogDAO) CreateBatch(items []models.MemoryUsageLog) error {
 	}
 	return database.DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
+			{Name: "user_id"},
 			{Name: "thread_id"},
 			{Name: "run_id"},
 			{Name: "memory_uri"},
 		},
 		DoNothing: true,
 	}).Create(&items).Error
+}
+
+func (d *MemoryUsageLogDAO) ListPendingByUserIDAndThreadID(userID, threadID string) ([]models.MemoryUsageLog, error) {
+	var items []models.MemoryUsageLog
+	if err := database.DB.
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
+		Where("reported_at IS NULL").
+		Order("id ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // ListPendingByThreadID loads all usage rows that have not yet been reported to OpenViking.
