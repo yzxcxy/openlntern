@@ -327,7 +327,7 @@ func (s *Service) resolveRuntimeContextWindow(ctx context.Context, runtimeConfig
 	if modelID == "" && providerID == "" {
 		return 0
 	}
-	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(modelID, providerID)
+	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(ownerIDFromContext(ctx), modelID, providerID)
 	if err != nil || selection == nil || selection.Model == nil {
 		return 0
 	}

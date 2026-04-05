@@ -33,27 +33,36 @@ func (d *PluginDAO) ToolStoreRootURI() string {
 	return defaultPluginToolStoreRootURI
 }
 
-// ToolStorePluginURI 返回插件级工具索引目录 URI。
-func (d *PluginDAO) ToolStorePluginURI(pluginID string) string {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+// ToolStoreUserURI 返回用户级工具索引目录 URI。
+func (d *PluginDAO) ToolStoreUserURI(userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
 		return d.ToolStoreRootURI()
 	}
-	return strings.TrimRight(d.ToolStoreRootURI(), "/") + "/" + pluginID + "/"
+	return strings.TrimRight(d.ToolStoreRootURI(), "/") + "/" + userID + "/"
+}
+
+// ToolStorePluginURI 返回插件级工具索引目录 URI。
+func (d *PluginDAO) ToolStorePluginURI(userID string, pluginID string) string {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return d.ToolStoreUserURI(userID)
+	}
+	return strings.TrimRight(d.ToolStoreUserURI(userID), "/") + "/" + pluginID + "/"
 }
 
 // ToolStoreResourceURI 返回工具文档资源 URI。
-func (d *PluginDAO) ToolStoreResourceURI(pluginID string, toolID string) string {
+func (d *PluginDAO) ToolStoreResourceURI(userID string, pluginID string, toolID string) string {
 	pluginID = strings.TrimSpace(pluginID)
 	toolID = strings.TrimSpace(toolID)
 	if pluginID == "" || toolID == "" {
 		return ""
 	}
-	return strings.TrimRight(d.ToolStorePluginURI(pluginID), "/") + "/" + toolID + ".md"
+	return strings.TrimRight(d.ToolStorePluginURI(userID, pluginID), "/") + "/" + toolID + ".md"
 }
 
 // UpsertToolStoreResource 将工具文档写入 OpenViking resources/tools 目录。
-func (d *PluginDAO) UpsertToolStoreResource(ctx context.Context, pluginID string, toolID string, markdown string) error {
+func (d *PluginDAO) UpsertToolStoreResource(ctx context.Context, userID string, pluginID string, toolID string, markdown string) error {
 	if !d.ToolStoreConfigured() {
 		return errors.New("tool store not configured")
 	}
@@ -79,7 +88,7 @@ func (d *PluginDAO) UpsertToolStoreResource(ctx context.Context, pluginID string
 	if err := os.WriteFile(filePath, []byte(markdown), 0o600); err != nil {
 		return err
 	}
-	targetURI := d.ToolStoreResourceURI(pluginID, toolID)
+	targetURI := d.ToolStoreResourceURI(userID, pluginID, toolID)
 	if targetURI == "" {
 		return errors.New("tool store target uri is empty")
 	}
@@ -87,20 +96,20 @@ func (d *PluginDAO) UpsertToolStoreResource(ctx context.Context, pluginID string
 		return err
 	}
 
-	if err := addResource(ctx, filePath, d.ToolStorePluginURI(pluginID), false, 0); err != nil {
+	if err := addResource(ctx, filePath, d.ToolStorePluginURI(userID, pluginID), false, 0); err != nil {
 		if !isToolStoreDuplicateError(err) && !isToolStoreAlreadyExistsError(err) {
 			return err
 		}
 		if removeErr := deletePath(ctx, targetURI, false); removeErr != nil && !isToolStoreNotFoundError(removeErr) {
 			return removeErr
 		}
-		return addResource(ctx, filePath, d.ToolStorePluginURI(pluginID), false, 0)
+		return addResource(ctx, filePath, d.ToolStorePluginURI(userID, pluginID), false, 0)
 	}
 	return nil
 }
 
 // ReplaceToolStoreResourcesByPlugin 按插件批量替换工具文档，使用单次导入请求写入 OpenViking。
-func (d *PluginDAO) ReplaceToolStoreResourcesByPlugin(ctx context.Context, pluginID string, documents map[string]string) error {
+func (d *PluginDAO) ReplaceToolStoreResourcesByPlugin(ctx context.Context, userID string, pluginID string, documents map[string]string) error {
 	if !d.ToolStoreConfigured() {
 		return errors.New("tool store not configured")
 	}
@@ -109,7 +118,7 @@ func (d *PluginDAO) ReplaceToolStoreResourcesByPlugin(ctx context.Context, plugi
 		return errors.New("plugin_id is required")
 	}
 	// 先通过 ls 探测并按资源级删除，避免目录不存在时触发后端 rm 异常导致连接被重置。
-	if err := d.DeleteToolStorePluginURI(ctx, pluginID); err != nil {
+	if err := d.DeleteToolStorePluginURI(ctx, userID, pluginID); err != nil {
 		return err
 	}
 	if len(documents) == 0 {
@@ -129,11 +138,11 @@ func (d *PluginDAO) ReplaceToolStoreResourcesByPlugin(ctx context.Context, plugi
 	if err := writeToolStoreDocumentFiles(pluginDir, documents); err != nil {
 		return err
 	}
-	return addResource(ctx, pluginDir, d.ToolStoreRootURI(), false, 0)
+	return addResource(ctx, pluginDir, d.ToolStoreUserURI(userID), false, 0)
 }
 
 // ListToolStoreResourceURIsByPlugin 返回插件目录下的所有工具资源 URI。
-func (d *PluginDAO) ListToolStoreResourceURIsByPlugin(ctx context.Context, pluginID string) ([]string, error) {
+func (d *PluginDAO) ListToolStoreResourceURIsByPlugin(ctx context.Context, userID string, pluginID string) ([]string, error) {
 	if !d.ToolStoreConfigured() {
 		return []string{}, nil
 	}
@@ -141,7 +150,7 @@ func (d *PluginDAO) ListToolStoreResourceURIsByPlugin(ctx context.Context, plugi
 	if pluginID == "" {
 		return []string{}, nil
 	}
-	rootURI := d.ToolStoreRootURI()
+	rootURI := d.ToolStoreUserURI(userID)
 	entries, err := listEntries(ctx, rootURI, true)
 	if err != nil {
 		if isToolStoreNotFoundError(err) {
@@ -191,7 +200,7 @@ func (d *PluginDAO) DeleteToolStoreResourceURI(ctx context.Context, resourceURI 
 }
 
 // DeleteToolStorePluginURI 删除插件目录下全部工具资源。
-func (d *PluginDAO) DeleteToolStorePluginURI(ctx context.Context, pluginID string) error {
+func (d *PluginDAO) DeleteToolStorePluginURI(ctx context.Context, userID string, pluginID string) error {
 	if !d.ToolStoreConfigured() {
 		return nil
 	}
@@ -199,7 +208,7 @@ func (d *PluginDAO) DeleteToolStorePluginURI(ctx context.Context, pluginID strin
 	if pluginID == "" {
 		return nil
 	}
-	uris, err := d.ListToolStoreResourceURIsByPlugin(ctx, pluginID)
+	uris, err := d.ListToolStoreResourceURIsByPlugin(ctx, userID, pluginID)
 	if err != nil {
 		return err
 	}

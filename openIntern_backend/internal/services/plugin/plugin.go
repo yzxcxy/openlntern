@@ -154,14 +154,17 @@ type PluginService struct{}
 var Plugin = new(PluginService)
 var pluginDefaultIconURL string
 var sandboxBaseURL string
+var builtinPluginDefinitions []builtinPluginDefinition
 
 func InitPlugin(cfg config.PluginConfig) {
 	pluginDefaultIconURL = strings.TrimSpace(cfg.DefaultIconURL)
+	definitions, err := loadBuiltinPluginDefinitions(cfg.BuiltinManifestPath)
+	if err != nil {
+		panic(fmt.Errorf("load builtin plugins failed: %w", err))
+	}
+	builtinPluginDefinitions = definitions
 	initPluginMCPSync(cfg)
 	initPluginOpenVikingSync(cfg)
-	if err := ensureBuiltinPlugins(cfg.BuiltinManifestPath); err != nil {
-		panic(fmt.Errorf("ensure builtin plugins failed: %w", err))
-	}
 }
 
 func GetDefaultPluginIconURL() string {
@@ -172,8 +175,25 @@ func SetSandboxBaseURL(baseURL string) {
 	sandboxBaseURL = strings.TrimSpace(baseURL)
 }
 
-func (s *PluginService) Create(input UpsertPluginInput) (*PluginView, error) {
-	plugin, tools, err := s.prepareDefinition("", input, nil)
+func (s *PluginService) EnsureBuiltinPluginsForUser(userID string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
+	for _, definition := range builtinPluginDefinitions {
+		if err := upsertBuiltinPlugin(userID, definition); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *PluginService) Create(userID string, input UpsertPluginInput) (*PluginView, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	plugin, tools, err := s.prepareDefinition(userID, "", input, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -186,24 +206,24 @@ func (s *PluginService) Create(input UpsertPluginInput) (*PluginView, error) {
 		return nil, err
 	}
 	if shouldQueueMCPSync {
-		if err := s.queueMCPPluginSync(plugin.PluginID, mcpSyncDelay); err != nil {
+		if err := s.queueMCPPluginSync(plugin.UserID, plugin.PluginID, mcpSyncDelay); err != nil {
 			return nil, err
 		}
 	}
 	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(plugin.PluginID, openVikingSyncDelay); err != nil {
+		if err := s.queueOpenVikingPluginReconcile(plugin.UserID, plugin.PluginID, openVikingSyncDelay); err != nil {
 			return nil, err
 		}
 	}
-	return s.GetByPluginID(plugin.PluginID)
+	return s.GetByPluginID(userID, plugin.PluginID)
 }
 
-func (s *PluginService) Update(pluginID string, input UpsertPluginInput) (*PluginView, error) {
-	existing, err := s.getPluginRecord(pluginID)
+func (s *PluginService) Update(userID string, pluginID string, input UpsertPluginInput) (*PluginView, error) {
+	existing, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return nil, err
 	}
-	plugin, tools, err := s.prepareDefinition(pluginID, input, existing)
+	plugin, tools, err := s.prepareDefinition(userID, pluginID, input, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -212,30 +232,33 @@ func (s *PluginService) Update(pluginID string, input UpsertPluginInput) (*Plugi
 	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
 		return nil, err
 	}
-	if err := dao.Plugin.Update(pluginID, plugin, tools); err != nil {
+	if err := dao.Plugin.Update(userID, pluginID, plugin, tools); err != nil {
 		return nil, err
 	}
 	if shouldQueueMCPSync {
-		if err := s.queueMCPPluginSync(plugin.PluginID, mcpSyncDelay); err != nil {
+		if err := s.queueMCPPluginSync(userID, plugin.PluginID, mcpSyncDelay); err != nil {
 			return nil, err
 		}
 	} else {
-		s.clearMCPPluginSync(pluginID)
+		s.clearMCPPluginSync(userID, pluginID)
 	}
 	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(plugin.PluginID, openVikingSyncDelay); err != nil {
+		if err := s.queueOpenVikingPluginReconcile(userID, plugin.PluginID, openVikingSyncDelay); err != nil {
 			return nil, err
 		}
 	}
-	return s.GetByPluginID(pluginID)
+	return s.GetByPluginID(userID, pluginID)
 }
 
-func (s *PluginService) GetByPluginID(pluginID string) (*PluginView, error) {
-	plugin, err := s.getPluginRecord(pluginID)
+func (s *PluginService) GetByPluginID(userID string, pluginID string) (*PluginView, error) {
+	if err := s.EnsureBuiltinPluginsForUser(userID); err != nil {
+		return nil, err
+	}
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return nil, err
 	}
-	toolMap, err := s.loadToolMap([]string{pluginID})
+	toolMap, err := s.loadToolMap(userID, []string{pluginID})
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +266,10 @@ func (s *PluginService) GetByPluginID(pluginID string) (*PluginView, error) {
 	return &view, nil
 }
 
-func (s *PluginService) List(page, pageSize int, filter PluginListFilter) ([]PluginView, int64, error) {
+func (s *PluginService) List(userID string, page, pageSize int, filter PluginListFilter) ([]PluginView, int64, error) {
+	if err := s.EnsureBuiltinPluginsForUser(userID); err != nil {
+		return nil, 0, err
+	}
 	if page <= 0 {
 		page = 1
 	}
@@ -251,6 +277,7 @@ func (s *PluginService) List(page, pageSize int, filter PluginListFilter) ([]Plu
 		pageSize = 10
 	}
 	items, total, err := dao.Plugin.List(page, pageSize, dao.PluginListFilter{
+		UserID:      strings.TrimSpace(userID),
 		Source:      normalizeOptionalFilter(filter.Source),
 		RuntimeType: normalizeOptionalFilter(filter.RuntimeType),
 		Status:      normalizeOptionalFilter(filter.Status),
@@ -263,7 +290,7 @@ func (s *PluginService) List(page, pageSize int, filter PluginListFilter) ([]Plu
 	for _, item := range items {
 		pluginIDs = append(pluginIDs, item.PluginID)
 	}
-	toolMap, err := s.loadToolMap(pluginIDs)
+	toolMap, err := s.loadToolMap(userID, pluginIDs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -274,8 +301,8 @@ func (s *PluginService) List(page, pageSize int, filter PluginListFilter) ([]Plu
 	return views, total, nil
 }
 
-func (s *PluginService) Delete(pluginID string) error {
-	plugin, err := s.getPluginRecord(pluginID)
+func (s *PluginService) Delete(userID string, pluginID string) error {
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return err
 	}
@@ -286,21 +313,21 @@ func (s *PluginService) Delete(pluginID string) error {
 	if err := s.ensureSyncQueuesReady(false, shouldQueueOpenVikingSync); err != nil {
 		return err
 	}
-	if err := dao.Plugin.Delete(pluginID); err != nil {
+	if err := dao.Plugin.Delete(userID, pluginID); err != nil {
 		return err
 	}
-	s.clearMCPPluginSync(pluginID)
-	s.clearOpenVikingPluginTasks(pluginID)
+	s.clearMCPPluginSync(userID, pluginID)
+	s.clearOpenVikingPluginTasks(userID, pluginID)
 	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginCleanup(pluginID, 0); err != nil {
+		if err := s.queueOpenVikingPluginCleanup(userID, pluginID, 0); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *PluginService) SetEnabled(pluginID string, enabled bool) (*PluginView, error) {
-	plugin, err := s.getPluginRecord(pluginID)
+func (s *PluginService) SetEnabled(userID string, pluginID string, enabled bool) (*PluginView, error) {
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return nil, err
 	}
@@ -316,42 +343,45 @@ func (s *PluginService) SetEnabled(pluginID string, enabled bool) (*PluginView, 
 	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
 		return nil, err
 	}
-	if err := dao.Plugin.UpdateStatus(pluginID, status); err != nil {
+	if err := dao.Plugin.UpdateStatus(userID, pluginID, status); err != nil {
 		return nil, err
 	}
 	if plugin.RuntimeType == pluginRuntimeMCP {
 		if enabled {
-			if err := s.queueMCPPluginSync(pluginID, 0); err != nil {
+			if err := s.queueMCPPluginSync(userID, pluginID, 0); err != nil {
 				return nil, err
 			}
 		} else {
-			s.clearMCPPluginSync(pluginID)
+			s.clearMCPPluginSync(userID, pluginID)
 		}
 	}
 	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(pluginID, openVikingSyncDelay); err != nil {
+		if err := s.queueOpenVikingPluginReconcile(userID, pluginID, openVikingSyncDelay); err != nil {
 			return nil, err
 		}
 	}
-	return s.GetByPluginID(pluginID)
+	return s.GetByPluginID(userID, pluginID)
 }
 
-func (s *PluginService) Sync(pluginID string) (*PluginView, error) {
-	plugin, err := s.getPluginRecord(pluginID)
+func (s *PluginService) Sync(userID string, pluginID string) (*PluginView, error) {
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return nil, err
 	}
 	if plugin.RuntimeType != pluginRuntimeMCP {
 		return nil, errors.New("only mcp plugins support sync")
 	}
-	if err := s.syncMCPPluginNow(context.Background(), pluginID, true); err != nil {
+	if err := s.syncMCPPluginNow(context.Background(), userID, pluginID, true); err != nil {
 		return nil, err
 	}
-	return s.GetByPluginID(pluginID)
+	return s.GetByPluginID(userID, pluginID)
 }
 
-func (s *PluginService) ListAvailableForChat() ([]ChatPluginView, error) {
-	plugins, err := dao.Plugin.ListEnabled()
+func (s *PluginService) ListAvailableForChat(userID string) ([]ChatPluginView, error) {
+	if err := s.EnsureBuiltinPluginsForUser(userID); err != nil {
+		return nil, err
+	}
+	plugins, err := dao.Plugin.ListEnabled(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +389,7 @@ func (s *PluginService) ListAvailableForChat() ([]ChatPluginView, error) {
 	for _, item := range plugins {
 		pluginIDs = append(pluginIDs, item.PluginID)
 	}
-	toolMap, err := s.loadToolMap(pluginIDs)
+	toolMap, err := s.loadToolMap(userID, pluginIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -391,11 +421,11 @@ func (s *PluginService) ListAvailableForChat() ([]ChatPluginView, error) {
 	return results, nil
 }
 
-func (s *PluginService) getPluginRecord(pluginID string) (*models.Plugin, error) {
-	return dao.Plugin.GetByPluginID(pluginID)
+func (s *PluginService) getPluginRecord(userID string, pluginID string) (*models.Plugin, error) {
+	return dao.Plugin.GetByUserIDAndPluginID(userID, pluginID)
 }
 
-func (s *PluginService) prepareDefinition(pluginID string, input UpsertPluginInput, existing *models.Plugin) (*models.Plugin, []models.Tool, error) {
+func (s *PluginService) prepareDefinition(userID string, pluginID string, input UpsertPluginInput, existing *models.Plugin) (*models.Plugin, []models.Tool, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, nil, errors.New("name is required")
@@ -457,6 +487,7 @@ func (s *PluginService) prepareDefinition(pluginID string, input UpsertPluginInp
 	}
 
 	plugin := &models.Plugin{
+		UserID:      strings.TrimSpace(userID),
 		PluginID:    nextPluginID,
 		Name:        name,
 		Description: strings.TrimSpace(input.Description),
@@ -497,14 +528,14 @@ func (s *PluginService) prepareDefinition(pluginID string, input UpsertPluginInp
 		}
 	}
 
-	tools, err := s.buildTools(nextPluginID, runtimeType, input.Tools)
+	tools, err := s.buildTools(strings.TrimSpace(userID), nextPluginID, runtimeType, input.Tools)
 	if err != nil {
 		return nil, nil, err
 	}
 	return plugin, tools, nil
 }
 
-func (s *PluginService) buildTools(pluginID string, runtimeType string, inputs []PluginToolInput) ([]models.Tool, error) {
+func (s *PluginService) buildTools(userID string, pluginID string, runtimeType string, inputs []PluginToolInput) ([]models.Tool, error) {
 	if runtimeType == pluginRuntimeMCP {
 		if len(inputs) == 0 {
 			return []models.Tool{}, nil
@@ -516,7 +547,7 @@ func (s *PluginService) buildTools(pluginID string, runtimeType string, inputs [
 	tools := make([]models.Tool, 0, len(inputs))
 	seenToolNames := make(map[string]struct{}, len(inputs))
 	for _, input := range inputs {
-		tool, err := s.buildTool(pluginID, runtimeType, input)
+		tool, err := s.buildTool(userID, pluginID, runtimeType, input)
 		if err != nil {
 			return nil, err
 		}
@@ -529,7 +560,7 @@ func (s *PluginService) buildTools(pluginID string, runtimeType string, inputs [
 	return tools, nil
 }
 
-func (s *PluginService) buildTool(pluginID string, runtimeType string, input PluginToolInput) (models.Tool, error) {
+func (s *PluginService) buildTool(userID string, pluginID string, runtimeType string, input PluginToolInput) (models.Tool, error) {
 	toolName := strings.TrimSpace(input.ToolName)
 	if toolName == "" {
 		return models.Tool{}, errors.New("tool_name is required")
@@ -554,6 +585,7 @@ func (s *PluginService) buildTool(pluginID string, runtimeType string, input Plu
 	}
 
 	tool := models.Tool{
+		UserID:           strings.TrimSpace(userID),
 		ToolID:           toolID,
 		PluginID:         pluginID,
 		ToolName:         toolName,
@@ -655,8 +687,8 @@ func (s *PluginService) buildTool(pluginID string, runtimeType string, input Plu
 	return tool, nil
 }
 
-func (s *PluginService) loadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {
-	return dao.Plugin.LoadToolMap(pluginIDs)
+func (s *PluginService) loadToolMap(userID string, pluginIDs []string) (map[string][]models.Tool, error) {
+	return dao.Plugin.LoadToolMap(userID, pluginIDs)
 }
 
 func normalizePluginIcon(value string) string {

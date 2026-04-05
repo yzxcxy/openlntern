@@ -24,8 +24,11 @@ func (s *PluginService) BuildAllRuntimeAPITools(ctx context.Context) ([]einoTool
 }
 
 func (s *PluginService) buildRuntimeAPITools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, error) {
-	_ = ctx
-	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeAPI, pluginStatusEnabled, toolIDs)
+	userID := userIDFromContext(ctx)
+	if userID == "" {
+		return nil, nil
+	}
+	toolRows, err := dao.Plugin.ListRuntimeTools(userID, pluginRuntimeAPI, pluginStatusEnabled, toolIDs)
 	if err != nil {
 		return nil, err
 	}

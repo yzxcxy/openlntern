@@ -18,12 +18,12 @@ func CreateModel(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	item, err := modelsvc.ModelCatalog.Create(input)
+	item, err := modelsvc.ModelCatalog.Create(c.GetString("user_id"), input)
 	if err != nil {
 		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
 		return
 	}
-	view, err := modelsvc.ModelCatalog.GetView(item.ModelID)
+	view, err := modelsvc.ModelCatalog.GetView(c.GetString("user_id"), item.ModelID)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -36,7 +36,7 @@ func ListModels(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
 	providerID := c.Query("provider_id")
-	items, total, err := modelsvc.ModelCatalog.List(page, pageSize, keyword, providerID)
+	items, total, err := modelsvc.ModelCatalog.List(c.GetString("user_id"), page, pageSize, keyword, providerID)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -50,7 +50,7 @@ func ListModels(c *gin.Context) {
 }
 
 func GetModel(c *gin.Context) {
-	view, err := modelsvc.ModelCatalog.GetView(c.Param("id"))
+	view, err := modelsvc.ModelCatalog.GetView(c.GetString("user_id"), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "model not found")
@@ -68,7 +68,7 @@ func UpdateModel(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	err := modelsvc.ModelCatalog.Update(c.Param("id"), input)
+	err := modelsvc.ModelCatalog.Update(c.GetString("user_id"), c.Param("id"), input)
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest
@@ -83,7 +83,7 @@ func UpdateModel(c *gin.Context) {
 }
 
 func DeleteModel(c *gin.Context) {
-	err := modelsvc.ModelCatalog.Delete(c.Param("id"))
+	err := modelsvc.ModelCatalog.Delete(c.GetString("user_id"), c.Param("id"))
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest
@@ -98,7 +98,7 @@ func DeleteModel(c *gin.Context) {
 }
 
 func ListModelCatalog(c *gin.Context) {
-	items, err := modelsvc.ModelCatalog.ListCatalogOptions()
+	items, err := modelsvc.ModelCatalog.ListCatalogOptions(c.GetString("user_id"))
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -107,7 +107,7 @@ func ListModelCatalog(c *gin.Context) {
 }
 
 func GetDefaultModel(c *gin.Context) {
-	item, err := modelsvc.DefaultModel.Get()
+	item, err := modelsvc.DefaultModel.Get(c.GetString("user_id"))
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -130,7 +130,7 @@ func UpdateDefaultModel(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	item, err := modelsvc.DefaultModel.Set(req.ModelID)
+	item, err := modelsvc.DefaultModel.Set(c.GetString("user_id"), req.ModelID)
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest

@@ -43,7 +43,7 @@ type ThreadStore interface {
 }
 
 type ModelCatalogResolver interface {
-	ResolveRuntimeSelection(modelID, providerID string) (*RuntimeModelSelection, error)
+	ResolveRuntimeSelection(userID, modelID, providerID string) (*RuntimeModelSelection, error)
 }
 
 type ModelProviderKeyResolver interface {

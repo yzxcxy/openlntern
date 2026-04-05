@@ -4,6 +4,7 @@ import (
 	"errors"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
+	pluginsvc "openIntern/internal/services/plugin"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -29,6 +30,9 @@ func (s *UserService) CreateUser(user *models.User) error {
 	user.Password = string(hashedPassword)
 
 	if err := dao.User.Create(user); err != nil {
+		return err
+	}
+	if err := pluginsvc.Plugin.EnsureBuiltinPluginsForUser(user.UserID); err != nil {
 		return err
 	}
 	return nil

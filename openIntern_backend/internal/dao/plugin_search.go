@@ -10,6 +10,7 @@ import (
 
 // PluginToolSearchFilter 描述工具召回查询条件。
 type PluginToolSearchFilter struct {
+	UserID         string
 	Query          string
 	TargetURI      string
 	Limit          int
@@ -44,6 +45,9 @@ func (d *PluginDAO) FindToolSearchMatches(ctx context.Context, filter PluginTool
 	}
 
 	targetURI := strings.TrimSpace(filter.TargetURI)
+	if targetURI == "" {
+		targetURI = d.ToolStoreUserURI(filter.UserID)
+	}
 	if targetURI == "" {
 		return nil, nil
 	}

@@ -18,8 +18,8 @@ import (
 type modelCatalogResolverAdapter struct{}
 
 // ResolveRuntimeSelection adapts model service output to the agent runtime contract.
-func (modelCatalogResolverAdapter) ResolveRuntimeSelection(modelID, providerID string) (*RuntimeModelSelection, error) {
-	selection, err := modelsvc.ModelCatalog.ResolveRuntimeSelection(modelID, providerID)
+func (modelCatalogResolverAdapter) ResolveRuntimeSelection(userID, modelID, providerID string) (*RuntimeModelSelection, error) {
+	selection, err := modelsvc.ModelCatalog.ResolveRuntimeSelection(userID, modelID, providerID)
 	if err != nil {
 		return nil, err
 	}
