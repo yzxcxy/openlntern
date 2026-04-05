@@ -12,3 +12,4 @@ _eino/
 .setting/
 evals/promptfoo/.env.promptfoo.local
 evals/promptfoo/.promptfoo/
+dependent_docs/
