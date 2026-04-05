@@ -64,13 +64,12 @@ type Dependencies struct {
 }
 
 type runtimeState struct {
-	apmplusShutdown     func(context.Context) error
-	summaryModel        einoModel.ToolCallingChatModel
-	sandboxBaseURL      string
-	staticAgentTools    []einoTool.BaseTool
-	agentHandlers       []adk.ChatModelAgentMiddleware
-	contextCompression  contextCompressionSettings
-	maxIterations       int
+	apmplusShutdown    func(context.Context) error
+	summaryModel       einoModel.ToolCallingChatModel
+	staticAgentTools   []einoTool.BaseTool
+	agentHandlers      []adk.ChatModelAgentMiddleware
+	contextCompression contextCompressionSettings
+	maxIterations      int
 }
 
 type Service struct {

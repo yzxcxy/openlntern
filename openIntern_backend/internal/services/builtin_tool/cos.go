@@ -3,15 +3,13 @@ package builtin_tool
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
-	"net/http"
+	sandboxsvc "openIntern/internal/services/sandbox"
 	"path"
 	"strings"
-	"time"
 
 	einoTool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -22,8 +20,7 @@ type FileUploader interface {
 }
 
 const (
-	ContextKeyFileUploader   contextKey = "openintern_file_uploader"
-	ContextKeySandboxBaseURL contextKey = "openintern_sandbox_base_url"
+	ContextKeyFileUploader contextKey = "openintern_file_uploader"
 )
 
 type UploadToCOSInput struct {
@@ -50,11 +47,7 @@ func uploadToCOSImpl(ctx context.Context, input UploadToCOSInput) (string, error
 	if uploader == nil {
 		return "", errors.New("file uploader not available in context")
 	}
-	baseURL, _ := ctx.Value(ContextKeySandboxBaseURL).(string)
-	baseURL = strings.TrimSpace(baseURL)
-	if baseURL == "" {
-		return "", errors.New("sandbox base url not configured")
-	}
+	userID, _ := ctx.Value(ContextKeyUserID).(string)
 	cosKey := strings.TrimSpace(input.COSKey)
 	if cosKey == "" {
 		return "", errors.New("cos_key is required")
@@ -67,7 +60,11 @@ func uploadToCOSImpl(ctx context.Context, input UploadToCOSInput) (string, error
 	if !path.IsAbs(sandboxPath) {
 		return "", errors.New("sandbox_path must be an absolute path in sandbox, for example /tmp/output.md")
 	}
-	decoded, err := readSandboxFile(ctx, baseURL, sandboxPath)
+	instance, err := sandboxsvc.Lifecycle.GetOrCreate(ctx, strings.TrimSpace(userID))
+	if err != nil {
+		return "", err
+	}
+	decoded, err := readSandboxFile(ctx, instance.Endpoint, sandboxPath)
 	if err != nil {
 		log.Printf("upload_to_cos sandbox read failed cos_key=%s sandbox_path=%s err=%v", cosKey, sandboxPath, err)
 		return "", errors.New("upload_to_cos failed at sandbox file read: " + err.Error())
@@ -81,6 +78,7 @@ func uploadToCOSImpl(ctx context.Context, input UploadToCOSInput) (string, error
 	if err != nil {
 		return "", err
 	}
+	_ = sandboxsvc.Lifecycle.Touch(ctx, strings.TrimSpace(userID))
 	log.Printf("upload_to_cos success cos_key=%s sandbox_path=%s bytes=%d", cosKey, sandboxPath, len(decoded))
 	return string(respPayload), nil
 }
@@ -94,61 +92,11 @@ func readSandboxFile(ctx context.Context, baseURL string, sandboxPath string) ([
 }
 
 func readSandboxFileWithPayload(ctx context.Context, baseURL string, reqPayload sandboxReadRequest) ([]byte, error) {
-	body, err := json.Marshal(reqPayload)
+	respBody, err := sandboxsvc.Lifecycle.Client().ReadFile(ctx, baseURL, reqPayload.File)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/v1/file/read", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(respBody))
-		if msg == "" {
-			msg = resp.Status
-		}
-		return nil, errors.New(msg)
-	}
-	var readResp sandboxReadResponse
-	if err := json.Unmarshal(respBody, &readResp); err != nil {
-		return nil, err
-	}
-	if readResp.Success != nil && !*readResp.Success {
-		msg := strings.TrimSpace(readResp.Message)
-		if msg == "" {
-			msg = "sandbox read failed"
-		}
-		return nil, errors.New(msg)
-	}
-	if readResp.Data.Content == "" {
-		msg := strings.TrimSpace(readResp.Message)
-		if msg == "" {
-			msg = "sandbox read returned empty content"
-		}
-		return nil, errors.New(msg)
-	}
-	if readResp.Data.Encoding != "" && strings.ToLower(readResp.Data.Encoding) != "base64" {
-		return nil, errors.New("sandbox read returned unsupported encoding")
-	}
-	if strings.ToLower(readResp.Data.Encoding) == "base64" {
-		decoded, err := base64.StdEncoding.DecodeString(readResp.Data.Content)
-		if err != nil {
-			return nil, err
-		}
-		return decoded, nil
-	}
-	return []byte(readResp.Data.Content), nil
+	return respBody, nil
 }
 
 func GetCOSTools(ctx context.Context) ([]einoTool.BaseTool, error) {

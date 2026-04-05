@@ -254,25 +254,19 @@ func (c *agentModeCompiler) buildTools(detail *AgentDetailView, depth int) ([]ei
 
 func (c *agentModeCompiler) buildBuiltinTools(knowledgeBaseNames []string) ([]einoTool.BaseTool, func(), error) {
 	// Agent 模式默认注入沙箱工具；知识库读取工具仅在当前 agent 绑定知识库时追加。
-	sandboxTools, sandboxCleanup, err := builtinTool.GetSandboxMCPTools(c.ctx, c.state.sandboxBaseURL)
+	sandboxTool, err := builtinTool.GetSandboxExecuteBashTool(c.ctx)
 	if err != nil {
-		if sandboxCleanup != nil {
-			sandboxCleanup()
-		}
 		return nil, nil, err
 	}
-	resolvedTools := append([]einoTool.BaseTool{}, sandboxTools...)
+	resolvedTools := append([]einoTool.BaseTool{}, sandboxTool)
 	if len(knowledgeBaseNames) > 0 {
 		knowledgeBaseTools, err := builtinTool.GetKnowledgeBaseTools(c.ctx, knowledgeBaseNames)
 		if err != nil {
-			if sandboxCleanup != nil {
-				sandboxCleanup()
-			}
 			return nil, nil, err
 		}
 		resolvedTools = append(resolvedTools, knowledgeBaseTools...)
 	}
-	return resolvedTools, sandboxCleanup, nil
+	return resolvedTools, nil, nil
 }
 
 func (c *agentModeCompiler) buildPluginTools(toolIDs []string) ([]einoTool.BaseTool, func(), error) {

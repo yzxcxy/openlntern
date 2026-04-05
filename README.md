@@ -62,7 +62,7 @@ openIntern/
 - MySQL
 - Redis
 - Docker / Docker Compose（如需托管 OpenViking 的 memory / skills 能力）
-- 可选：Sandbox 服务，默认读取 `http://127.0.0.1:8081`
+- Docker CLI（用于按用户懒创建本地 sandbox 容器）
 
 ## 配置
 
@@ -88,13 +88,24 @@ redis:
   addr: "127.0.0.1:6379"
 tools:
   sandbox:
-    url: "http://127.0.0.1:8081"
- openviking:
+    enabled: true
+    provider: "docker"
+    idle_ttl_seconds: 1800
+    create_timeout_seconds: 30
+    recycle_interval_seconds: 30
+    healthcheck_timeout_seconds: 10
+    docker:
+      image: "enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:latest"
+      host: "127.0.0.1"
+      network: ""
+  openviking:
     base_url: "http://127.0.0.1:1933"
 ```
 
 说明：
 
+- sandbox 不再读取固定 `url`；后端会在用户首次调用 sandbox 相关能力时，使用 Docker CLI 动态创建该用户自己的 AIO sandbox 容器。
+- 同一用户后续请求会复用同一个容器；空闲超时后，后端后台会自动回收该容器。
 - OpenViking 的连接参数仍然由 [openIntern_backend/config.yaml](/Users/fqc/project/agent/openIntern/openIntern_backend/config.yaml) 中的 `tools.openviking` 提供，供 memory 与 skills 等后端能力调用。
 - `tool_search` 已改为本地关键词匹配，不再依赖 OpenViking 工具索引。
 - OpenViking 的服务启动、停止和内部参数管理不再由 openIntern 前后端负责。
@@ -143,12 +154,14 @@ pnpm dev
 docker compose up -d openviking
 ```
 
+4. sandbox 不需要提前手工启动固定容器；后端会在第一次使用 sandbox 相关能力时自动执行 `docker run`
+
 默认访问地址：
 
 - 前端：`http://127.0.0.1:3000`
 - 后端：`http://127.0.0.1:8080`
 - OpenViking：`http://127.0.0.1:1933`
-- Sandbox：`http://127.0.0.1:8081`
+- Sandbox：按用户动态分配本地端口，无固定地址
 
 ## 开发说明
 
@@ -156,6 +169,8 @@ docker compose up -d openviking
 - 前端通过本地存储保存 `token` 和 `user`
 - 后端 API 主要位于 `/v1/*`
 - 后端 `go.mod` 中将 AG-UI Go SDK `replace` 到仓库内的 [go](/Users/fqc/project/agent/openIntern/go)
+- 可用 `docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Status}}'` 查看当前用户 sandbox 容器
+- 手工删除某个用户 sandbox 容器后，下一次相关请求会自动重建
 
 ## 常用开发命令
 

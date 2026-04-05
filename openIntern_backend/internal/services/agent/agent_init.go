@@ -6,7 +6,6 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
 	skillmiddleware "openIntern/internal/services/middlewares/skill"
-	pluginsvc "openIntern/internal/services/plugin"
 	"strings"
 
 	"github.com/cloudwego/eino-ext/callbacks/apmplus"
@@ -54,11 +53,12 @@ func (s *Service) InitEino(summaryCfg config.LLMConfig, toolsCfg config.ToolsCon
 		}
 	}
 
-	sandboxBaseURL := strings.TrimSpace(toolsCfg.Sandbox.Url)
-	if sandboxBaseURL == "" {
-		return nil, fmt.Errorf("tools.sandbox.url is required")
+	if toolsCfg.Sandbox.Enabled == nil || !*toolsCfg.Sandbox.Enabled {
+		return nil, fmt.Errorf("tools.sandbox.enabled must be true")
 	}
-	pluginsvc.SetSandboxBaseURL(sandboxBaseURL)
+	if strings.TrimSpace(toolsCfg.Sandbox.Provider) == "" {
+		return nil, fmt.Errorf("tools.sandbox.provider is required")
+	}
 
 	skillBackend, err := skillmiddleware.NewRemoteBackend(dao.SkillStore, s.deps.SkillFrontmatterStore)
 	if err != nil {
@@ -85,7 +85,6 @@ func (s *Service) InitEino(summaryCfg config.LLMConfig, toolsCfg config.ToolsCon
 	s.setState(runtimeState{
 		apmplusShutdown:    shutdown,
 		summaryModel:       runtimeSummaryModel,
-		sandboxBaseURL:     sandboxBaseURL,
 		staticAgentTools:   allTools,
 		agentHandlers:      []adk.ChatModelAgentMiddleware{patchToolCallsMiddleware, skillMiddleware},
 		contextCompression: compressionSettings,

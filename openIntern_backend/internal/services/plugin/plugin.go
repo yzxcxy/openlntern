@@ -153,7 +153,6 @@ type PluginService struct{}
 
 var Plugin = new(PluginService)
 var pluginDefaultIconURL string
-var sandboxBaseURL string
 var builtinPluginDefinitions []builtinPluginDefinition
 
 func InitPlugin(cfg config.PluginConfig) {
@@ -168,10 +167,6 @@ func InitPlugin(cfg config.PluginConfig) {
 
 func GetDefaultPluginIconURL() string {
 	return pluginDefaultIconURL
-}
-
-func SetSandboxBaseURL(baseURL string) {
-	sandboxBaseURL = strings.TrimSpace(baseURL)
 }
 
 func (s *PluginService) EnsureBuiltinPluginsForUser(userID string) error {

@@ -67,8 +67,20 @@ type ToolsConfig struct {
 	OpenViking OpenVikingConfig     `yaml:"openviking" json:"openviking"`
 }
 
+type SandboxDockerConfig struct {
+	Image   string `yaml:"image" json:"image"`
+	Host    string `yaml:"host" json:"host"`
+	Network string `yaml:"network" json:"network"`
+}
+
 type SandboxConfig struct {
-	Url string `yaml:"url" json:"url"`
+	Enabled                   *bool               `yaml:"enabled" json:"enabled"`
+	Provider                  string              `yaml:"provider" json:"provider"`
+	IdleTTLSeconds            int                 `yaml:"idle_ttl_seconds" json:"idle_ttl_seconds"`
+	CreateTimeoutSeconds      int                 `yaml:"create_timeout_seconds" json:"create_timeout_seconds"`
+	RecycleIntervalSeconds    int                 `yaml:"recycle_interval_seconds" json:"recycle_interval_seconds"`
+	HealthcheckTimeoutSeconds int                 `yaml:"healthcheck_timeout_seconds" json:"healthcheck_timeout_seconds"`
+	Docker                    SandboxDockerConfig `yaml:"docker" json:"docker"`
 }
 
 // MemoryProviderConfig controls which long-term memory backend is active.

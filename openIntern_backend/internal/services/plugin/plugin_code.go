@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"openIntern/internal/models"
+	sandboxsvc "openIntern/internal/services/sandbox"
 	"strings"
 	"time"
 
@@ -76,8 +77,6 @@ func (t *codePluginTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
 func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...einoTool.Option) (string, error) {
 	_ = opts
 
-	baseURL := sandboxBaseURL
-
 	input, err := decodeCodePluginInput(argumentsInJSON)
 	if err != nil {
 		return "", err
@@ -91,7 +90,13 @@ func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 		return "", err
 	}
 
-	output, err := RunCodeInSandbox(ctx, t.client, baseURL, SandboxCodeRunInput{
+	userID := userIDFromContext(ctx)
+	instance, err := sandboxsvc.Lifecycle.GetOrCreate(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	output, err := RunCodeInSandbox(ctx, t.client, instance.Endpoint, SandboxCodeRunInput{
 		CodeLanguage: t.def.CodeLanguage,
 		Code:         wrappedCode,
 		Input:        input,
@@ -105,6 +110,7 @@ func (t *codePluginTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 	if err != nil {
 		return "", err
 	}
+	_ = sandboxsvc.Lifecycle.Touch(ctx, userID)
 
 	return encodeCodePluginResult(result)
 }
