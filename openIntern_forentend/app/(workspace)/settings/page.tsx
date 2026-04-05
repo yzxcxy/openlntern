@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
-import { UiInput } from "../../components/ui/UiInput";
-import { UiSelect } from "../../components/ui/UiSelect";
 import { readValidToken, requestBackend } from "../auth";
 import { AgentSettings } from "./components/AgentSettings";
-import { OpenVikingConnectionSettings } from "./components/OpenVikingConnectionSettings";
-import { OpenVikingServiceSettings } from "./components/OpenVikingServiceSettings";
-import { OpenVikingControl } from "./components/OpenVikingControl";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { SystemSettings } from "./components/SystemSettings";
 
@@ -24,18 +19,6 @@ type ConfigResponse = {
     memory?: {
       provider?: string;
     };
-    openviking?: {
-      base_url?: string;
-      api_key?: string;
-      skills_root?: string;
-      tools_root?: string;
-      timeout_seconds?: number;
-      memory_search_timeout_seconds?: number;
-      memory_sync_delay_seconds?: number;
-      memory_sync_poll_seconds?: number;
-      memory_sync_timeout_seconds?: number;
-      memory_sync_retry_seconds?: number;
-    };
   };
   context_compression?: {
     enabled?: boolean;
@@ -44,38 +27,6 @@ type ConfigResponse = {
     output_reserve_tokens?: number;
     max_recent_messages?: number;
     estimated_chars_per_token?: number;
-  };
-  openviking_service?: {
-    storage?: {
-      workspace?: string;
-    };
-    log?: {
-      level?: string;
-      output?: string;
-    };
-    embedding?: {
-      dense?: {
-        api_base?: string;
-        api_key?: string;
-        provider?: string;
-        dimension?: number;
-        model?: string;
-        input?: string;
-      };
-      max_concurrent?: number;
-    };
-    vlm?: {
-      api_base?: string;
-      api_key?: string;
-      provider?: string;
-      model?: string;
-      max_concurrent?: number;
-    };
-    parsers?: {
-      code?: {
-        code_summary_mode?: string;
-      };
-    };
   };
   summary_llm?: {
     model?: string;
@@ -97,7 +48,7 @@ type ConfigResponse = {
   };
 };
 
-type TabKey = "agent" | "ov-connection" | "ov-service" | "ov-control" | "advanced" | "system";
+type TabKey = "agent" | "advanced" | "system";
 
 const joinClasses = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
@@ -143,23 +94,13 @@ export default function SettingsPage() {
     setError("");
     setSuccess("");
     try {
-      if (section === "openviking_service") {
-        await requestBackend("/v1/openviking/config", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-          fallbackMessage: "更新配置失败",
-          router,
-        });
-      } else {
-        await requestBackend("/v1/config", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [section]: updates }),
-          fallbackMessage: "更新配置失败",
-          router,
-        });
-      }
+      await requestBackend("/v1/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [section]: updates }),
+        fallbackMessage: "更新配置失败",
+        router,
+      });
       setSuccess("配置保存成功");
       await fetchConfig();
     } catch (err) {
@@ -199,9 +140,6 @@ export default function SettingsPage() {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "agent", label: "Agent 设置" },
-    { key: "ov-connection", label: "OpenViking 连接" },
-    { key: "ov-service", label: "OpenViking 服务" },
-    { key: "ov-control", label: "进程控制" },
     { key: "advanced", label: "高级设置" },
     { key: "system", label: "系统配置" },
   ];
@@ -216,24 +154,6 @@ export default function SettingsPage() {
             saving={saving}
           />
         );
-      case "ov-connection":
-        return (
-          <OpenVikingConnectionSettings
-            config={config?.tools?.openviking}
-            onSave={(updates) => handleSave("tools", { openviking: updates })}
-            saving={saving}
-          />
-        );
-      case "ov-service":
-        return (
-          <OpenVikingServiceSettings
-            config={config?.openviking_service}
-            onSave={(updates) => handleSave("openviking_service", updates)}
-            saving={saving}
-          />
-        );
-      case "ov-control":
-        return <OpenVikingControl />;
       case "advanced":
         return (
           <AdvancedSettings
@@ -267,7 +187,7 @@ export default function SettingsPage() {
               系统设置
             </h1>
             <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              配置 Agent、OpenViking 和系统参数
+              配置 Agent 和系统参数
             </p>
           </div>
           <UiButton variant="secondary" onClick={handleReload} disabled={saving}>

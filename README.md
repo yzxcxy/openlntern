@@ -30,7 +30,7 @@ openIntern 是一个面向智能体工作流的全栈项目，当前仓库包含
 - GORM
 - Redis
 - MySQL
-- Eino / OpenViking / AG-UI 相关集成
+- Eino / AG-UI 相关集成
 
 前端：
 
@@ -61,7 +61,7 @@ openIntern/
 - `pnpm`
 - MySQL
 - Redis
-- 可选：`openviking-server`
+- Docker / Docker Compose（用于托管 OpenViking）
 - 可选：Sandbox 服务，默认读取 `http://127.0.0.1:8081`
 
 ## 配置
@@ -75,7 +75,6 @@ openIntern/
 - JWT
 - COS 文件存储
 - LLM / Summary LLM
-- OpenViking 相关能力
 - 上下文压缩
 - APMPlus
 
@@ -93,6 +92,11 @@ tools:
   openviking:
     base_url: "http://127.0.0.1:1933"
 ```
+
+说明：
+
+- OpenViking 的连接参数仍然由 [openIntern_backend/config.yaml](/Users/fqc/project/agent/openIntern/openIntern_backend/config.yaml) 中的 `tools.openviking` 提供，供后端业务能力调用。
+- OpenViking 的服务启动、停止和内部参数管理不再由 openIntern 前后端负责。
 
 安全说明：
 
@@ -117,30 +121,6 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8080
 
 ## 本地启动
 
-### 方式一：使用脚本启动
-
-仓库提供了统一启动脚本 [scripts/start-dev-services.sh](/Users/fqc/project/agent/openIntern/scripts/start-dev-services.sh)：
-
-```bash
-./scripts/start-dev-services.sh
-```
-
-可选参数：
-
-```bash
-./scripts/start-dev-services.sh auto --with-openviking
-./scripts/start-dev-services.sh terminal
-./scripts/start-dev-services.sh tmux --without-openviking
-```
-
-脚本会启动：
-
-- 前端：`pnpm dev`
-- 后端：`go run main.go`
-- 可选：`openviking-server`
-
-### 方式二：手动启动
-
 1. 启动后端
 
 ```bash
@@ -156,10 +136,10 @@ pnpm install
 pnpm dev
 ```
 
-3. 按需启动 OpenViking
+3. 如需 OpenViking，请先通过仓库根目录的 Docker Compose 启动对应容器
 
 ```bash
-openviking-server
+docker compose up -d openviking
 ```
 
 默认访问地址：

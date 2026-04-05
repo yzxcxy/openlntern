@@ -149,15 +149,5 @@ func SetupRouter() *gin.Engine {
 		configGroup.POST("/reload", controllers.ReloadConfig)
 	}
 
-	// OpenViking service routes
-	openvikingGroup := r.Group("/v1/openviking", middleware.AuthRequired())
-	{
-		openvikingGroup.GET("/status", controllers.GetOpenVikingStatus)
-		openvikingGroup.POST("/start", controllers.StartOpenViking)
-		openvikingGroup.POST("/stop", controllers.StopOpenViking)
-		openvikingGroup.POST("/restart", controllers.RestartOpenViking)
-		openvikingGroup.PUT("/config", controllers.UpdateOpenVikingServiceConfig)
-	}
-
 	return r
 }
