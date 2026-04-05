@@ -132,7 +132,7 @@ func (s *Service) resolveRuntimeToolSet(ctx context.Context, runtimeConfig *Agen
 	resolved.dynamicTools = dynamicTools
 
 	if mode == "select" {
-		initialVisibleToolNames, err := pluginsvc.Plugin.ResolveEnabledRuntimeToolNamesByIDs(runtimeConfig.Plugins.SelectedToolIDs)
+		initialVisibleToolNames, err := pluginsvc.Plugin.ResolveEnabledRuntimeToolNamesByIDsForUser(ownerIDFromContext(ctx), runtimeConfig.Plugins.SelectedToolIDs)
 		if err != nil {
 			if resolved.cleanup != nil {
 				resolved.cleanup()
@@ -287,7 +287,7 @@ func (s *Service) buildRuntimeChatModel(ctx context.Context, runtimeConfig *Agen
 	if runtimeConfig == nil {
 		return nil, fmt.Errorf("no model configured")
 	}
-	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(runtimeConfig.Model.ModelID, runtimeConfig.Model.ProviderID)
+	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(ownerIDFromContext(ctx), runtimeConfig.Model.ModelID, runtimeConfig.Model.ProviderID)
 	if err != nil {
 		return nil, err
 	}

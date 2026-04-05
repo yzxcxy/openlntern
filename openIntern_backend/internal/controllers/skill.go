@@ -33,7 +33,7 @@ type skillFileItem struct {
 
 func ListSkillFiles(c *gin.Context) {
 	rawPath := c.DefaultQuery("path", "/")
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -100,7 +100,7 @@ func ReadSkillFile(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -129,7 +129,7 @@ func ReadSkillFile(c *gin.Context) {
 }
 
 func ImportSkill(c *gin.Context) {
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -229,7 +229,7 @@ func DeleteSkill(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -265,7 +265,7 @@ func GetSkillMetaByName(c *gin.Context) {
 		return
 	}
 
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -303,7 +303,7 @@ func ReadSkillContent(c *gin.Context) {
 		return
 	}
 
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -347,7 +347,7 @@ func ListSkills(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
 
-	if _, _, ok := getAuthUser(c); !ok {
+	if _, ok := getAuthUser(c); !ok {
 		response.Unauthorized(c)
 		return
 	}
@@ -609,25 +609,25 @@ func isStoreNotFound(err error) bool {
 
 var errSkillFound = errors.New("skill found")
 
-func getAuthUser(c *gin.Context) (string, string, bool) {
+func getAuthUser(c *gin.Context) (string, bool) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		return "", "", false
+		return "", false
 	}
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return "", "", false
+		return "", false
 	}
 	claims, err := accountsvc.ParseToken(parts[1])
 	if err != nil {
-		return "", "", false
+		return "", false
 	}
-	refreshedToken, expiresAt, err := accountsvc.GenerateToken(claims.UserID, claims.Role)
+	refreshedToken, expiresAt, err := accountsvc.GenerateToken(claims.UserID)
 	if err == nil {
 		c.Header("X-Access-Token", refreshedToken)
 		c.Header("X-Token-Expires", strconv.FormatInt(expiresAt, 10))
 	}
-	return claims.UserID, claims.Role, true
+	return claims.UserID, true
 }
 
 func cleanSkillPath(p string) (string, error) {

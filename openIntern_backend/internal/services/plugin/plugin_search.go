@@ -36,6 +36,10 @@ type RuntimeToolSearchMatch struct {
 
 // SearchRuntimeToolIDs 使用 OpenViking find 召回工具并执行 MySQL 启用态二次过滤。
 func (s *PluginService) SearchRuntimeToolIDs(ctx context.Context, query string, options ToolSearchOptions) ([]string, error) {
+	userID := userIDFromContext(ctx)
+	if userID == "" {
+		return []string{}, nil
+	}
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return []string{}, nil
@@ -45,7 +49,7 @@ func (s *PluginService) SearchRuntimeToolIDs(ctx context.Context, query string, 
 	maxMCPTools := normalizeToolSearchMaxMCPTools(options.MaxMCPTools)
 	scoreThreshold := normalizeToolSearchScoreThreshold(options.MinScore)
 	runtimeTypes := normalizeToolSearchRuntimeTypes(options.RuntimeTypes)
-	targetURI := resolveToolSearchTargetURI(options.TargetURI)
+	targetURI := dao.Plugin.ToolStoreUserURI(userID)
 
 	candidateLimit := topK * defaultToolSearchCandidateFactor
 	if candidateLimit < defaultToolSearchMinCandidateAmount {
@@ -54,6 +58,7 @@ func (s *PluginService) SearchRuntimeToolIDs(ctx context.Context, query string, 
 
 	matches, err := dao.Plugin.FindToolSearchMatches(ctx, dao.PluginToolSearchFilter{
 		Query:          query,
+		UserID:         userID,
 		TargetURI:      targetURI,
 		Limit:          candidateLimit,
 		ScoreThreshold: scoreThreshold,
@@ -74,7 +79,7 @@ func (s *PluginService) SearchRuntimeToolIDs(ctx context.Context, query string, 
 		return []string{}, nil
 	}
 
-	enabledRecords, err := dao.Plugin.ListEnabledRuntimeToolRecords(candidateToolIDs, runtimeTypes)
+	enabledRecords, err := dao.Plugin.ListEnabledRuntimeToolRecords(userID, candidateToolIDs, runtimeTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +133,11 @@ func (s *PluginService) SearchRuntimeTools(ctx context.Context, query string, op
 		return []RuntimeToolSearchMatch{}, nil
 	}
 
-	toolNameByID, err := s.loadEnabledRuntimeToolNameMap(selectedToolIDs)
+	userID := userIDFromContext(ctx)
+	if userID == "" {
+		return []RuntimeToolSearchMatch{}, nil
+	}
+	toolNameByID, err := s.loadEnabledRuntimeToolNameMap(userID, selectedToolIDs)
 	if err != nil {
 		return nil, err
 	}

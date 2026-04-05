@@ -24,6 +24,14 @@ func (d *MemorySyncStateDAO) GetByThreadID(threadID string) (*models.MemorySyncS
 	return &item, nil
 }
 
+func (d *MemorySyncStateDAO) GetByUserIDAndThreadID(userID, threadID string) (*models.MemorySyncState, error) {
+	var item models.MemorySyncState
+	if err := database.DB.Where("user_id = ? AND thread_id = ?", userID, threadID).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 // ListRunnable returns a bounded batch of states that are ready for synchronization work.
 func (d *MemorySyncStateDAO) ListRunnable(limit int) ([]models.MemorySyncState, error) {
 	if limit <= 0 {
@@ -54,7 +62,7 @@ func (d *MemorySyncStateDAO) ResetLegacySyncing() error {
 // UpsertPendingRun records that a completed chat run needs long-term memory synchronization.
 func (d *MemorySyncStateDAO) UpsertPendingRun(item *models.MemorySyncState) error {
 	return database.DB.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "thread_id"}},
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "thread_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"last_committed_run_id",
 			"status",
@@ -83,10 +91,39 @@ func (d *MemorySyncStateDAO) MarkReady(threadID, lastSyncedMsgID, runID string) 
 		}).Error
 }
 
+func (d *MemorySyncStateDAO) MarkReadyByUserID(userID, threadID, lastSyncedMsgID, runID string) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
+		Updates(map[string]any{
+			"last_added_msg_id":     lastSyncedMsgID,
+			"last_synced_msg_id":    lastSyncedMsgID,
+			"last_committed_run_id": runID,
+			"commit_task_id":        "",
+			"commit_task_status":    "",
+			"commit_status":         models.MemoryCommitStatusCommitted,
+			"status":                models.MemorySyncStatusReady,
+			"retry_count":           0,
+			"last_error":            "",
+			"next_attempt_at":       nil,
+		}).Error
+}
+
 // MarkFailed stores the latest failure and increments retry counters.
 func (d *MemorySyncStateDAO) MarkFailed(threadID, lastError string, nextAttemptAt *time.Time, commitStatus string) error {
 	return database.DB.Model(&models.MemorySyncState{}).
 		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"commit_status":   commitStatus,
+			"status":          models.MemorySyncStatusFailed,
+			"retry_count":     gorm.Expr("retry_count + 1"),
+			"last_error":      lastError,
+			"next_attempt_at": nextAttemptAt,
+		}).Error
+}
+
+func (d *MemorySyncStateDAO) MarkFailedByUserID(userID, threadID, lastError string, nextAttemptAt *time.Time, commitStatus string) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
 		Updates(map[string]any{
 			"commit_status":   commitStatus,
 			"status":          models.MemorySyncStatusFailed,
@@ -110,10 +147,35 @@ func (d *MemorySyncStateDAO) MarkCommitSubmitted(threadID, taskID string, nextAt
 		}).Error
 }
 
+func (d *MemorySyncStateDAO) MarkCommitSubmittedByUserID(userID, threadID, taskID string, nextAttemptAt *time.Time) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
+		Updates(map[string]any{
+			"commit_task_id":     taskID,
+			"commit_task_status": models.MemorySyncStatusPending,
+			"commit_status":      models.MemoryCommitStatusProcessing,
+			"status":             models.MemorySyncStatusPending,
+			"last_error":         "",
+			"next_attempt_at":    nextAttemptAt,
+		}).Error
+}
+
 // MarkCommitPolling stores the latest polled task status and re-queues the thread for next poll.
 func (d *MemorySyncStateDAO) MarkCommitPolling(threadID, taskStatus string, nextAttemptAt *time.Time) error {
 	return database.DB.Model(&models.MemorySyncState{}).
 		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"commit_task_status": taskStatus,
+			"commit_status":      models.MemoryCommitStatusProcessing,
+			"status":             models.MemorySyncStatusPending,
+			"last_error":         "",
+			"next_attempt_at":    nextAttemptAt,
+		}).Error
+}
+
+func (d *MemorySyncStateDAO) MarkCommitPollingByUserID(userID, threadID, taskStatus string, nextAttemptAt *time.Time) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
 		Updates(map[string]any{
 			"commit_task_status": taskStatus,
 			"commit_status":      models.MemoryCommitStatusProcessing,
@@ -133,10 +195,31 @@ func (d *MemorySyncStateDAO) ClearCommitTask(threadID string) error {
 		}).Error
 }
 
+func (d *MemorySyncStateDAO) ClearCommitTaskByUserID(userID, threadID string) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
+		Updates(map[string]any{
+			"commit_task_id":     "",
+			"commit_task_status": "",
+		}).Error
+}
+
 // MarkMessagesAdded stores the add-message cursor before commit starts.
 func (d *MemorySyncStateDAO) MarkMessagesAdded(threadID, lastAddedMsgID string) error {
 	return database.DB.Model(&models.MemorySyncState{}).
 		Where("thread_id = ?", threadID).
+		Updates(map[string]any{
+			"last_added_msg_id":  lastAddedMsgID,
+			"commit_task_id":     "",
+			"commit_task_status": "",
+			"commit_status":      models.MemoryCommitStatusPending,
+			"last_error":         "",
+		}).Error
+}
+
+func (d *MemorySyncStateDAO) MarkMessagesAddedByUserID(userID, threadID, lastAddedMsgID string) error {
+	return database.DB.Model(&models.MemorySyncState{}).
+		Where("user_id = ? AND thread_id = ?", userID, threadID).
 		Updates(map[string]any{
 			"last_added_msg_id":  lastAddedMsgID,
 			"commit_task_id":     "",

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -21,6 +23,8 @@ type Manager struct {
 	process       *exec.Cmd
 	configPath    string
 	config        *config.OpenVikingServiceConfig
+	healthURL     string
+	external      bool
 	status        string
 	lastError     string
 	startTime     time.Time
@@ -51,7 +55,7 @@ var globalManager *Manager
 var managerMu sync.Mutex
 
 // InitManager 初始化 OpenViking 管理器
-func InitManager(cfg *config.OpenVikingServiceConfig, configPath string) *Manager {
+func InitManager(cfg *config.OpenVikingServiceConfig, configPath string, healthURL string) *Manager {
 	managerMu.Lock()
 	defer managerMu.Unlock()
 
@@ -59,6 +63,8 @@ func InitManager(cfg *config.OpenVikingServiceConfig, configPath string) *Manage
 		globalManager = &Manager{
 			configPath: configPath,
 			config:     cfg,
+			healthURL:  strings.TrimSpace(healthURL),
+			external:   parseExternalModeEnv(),
 			status:     "stopped",
 			restartPolicy: RestartPolicy{
 				Enabled:         true,
@@ -67,6 +73,11 @@ func InitManager(cfg *config.OpenVikingServiceConfig, configPath string) *Manage
 				HealthCheckIntv: 30 * time.Second,
 			},
 		}
+	} else {
+		globalManager.configPath = configPath
+		globalManager.config = cfg
+		globalManager.healthURL = strings.TrimSpace(healthURL)
+		globalManager.external = parseExternalModeEnv()
 	}
 	return globalManager
 }
@@ -78,10 +89,25 @@ func GetManager() *Manager {
 	return globalManager
 }
 
+// ManagedExternally returns whether OpenViking lifecycle is managed outside the backend process.
+func (m *Manager) ManagedExternally() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.external
+}
+
 // Start 启动 OpenViking 服务
 func (m *Manager) Start() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.external {
+		m.status = "external"
+		return fmt.Errorf("openviking is managed externally")
+	}
 
 	if m.process != nil && m.isProcessRunning() {
 		return fmt.Errorf("openviking is already running")
@@ -140,6 +166,11 @@ func (m *Manager) Stop() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.external {
+		m.status = "external"
+		return nil
+	}
+
 	if m.process == nil || !m.isProcessRunning() {
 		m.status = "stopped"
 		return nil
@@ -173,6 +204,9 @@ func (m *Manager) Stop() error {
 
 // Restart 重启 OpenViking 服务
 func (m *Manager) Restart() error {
+	if m.ManagedExternally() {
+		return fmt.Errorf("openviking is managed externally")
+	}
 	if err := m.Stop(); err != nil {
 		return err
 	}
@@ -189,6 +223,15 @@ func (m *Manager) Status() StatusResponse {
 	resp := StatusResponse{
 		Status:    m.status,
 		LastError: m.lastError,
+	}
+
+	if m.external {
+		resp.Status = "external"
+		resp.Running = m.checkExternalHealth()
+		if !resp.Running && resp.LastError == "" {
+			resp.LastError = "external openviking health check failed"
+		}
+		return resp
 	}
 
 	if m.process != nil && m.isProcessRunning() {
@@ -290,4 +333,34 @@ func findOpenVikingExecutable() (string, error) {
 	}
 
 	return "", fmt.Errorf("openviking-server not found in PATH or common locations")
+}
+
+func parseExternalModeEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("OPENINTERN_OPENVIKING_MANAGED_EXTERNALLY"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Manager) checkExternalHealth() bool {
+	healthURL := strings.TrimSpace(m.healthURL)
+	if healthURL == "" {
+		return false
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(healthURL)
+	if err != nil {
+		m.lastError = err.Error()
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		m.lastError = fmt.Sprintf("external health check returned status %d", resp.StatusCode)
+		return false
+	}
+	m.lastError = ""
+	return true
 }

@@ -17,18 +17,12 @@ type User struct {
 	Password string `gorm:"not null" json:"-"`                  // 存储哈希后的密码
 	Avatar   string `gorm:"size:255" json:"avatar"`             // 头像 URL
 	Phone    string `gorm:"size:50" json:"phone"`               // 联系方式
-	Role     string `gorm:"default:'user';size:20" json:"role"` // 角色：user 或 admin
 
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
-
-const (
-	RoleUser  = "user"
-	RoleAdmin = "admin"
-)
 
 // BeforeCreate GORM hook to set UserID if not present
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {

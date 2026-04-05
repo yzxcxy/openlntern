@@ -10,9 +10,10 @@ import (
 type Tool struct {
 	ID uint `gorm:"primarykey" json:"-"`
 
-	ToolID           string `gorm:"column:tool_id;uniqueIndex;not null;size:36" json:"tool_id"`
-	PluginID         string `gorm:"column:plugin_id;index;not null;size:36" json:"plugin_id"`
-	ToolName         string `gorm:"column:tool_name;index;not null;size:120" json:"tool_name"`
+	UserID           string `gorm:"column:user_id;uniqueIndex:ux_tool_user_tool,priority:1;uniqueIndex:ux_tool_user_plugin_name,priority:1;index;not null;size:36" json:"user_id"`
+	ToolID           string `gorm:"column:tool_id;uniqueIndex:ux_tool_user_tool,priority:2;not null;size:36" json:"tool_id"`
+	PluginID         string `gorm:"column:plugin_id;uniqueIndex:ux_tool_user_plugin_name,priority:2;index;not null;size:36" json:"plugin_id"`
+	ToolName         string `gorm:"column:tool_name;uniqueIndex:ux_tool_user_plugin_name,priority:3;index;not null;size:120" json:"tool_name"`
 	Description      string `gorm:"type:text" json:"description"`
 	InputSchemaJSON  string `gorm:"column:input_schema_json;type:longtext" json:"input_schema_json"`
 	OutputSchemaJSON string `gorm:"column:output_schema_json;type:longtext" json:"output_schema_json"`

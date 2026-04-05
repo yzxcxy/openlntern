@@ -127,7 +127,7 @@ func (s *AgentDefinitionService) Create(ctx context.Context, ownerID string, inp
 	}
 	item := &models.Agent{
 		AgentID:               uuid.NewString(),
-		OwnerID:               ownerID,
+		UserID:                ownerID,
 		Status:                AgentStatusDraft,
 		Name:                  strings.TrimSpace(input.Name),
 		Description:           strings.TrimSpace(input.Description),
@@ -146,7 +146,7 @@ func (s *AgentDefinitionService) Create(ctx context.Context, ownerID string, inp
 	if err := dao.Agent.Create(item); err != nil {
 		return nil, err
 	}
-	if err := dao.AgentBinding.ReplaceByAgentID(item.AgentID, buildBindings(item.AgentID, normalized)); err != nil {
+	if err := dao.AgentBinding.ReplaceByAgentID(ownerID, item.AgentID, buildBindings(ownerID, item.AgentID, normalized)); err != nil {
 		return nil, err
 	}
 	return s.Get(ownerID, item.AgentID)
@@ -175,7 +175,7 @@ func (s *AgentDefinitionService) Update(ctx context.Context, ownerID, agentID st
 	if _, err := dao.Agent.UpdateByAgentIDAndOwner(item.AgentID, ownerID, updates); err != nil {
 		return nil, err
 	}
-	if err := dao.AgentBinding.ReplaceByAgentID(item.AgentID, buildBindings(item.AgentID, normalized)); err != nil {
+	if err := dao.AgentBinding.ReplaceByAgentID(ownerID, item.AgentID, buildBindings(ownerID, item.AgentID, normalized)); err != nil {
 		return nil, err
 	}
 	return s.Get(ownerID, item.AgentID)
@@ -194,7 +194,7 @@ func (s *AgentDefinitionService) BuildDebugDetail(ctx context.Context, ownerID s
 	}
 	item := models.Agent{
 		AgentID:              agentID,
-		OwnerID:              ownerID,
+		UserID:               ownerID,
 		Status:               AgentStatusDraft,
 		Name:                 strings.TrimSpace(input.Name),
 		Description:          strings.TrimSpace(input.Description),
@@ -206,7 +206,7 @@ func (s *AgentDefinitionService) BuildDebugDetail(ctx context.Context, ownerID s
 		DefaultModelID:       strings.TrimSpace(input.DefaultModelID),
 		AgentMemoryEnabled:   input.AgentMemoryEnabled,
 	}
-	return buildAgentDetailView(item, buildBindings(agentID, normalized), loadModelName(item.DefaultModelID))
+	return buildAgentDetailView(item, buildBindings(ownerID, agentID, normalized), loadModelName(ownerID, item.DefaultModelID))
 }
 
 func (s *AgentDefinitionService) Get(ownerID, agentID string) (*AgentDetailView, error) {
@@ -214,17 +214,17 @@ func (s *AgentDefinitionService) Get(ownerID, agentID string) (*AgentDetailView,
 	if err != nil {
 		return nil, err
 	}
-	bindings, err := dao.AgentBinding.ListByAgentID(item.AgentID)
+	bindings, err := dao.AgentBinding.ListByAgentID(ownerID, item.AgentID)
 	if err != nil {
 		return nil, err
 	}
-	modelName := loadModelName(item.DefaultModelID)
+	modelName := loadModelName(ownerID, item.DefaultModelID)
 	return buildAgentDetailView(*item, bindings, modelName)
 }
 
 func (s *AgentDefinitionService) List(ownerID string, page, pageSize int, filter AgentListFilter) ([]AgentListItem, int64, error) {
 	items, total, err := dao.Agent.List(page, pageSize, dao.AgentListFilter{
-		OwnerID:   strings.TrimSpace(ownerID),
+		UserID:    strings.TrimSpace(ownerID),
 		Keyword:   strings.TrimSpace(filter.Keyword),
 		AgentType: normalizeOptionalAgentType(filter.AgentType),
 		Status:    normalizeOptionalAgentStatus(filter.Status),
@@ -236,12 +236,12 @@ func (s *AgentDefinitionService) List(ownerID string, page, pageSize int, filter
 	for _, item := range items {
 		agentIDs = append(agentIDs, item.AgentID)
 	}
-	bindings, err := dao.AgentBinding.ListByAgentIDs(agentIDs)
+	bindings, err := dao.AgentBinding.ListByAgentIDs(ownerID, agentIDs)
 	if err != nil {
 		return nil, 0, err
 	}
 	bindingMap := groupBindingsByAgentID(bindings)
-	modelNames := loadModelNames(items)
+	modelNames := loadModelNames(ownerID, items)
 	result := make([]AgentListItem, 0, len(items))
 	for _, item := range items {
 		result = append(result, buildAgentListItem(item, bindingMap[item.AgentID], modelNames[item.DefaultModelID]))
@@ -300,7 +300,7 @@ func (s *AgentDefinitionService) Delete(ownerID, agentID string) error {
 		}
 		return fmt.Errorf("agent is still referenced by enabled supervisors: %s", strings.Join(names, ", "))
 	}
-	if err := dao.AgentBinding.DeleteByAgentID(item.AgentID); err != nil {
+	if err := dao.AgentBinding.DeleteByAgentID(ownerID, item.AgentID); err != nil {
 		return err
 	}
 	_, err = dao.Agent.DeleteByAgentIDAndOwner(item.AgentID, ownerID)
@@ -312,7 +312,7 @@ func (s *AgentDefinitionService) ListEnabledOptions(ownerID string) ([]EnabledAg
 	if err != nil {
 		return nil, err
 	}
-	modelNames := loadModelNames(items)
+	modelNames := loadModelNames(ownerID, items)
 	result := make([]EnabledAgentOption, 0, len(items))
 	for _, item := range items {
 		result = append(result, EnabledAgentOption{
@@ -350,7 +350,7 @@ func (s *AgentDefinitionService) validateAndNormalizeInput(ctx context.Context, 
 		return nil, errors.New("chat_background_json must be valid json")
 	}
 	if defaultModelID := strings.TrimSpace(input.DefaultModelID); defaultModelID != "" {
-		if _, err := modelsvc.ModelCatalog.GetByModelID(defaultModelID); err != nil {
+		if _, err := modelsvc.ModelCatalog.GetByModelID(ownerID, defaultModelID); err != nil {
 			return nil, fmt.Errorf("default model not found")
 		}
 	}
@@ -363,7 +363,7 @@ func (s *AgentDefinitionService) validateAndNormalizeInput(ctx context.Context, 
 	if agentType == AgentTypeSingle && len(normalized.subAgentIDs) > 0 {
 		return nil, errors.New("single agent cannot bind sub agents")
 	}
-	if err := validateEnabledTools(normalized.toolIDs); err != nil {
+	if err := validateEnabledTools(ownerID, normalized.toolIDs); err != nil {
 		return nil, err
 	}
 	if err := validateExistingSkills(ctx, normalized.skillNames); err != nil {
@@ -414,7 +414,7 @@ func validateAgentGraph(ownerID, currentAgentID string, currentSubAgentIDs []str
 	for _, item := range allAgents {
 		agentIDs = append(agentIDs, item.AgentID)
 	}
-	bindings, err := dao.AgentBinding.ListByAgentIDs(agentIDs)
+	bindings, err := dao.AgentBinding.ListByAgentIDs(ownerID, agentIDs)
 	if err != nil {
 		return err
 	}
@@ -481,11 +481,12 @@ func (s *AgentDefinitionService) validateForEnable(ctx context.Context, ownerID 
 	return err
 }
 
-func buildBindings(agentID string, normalized *normalizedBindings) []models.AgentBinding {
+func buildBindings(userID, agentID string, normalized *normalizedBindings) []models.AgentBinding {
 	result := make([]models.AgentBinding, 0, len(normalized.toolIDs)+len(normalized.skillNames)+len(normalized.knowledgeBaseNames)+len(normalized.subAgentIDs))
 	appendBindings := func(bindingType string, ids []string) {
 		for idx, id := range ids {
 			result = append(result, models.AgentBinding{
+				UserID:          userID,
 				AgentID:         agentID,
 				BindingType:     bindingType,
 				BindingTargetID: id,
@@ -504,7 +505,7 @@ func buildAgentDetailView(item models.Agent, bindings []models.AgentBinding, mod
 	grouped := splitBindings(bindings)
 	return &AgentDetailView{
 		AgentID:            item.AgentID,
-		OwnerID:            item.OwnerID,
+		OwnerID:            item.UserID,
 		Name:               item.Name,
 		Description:        item.Description,
 		AgentType:          item.AgentType,
@@ -533,7 +534,7 @@ func buildAgentListItem(item models.Agent, bindings []models.AgentBinding, model
 	grouped := splitBindings(bindings)
 	return AgentListItem{
 		AgentID:            item.AgentID,
-		OwnerID:            item.OwnerID,
+		OwnerID:            item.UserID,
 		Name:               item.Name,
 		Description:        item.Description,
 		AgentType:          item.AgentType,
@@ -583,11 +584,11 @@ func splitBindings(bindings []models.AgentBinding) map[string][]string {
 	return result
 }
 
-func validateEnabledTools(toolIDs []string) error {
+func validateEnabledTools(ownerID string, toolIDs []string) error {
 	if len(toolIDs) == 0 {
 		return nil
 	}
-	items, err := dao.Plugin.ListEnabledToolsByIDs(toolIDs)
+	items, err := dao.Plugin.ListEnabledToolsByIDs(ownerID, toolIDs)
 	if err != nil {
 		return err
 	}
@@ -702,19 +703,19 @@ func parseExampleQuestions(raw string) []string {
 	return normalizeQuestionList(items)
 }
 
-func loadModelName(modelID string) string {
+func loadModelName(ownerID string, modelID string) string {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return ""
 	}
-	item, err := modelsvc.ModelCatalog.GetByModelID(modelID)
+	item, err := modelsvc.ModelCatalog.GetByModelID(ownerID, modelID)
 	if err != nil || item == nil {
 		return ""
 	}
 	return item.Name
 }
 
-func loadModelNames(items []models.Agent) map[string]string {
+func loadModelNames(ownerID string, items []models.Agent) map[string]string {
 	result := make(map[string]string, len(items))
 	for _, item := range items {
 		modelID := strings.TrimSpace(item.DefaultModelID)
@@ -724,7 +725,7 @@ func loadModelNames(items []models.Agent) map[string]string {
 		if _, ok := result[modelID]; ok {
 			continue
 		}
-		result[modelID] = loadModelName(modelID)
+		result[modelID] = loadModelName(ownerID, modelID)
 	}
 	return result
 }

@@ -14,6 +14,7 @@ import (
 	pluginsvc "openIntern/internal/services/plugin"
 	openvikingsvc "openIntern/internal/services/openviking"
 	storagesvc "openIntern/internal/services/storage"
+	"strings"
 	"syscall"
 )
 
@@ -49,9 +50,14 @@ func main() {
 
 	// 初始化并启动 OpenViking 服务
 	ovConfig := config.GetOpenVikingServiceConfig()
-	ovManager := openvikingsvc.InitManager(ovConfig, config.GetOpenVikingConfigPath())
-	if err := ovManager.Start(); err != nil {
-		log.Printf("warning: failed to start openviking: %v", err)
+	healthURL := strings.TrimRight(strings.TrimSpace(cfg.Tools.OpenViking.BaseURL), "/") + "/health"
+	ovManager := openvikingsvc.InitManager(ovConfig, config.GetOpenVikingConfigPath(), healthURL)
+	if ovManager.ManagedExternally() {
+		log.Println("openviking is managed externally; skip local process startup")
+	} else {
+		if err := ovManager.Start(); err != nil {
+			log.Printf("warning: failed to start openviking: %v", err)
+		}
 	}
 
 	// 设置信号处理，确保子进程被正确清理
@@ -59,9 +65,11 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		log.Println("received shutdown signal, stopping openviking...")
-		if err := ovManager.Stop(); err != nil {
-			log.Printf("warning: failed to stop openviking: %v", err)
+		if !ovManager.ManagedExternally() {
+			log.Println("received shutdown signal, stopping openviking...")
+			if err := ovManager.Stop(); err != nil {
+				log.Printf("warning: failed to stop openviking: %v", err)
+			}
 		}
 		os.Exit(0)
 	}()

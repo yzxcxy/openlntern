@@ -59,7 +59,11 @@ type ModelProviderService struct{}
 
 var ModelProvider = new(ModelProviderService)
 
-func (s *ModelProviderService) Create(input CreateModelProviderInput) (*models.ModelProvider, error) {
+func (s *ModelProviderService) Create(userID string, input CreateModelProviderInput) (*models.ModelProvider, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errors.New("user_id is required")
+	}
 	name := strings.TrimSpace(input.Name)
 	apiType := strings.ToLower(strings.TrimSpace(input.APIType))
 	if name == "" || apiType == "" {
@@ -78,6 +82,7 @@ func (s *ModelProviderService) Create(input CreateModelProviderInput) (*models.M
 		enabled = *input.Enabled
 	}
 	item := &models.ModelProvider{
+		UserID:           userID,
 		Name:             name,
 		APIType:          apiType,
 		BaseURL:          strings.TrimSpace(input.BaseURL),
@@ -92,11 +97,11 @@ func (s *ModelProviderService) Create(input CreateModelProviderInput) (*models.M
 	return item, nil
 }
 
-func (s *ModelProviderService) GetByProviderID(providerID string) (*models.ModelProvider, error) {
-	return dao.ModelProvider.GetByProviderID(providerID)
+func (s *ModelProviderService) GetByProviderID(userID string, providerID string) (*models.ModelProvider, error) {
+	return dao.ModelProvider.GetByUserIDAndProviderID(userID, providerID)
 }
 
-func (s *ModelProviderService) Update(providerID string, input UpdateModelProviderInput) error {
+func (s *ModelProviderService) Update(userID string, providerID string, input UpdateModelProviderInput) error {
 	updates := make(map[string]any)
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
@@ -140,7 +145,7 @@ func (s *ModelProviderService) Update(providerID string, input UpdateModelProvid
 	if len(updates) == 0 {
 		return nil
 	}
-	rowsAffected, err := dao.ModelProvider.UpdateByProviderID(providerID, updates)
+	rowsAffected, err := dao.ModelProvider.UpdateByUserIDAndProviderID(userID, providerID, updates)
 	if err != nil {
 		return err
 	}
@@ -150,15 +155,15 @@ func (s *ModelProviderService) Update(providerID string, input UpdateModelProvid
 	return nil
 }
 
-func (s *ModelProviderService) Delete(providerID string) error {
-	count, err := dao.ModelProvider.CountModelsByProviderID(providerID)
+func (s *ModelProviderService) Delete(userID string, providerID string) error {
+	count, err := dao.ModelProvider.CountModelsByUserIDAndProviderID(userID, providerID)
 	if err != nil {
 		return err
 	}
 	if count > 0 {
 		return errors.New("provider still has models")
 	}
-	rowsAffected, err := dao.ModelProvider.DeleteByProviderID(providerID)
+	rowsAffected, err := dao.ModelProvider.DeleteByUserIDAndProviderID(userID, providerID)
 	if err != nil {
 		return err
 	}
@@ -168,8 +173,9 @@ func (s *ModelProviderService) Delete(providerID string) error {
 	return nil
 }
 
-func (s *ModelProviderService) List(page, pageSize int, keyword string) ([]ModelProviderView, int64, error) {
+func (s *ModelProviderService) List(userID string, page, pageSize int, keyword string) ([]ModelProviderView, int64, error) {
 	items, total, err := dao.ModelProvider.List(page, pageSize, dao.ModelProviderListFilter{
+		UserID:  strings.TrimSpace(userID),
 		Keyword: keyword,
 	})
 	if err != nil {

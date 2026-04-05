@@ -18,12 +18,16 @@ type MemorySyncStateService struct{}
 var MemorySyncState = new(MemorySyncStateService)
 
 // GetByThreadID returns the memory sync state row for the specified thread.
-func (s *MemorySyncStateService) GetByThreadID(threadID string) (*models.MemorySyncState, error) {
+func (s *MemorySyncStateService) GetByThreadID(userID, threadID string) (*models.MemorySyncState, error) {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
+	if userID == "" {
+		return nil, errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return nil, errors.New("thread_id is required")
 	}
-	return dao.MemorySyncState.GetByThreadID(threadID)
+	return dao.MemorySyncState.GetByUserIDAndThreadID(userID, threadID)
 }
 
 // ListRunnable returns a bounded batch of pending or failed sync states.
@@ -37,23 +41,27 @@ func (s *MemorySyncStateService) ResetLegacySyncing() error {
 }
 
 // ScheduleThreadSync marks the thread as pending long-term memory synchronization.
-func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) error {
+func (s *MemorySyncStateService) ScheduleThreadSync(userID, threadID, runID string) error {
 	if !memorySyncConfigured() {
 		return nil
 	}
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
 	runID = strings.TrimSpace(runID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
 	if runID == "" {
 		return errors.New("run_id is required")
 	}
-	if _, err := dao.Thread.GetByThreadID(threadID); err != nil {
+	if _, err := dao.Thread.GetByUserIDAndThreadID(userID, threadID); err != nil {
 		return err
 	}
 	nextAttemptAt := nextMemorySyncScheduledAt(time.Now())
-	if existing, err := dao.MemorySyncState.GetByThreadID(threadID); err == nil {
+	if existing, err := dao.MemorySyncState.GetByUserIDAndThreadID(userID, threadID); err == nil {
 		// Keep fast polling cadence when an async commit task is already in-flight.
 		if strings.TrimSpace(existing.CommitTaskID) != "" {
 			nextAttemptAt = nextMemorySyncPollAt(time.Now())
@@ -62,6 +70,7 @@ func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) erro
 		return err
 	}
 	item := &models.MemorySyncState{
+		UserID:             userID,
 		ThreadID:           threadID,
 		LastCommittedRunID: runID,
 		CommitStatus:       models.MemoryCommitStatusPending,
@@ -74,12 +83,17 @@ func (s *MemorySyncStateService) ScheduleThreadSync(threadID, runID string) erro
 }
 
 // MarkReady marks the thread as fully synchronized and updates the cursor.
-func (s *MemorySyncStateService) MarkReady(threadID, lastSyncedMsgID, runID string) error {
+func (s *MemorySyncStateService) MarkReady(userID, threadID, lastSyncedMsgID, runID string) error {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
-	return dao.MemorySyncState.MarkReady(
+	return dao.MemorySyncState.MarkReadyByUserID(
+		userID,
 		threadID,
 		strings.TrimSpace(lastSyncedMsgID),
 		strings.TrimSpace(runID),
@@ -87,8 +101,12 @@ func (s *MemorySyncStateService) MarkReady(threadID, lastSyncedMsgID, runID stri
 }
 
 // MarkFailed stores the latest synchronization error for the thread and schedules the next retry time.
-func (s *MemorySyncStateService) MarkFailed(threadID, lastError string, nextAttemptAt *time.Time, commitStatus string) error {
+func (s *MemorySyncStateService) MarkFailed(userID, threadID, lastError string, nextAttemptAt *time.Time, commitStatus string) error {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
@@ -96,7 +114,8 @@ func (s *MemorySyncStateService) MarkFailed(threadID, lastError string, nextAtte
 	if commitStatus == "" {
 		commitStatus = models.MemoryCommitStatusPending
 	}
-	return dao.MemorySyncState.MarkFailed(
+	return dao.MemorySyncState.MarkFailedByUserID(
+		userID,
 		threadID,
 		strings.TrimSpace(lastError),
 		nextAttemptAt,
@@ -105,51 +124,67 @@ func (s *MemorySyncStateService) MarkFailed(threadID, lastError string, nextAtte
 }
 
 // MarkCommitSubmitted stores the accepted async commit task id and schedules next polling.
-func (s *MemorySyncStateService) MarkCommitSubmitted(threadID, taskID string, nextAttemptAt *time.Time) error {
+func (s *MemorySyncStateService) MarkCommitSubmitted(userID, threadID, taskID string, nextAttemptAt *time.Time) error {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
 	taskID = strings.TrimSpace(taskID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
 	if taskID == "" {
 		return errors.New("task_id is required")
 	}
-	return dao.MemorySyncState.MarkCommitSubmitted(threadID, taskID, nextAttemptAt)
+	return dao.MemorySyncState.MarkCommitSubmittedByUserID(userID, threadID, taskID, nextAttemptAt)
 }
 
 // MarkCommitPolling records the latest async task status and re-queues polling.
-func (s *MemorySyncStateService) MarkCommitPolling(threadID, taskStatus string, nextAttemptAt *time.Time) error {
+func (s *MemorySyncStateService) MarkCommitPolling(userID, threadID, taskStatus string, nextAttemptAt *time.Time) error {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
 	taskStatus = strings.TrimSpace(taskStatus)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
 	if taskStatus == "" {
 		return errors.New("task_status is required")
 	}
-	return dao.MemorySyncState.MarkCommitPolling(threadID, taskStatus, nextAttemptAt)
+	return dao.MemorySyncState.MarkCommitPollingByUserID(userID, threadID, taskStatus, nextAttemptAt)
 }
 
 // ClearCommitTask clears stale async commit task metadata.
-func (s *MemorySyncStateService) ClearCommitTask(threadID string) error {
+func (s *MemorySyncStateService) ClearCommitTask(userID, threadID string) error {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
-	return dao.MemorySyncState.ClearCommitTask(threadID)
+	return dao.MemorySyncState.ClearCommitTaskByUserID(userID, threadID)
 }
 
 // MarkMessagesAdded records that add-message phase has completed up to the provided cursor.
-func (s *MemorySyncStateService) MarkMessagesAdded(threadID, lastAddedMsgID string) error {
+func (s *MemorySyncStateService) MarkMessagesAdded(userID, threadID, lastAddedMsgID string) error {
+	userID = strings.TrimSpace(userID)
 	threadID = strings.TrimSpace(threadID)
 	lastAddedMsgID = strings.TrimSpace(lastAddedMsgID)
+	if userID == "" {
+		return errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return errors.New("thread_id is required")
 	}
 	if lastAddedMsgID == "" {
 		return errors.New("last_added_msg_id is required")
 	}
-	return dao.MemorySyncState.MarkMessagesAdded(threadID, lastAddedMsgID)
+	return dao.MemorySyncState.MarkMessagesAddedByUserID(userID, threadID, lastAddedMsgID)
 }
 
 // IsNotFound reports whether the error means the sync state row does not exist.

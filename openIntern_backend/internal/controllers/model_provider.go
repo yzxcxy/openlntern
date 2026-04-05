@@ -18,7 +18,7 @@ func CreateModelProvider(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	item, err := modelsvc.ModelProvider.Create(input)
+	item, err := modelsvc.ModelProvider.Create(c.GetString("user_id"), input)
 	if err != nil {
 		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
 		return
@@ -30,7 +30,7 @@ func ListModelProviders(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
-	items, total, err := modelsvc.ModelProvider.List(page, pageSize, keyword)
+	items, total, err := modelsvc.ModelProvider.List(c.GetString("user_id"), page, pageSize, keyword)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -44,7 +44,7 @@ func ListModelProviders(c *gin.Context) {
 }
 
 func GetModelProvider(c *gin.Context) {
-	item, err := modelsvc.ModelProvider.GetByProviderID(c.Param("id"))
+	item, err := modelsvc.ModelProvider.GetByProviderID(c.GetString("user_id"), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NotFound(c, "model provider not found")
@@ -62,7 +62,7 @@ func UpdateModelProvider(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	err := modelsvc.ModelProvider.Update(c.Param("id"), input)
+	err := modelsvc.ModelProvider.Update(c.GetString("user_id"), c.Param("id"), input)
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest
@@ -77,7 +77,7 @@ func UpdateModelProvider(c *gin.Context) {
 }
 
 func DeleteModelProvider(c *gin.Context) {
-	err := modelsvc.ModelProvider.Delete(c.Param("id"))
+	err := modelsvc.ModelProvider.Delete(c.GetString("user_id"), c.Param("id"))
 	if err != nil {
 		status := http.StatusBadRequest
 		code := response.CodeBadRequest

@@ -46,12 +46,9 @@ func SetupRouter() *gin.Engine {
 	// User routes
 	userGroup := r.Group("/v1/users", middleware.AuthRequired())
 	{
-		userGroup.POST("", controllers.CreateUser)
-		userGroup.GET("", controllers.ListUsers)
-		userGroup.GET("/:id", controllers.GetUser)
-		userGroup.PUT("/:id", controllers.UpdateUser)
-		userGroup.POST("/:id/avatar", controllers.UploadAvatar)
-		userGroup.DELETE("/:id", controllers.DeleteUser)
+		userGroup.GET("/me", controllers.GetCurrentUser)
+		userGroup.PUT("/me", controllers.UpdateCurrentUser)
+		userGroup.POST("/me/avatar", controllers.UploadCurrentUserAvatar)
 	}
 
 	authGroup := r.Group("/v1/auth")

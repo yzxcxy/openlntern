@@ -27,6 +27,14 @@ func (d *A2UIDAO) GetByID(id string) (*models.A2UI, error) {
 	return &item, nil
 }
 
+func (d *A2UIDAO) GetByUserIDAndID(userID, id string) (*models.A2UI, error) {
+	var item models.A2UI
+	if err := database.DB.Where("user_id = ? AND a2ui_id = ?", userID, id).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (d *A2UIDAO) UpdateByID(id string, updates map[string]any) (int64, error) {
 	result := database.DB.Model(&models.A2UI{}).Where("a2ui_id = ?", id).Updates(updates)
 	return result.RowsAffected, result.Error
@@ -37,10 +45,42 @@ func (d *A2UIDAO) DeleteByID(id string) (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
+func (d *A2UIDAO) UpdateByUserIDAndID(userID, id string, updates map[string]any) (int64, error) {
+	result := database.DB.Model(&models.A2UI{}).Where("user_id = ? AND a2ui_id = ?", userID, id).Updates(updates)
+	return result.RowsAffected, result.Error
+}
+
+func (d *A2UIDAO) DeleteByUserIDAndID(userID, id string) (int64, error) {
+	result := database.DB.Where("user_id = ? AND a2ui_id = ?", userID, id).Delete(&models.A2UI{})
+	return result.RowsAffected, result.Error
+}
+
 func (d *A2UIDAO) List(page, pageSize int, filter A2UIListFilter) ([]models.A2UI, int64, error) {
 	_, pageSize, offset := normalizePagination(page, pageSize, 10)
 
 	query := database.DB.Model(&models.A2UI{})
+	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
+		pattern := "%" + keyword + "%"
+		query = query.Where("(name LIKE ? OR description LIKE ?)", pattern, pattern)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var items []models.A2UI
+	if err := query.Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
+}
+
+func (d *A2UIDAO) ListByUserID(userID string, page, pageSize int, filter A2UIListFilter) ([]models.A2UI, int64, error) {
+	_, pageSize, offset := normalizePagination(page, pageSize, 10)
+
+	query := database.DB.Model(&models.A2UI{}).Where("user_id = ?", userID)
 	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
 		pattern := "%" + keyword + "%"
 		query = query.Where("(name LIKE ? OR description LIKE ?)", pattern, pattern)

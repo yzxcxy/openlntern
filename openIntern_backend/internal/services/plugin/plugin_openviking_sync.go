@@ -55,28 +55,37 @@ func initPluginOpenVikingSync(cfg config.PluginConfig) {
 	})
 }
 
+func buildOpenVikingSyncTask(action string, userID string, pluginID string) string {
+	member := encodePluginQueueMember(userID, pluginID)
+	if member == "" {
+		return ""
+	}
+	return action + member
+}
+
 // queueOpenVikingPluginReconcile 入队插件对账任务，依据 MySQL 当前数据重建 OpenViking 工具索引。
-func (s *PluginService) queueOpenVikingPluginReconcile(pluginID string, delay time.Duration) error {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" || !dao.Plugin.ToolStoreConfigured() {
+func (s *PluginService) queueOpenVikingPluginReconcile(userID string, pluginID string, delay time.Duration) error {
+	taskKey := buildOpenVikingSyncTask(openVikingSyncTaskReconcilePrefix, userID, pluginID)
+	if taskKey == "" || !dao.Plugin.ToolStoreConfigured() {
 		return nil
 	}
-	return s.queueOpenVikingSyncTask(openVikingSyncTaskReconcilePrefix+pluginID, delay)
+	return s.queueOpenVikingSyncTask(taskKey, delay)
 }
 
 // queueOpenVikingPluginCleanup 入队插件清理任务，删除 OpenViking 中该插件目录。
-func (s *PluginService) queueOpenVikingPluginCleanup(pluginID string, delay time.Duration) error {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" || !dao.Plugin.ToolStoreConfigured() {
+func (s *PluginService) queueOpenVikingPluginCleanup(userID string, pluginID string, delay time.Duration) error {
+	taskKey := buildOpenVikingSyncTask(openVikingSyncTaskCleanupPrefix, userID, pluginID)
+	if taskKey == "" || !dao.Plugin.ToolStoreConfigured() {
 		return nil
 	}
-	return s.queueOpenVikingSyncTask(openVikingSyncTaskCleanupPrefix+pluginID, delay)
+	return s.queueOpenVikingSyncTask(taskKey, delay)
 }
 
 // clearOpenVikingPluginTasks 清理队列中的插件任务。
-func (s *PluginService) clearOpenVikingPluginTasks(pluginID string) {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+func (s *PluginService) clearOpenVikingPluginTasks(userID string, pluginID string) {
+	reconcileTask := buildOpenVikingSyncTask(openVikingSyncTaskReconcilePrefix, userID, pluginID)
+	cleanupTask := buildOpenVikingSyncTask(openVikingSyncTaskCleanupPrefix, userID, pluginID)
+	if reconcileTask == "" || cleanupTask == "" {
 		return
 	}
 	redisClient := database.GetRedis()
@@ -89,10 +98,10 @@ func (s *PluginService) clearOpenVikingPluginTasks(pluginID string) {
 	if err := redisClient.ZRem(
 		ctx,
 		openVikingSyncQueueRedisKey,
-		openVikingSyncTaskReconcilePrefix+pluginID,
-		openVikingSyncTaskCleanupPrefix+pluginID,
+		reconcileTask,
+		cleanupTask,
 	).Err(); err != nil {
-		log.Printf("clear openviking sync queue failed plugin_id=%s err=%v", pluginID, err)
+		log.Printf("clear openviking sync queue failed user_id=%s plugin_id=%s err=%v", userID, pluginID, err)
 	}
 }
 
@@ -181,7 +190,7 @@ func (s *PluginService) processQueuedOpenVikingSyncTasks(ctx context.Context, li
 
 // processOpenVikingSyncTask 解析并执行单个同步任务。
 func (s *PluginService) processOpenVikingSyncTask(ctx context.Context, taskKey string) error {
-	action, pluginID, ok := parseOpenVikingSyncTask(taskKey)
+	action, userID, pluginID, ok := parseOpenVikingSyncTask(taskKey)
 	if !ok {
 		return fmt.Errorf("invalid openviking sync task: %s", taskKey)
 	}
@@ -198,61 +207,68 @@ func (s *PluginService) processOpenVikingSyncTask(ctx context.Context, taskKey s
 
 	switch action {
 	case openVikingSyncTaskReconcilePrefix:
-		return s.syncPluginToolsToOpenVikingNow(runCtx, pluginID)
+		return s.syncPluginToolsToOpenVikingNow(runCtx, userID, pluginID)
 	case openVikingSyncTaskCleanupPrefix:
-		return dao.Plugin.DeleteToolStorePluginURI(runCtx, pluginID)
+		return dao.Plugin.DeleteToolStorePluginURI(runCtx, userID, pluginID)
 	default:
 		return fmt.Errorf("unsupported openviking sync action: %s", action)
 	}
 }
 
 // parseOpenVikingSyncTask 解析任务前缀与插件标识。
-func parseOpenVikingSyncTask(taskKey string) (string, string, bool) {
+func parseOpenVikingSyncTask(taskKey string) (string, string, string, bool) {
 	taskKey = strings.TrimSpace(taskKey)
 	if strings.HasPrefix(taskKey, openVikingSyncTaskReconcilePrefix) {
-		pluginID := strings.TrimSpace(strings.TrimPrefix(taskKey, openVikingSyncTaskReconcilePrefix))
-		return openVikingSyncTaskReconcilePrefix, pluginID, pluginID != ""
+		return decodeOpenVikingSyncTask(taskKey, openVikingSyncTaskReconcilePrefix)
 	}
 	if strings.HasPrefix(taskKey, openVikingSyncTaskCleanupPrefix) {
-		pluginID := strings.TrimSpace(strings.TrimPrefix(taskKey, openVikingSyncTaskCleanupPrefix))
-		return openVikingSyncTaskCleanupPrefix, pluginID, pluginID != ""
+		return decodeOpenVikingSyncTask(taskKey, openVikingSyncTaskCleanupPrefix)
 	}
-	return "", "", false
+	return "", "", "", false
+}
+
+func decodeOpenVikingSyncTask(taskKey string, prefix string) (string, string, string, bool) {
+	userID, pluginID, ok := decodePluginQueueMember(strings.TrimPrefix(strings.TrimSpace(taskKey), prefix))
+	if !ok {
+		return "", "", "", false
+	}
+	return prefix, userID, pluginID, true
 }
 
 // SyncPluginToolsToOpenViking 立即执行单插件同步，供运维脚本与手动回填使用。
-func (s *PluginService) SyncPluginToolsToOpenViking(ctx context.Context, pluginID string) error {
+func (s *PluginService) SyncPluginToolsToOpenViking(ctx context.Context, userID string, pluginID string) error {
 	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
-		return errors.New("plugin_id is required")
+	userID = strings.TrimSpace(userID)
+	if userID == "" || pluginID == "" {
+		return errors.New("user_id and plugin_id are required")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return s.syncPluginToolsToOpenVikingNow(ctx, pluginID)
+	return s.syncPluginToolsToOpenVikingNow(ctx, userID, pluginID)
 }
 
 // syncPluginToolsToOpenVikingNow 使用 MySQL 工具快照对账 OpenViking 资源目录。
-func (s *PluginService) syncPluginToolsToOpenVikingNow(ctx context.Context, pluginID string) error {
+func (s *PluginService) syncPluginToolsToOpenVikingNow(ctx context.Context, userID string, pluginID string) error {
 	if !dao.Plugin.ToolStoreConfigured() {
 		return nil
 	}
 
-	plugin, err := s.getPluginRecord(pluginID)
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		if errors.Is(err, dao.ErrPluginNotFound) {
-			return dao.Plugin.DeleteToolStorePluginURI(ctx, pluginID)
+			return dao.Plugin.DeleteToolStorePluginURI(ctx, userID, pluginID)
 		}
 		return err
 	}
 
-	tools, err := dao.Plugin.ListToolsByPluginID(pluginID)
+	tools, err := dao.Plugin.ListToolsByUserIDAndPluginID(userID, pluginID)
 	if err != nil {
 		return err
 	}
 
 	expected := buildExpectedToolStoreDocuments(plugin, tools)
-	return dao.Plugin.ReplaceToolStoreResourcesByPlugin(ctx, plugin.PluginID, expected)
+	return dao.Plugin.ReplaceToolStoreResourcesByPlugin(ctx, plugin.UserID, plugin.PluginID, expected)
 }
 
 // buildExpectedToolStoreDocuments 构建插件期望写入的工具文档集合。

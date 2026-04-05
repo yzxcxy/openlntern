@@ -105,7 +105,7 @@ func ProcessPendingMemorySyncStates(ctx context.Context, limit int) error {
 				if isMemorySyncCommitFatalError(err) {
 					commitStatus = models.MemoryCommitStatusFailed
 				}
-				if markErr := MemorySyncState.MarkFailed(item.ThreadID, err.Error(), nextAttemptAt, commitStatus); markErr != nil {
+				if markErr := MemorySyncState.MarkFailed(item.UserID, item.ThreadID, err.Error(), nextAttemptAt, commitStatus); markErr != nil {
 					log.Printf("memory sync mark failed failed thread_id=%s err=%v", item.ThreadID, markErr)
 				}
 			}
@@ -134,7 +134,7 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 		return pollSubmittedCommitTask(runCtx, state)
 	}
 
-	threadMessages, err := chatsvc.Message.ListThreadMessages(state.ThreadID)
+	threadMessages, err := chatsvc.Message.ListThreadMessages(state.UserID, state.ThreadID)
 	if err != nil {
 		return err
 	}
@@ -149,16 +149,16 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 	hasPendingCommit := strings.TrimSpace(state.LastAddedMsgID) != "" && strings.TrimSpace(state.LastAddedMsgID) != strings.TrimSpace(state.LastSyncedMsgID)
 	if lastMsgID == "" {
 		if !hasPendingCommit {
-			return MemorySyncState.MarkReady(state.ThreadID, state.LastSyncedMsgID, state.LastCommittedRunID)
+			return MemorySyncState.MarkReady(state.UserID, state.ThreadID, state.LastSyncedMsgID, state.LastCommittedRunID)
 		}
 	}
 	if len(sessionMessages) == 0 && !hasPendingCommit {
-		return MemorySyncState.MarkReady(state.ThreadID, lastMsgID, state.LastCommittedRunID)
+		return MemorySyncState.MarkReady(state.UserID, state.ThreadID, lastMsgID, state.LastCommittedRunID)
 	}
 	for _, item := range sessionMessages {
 		if msgID := strings.TrimSpace(item.MsgID); msgID != "" {
 			addCursor = msgID
-			if err := MemorySyncState.MarkMessagesAdded(state.ThreadID, addCursor); err != nil {
+			if err := MemorySyncState.MarkMessagesAdded(state.UserID, state.ThreadID, addCursor); err != nil {
 				return err
 			}
 		}
@@ -171,7 +171,7 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 	if taskID == "" {
 		return fmt.Errorf("%smemory backend returned empty task_id", memorySyncErrCommitSubmitFailedPrefix)
 	}
-	if err := MemorySyncState.MarkCommitSubmitted(state.ThreadID, taskID, nextMemorySyncPollAt(time.Now())); err != nil {
+	if err := MemorySyncState.MarkCommitSubmitted(state.UserID, state.ThreadID, taskID, nextMemorySyncPollAt(time.Now())); err != nil {
 		return err
 	}
 	return nil
@@ -195,15 +195,15 @@ func pollSubmittedCommitTask(ctx context.Context, state models.MemorySyncState) 
 	taskStatus = strings.ToLower(strings.TrimSpace(taskStatus))
 	switch taskStatus {
 	case models.MemorySyncStatusPending, "running":
-		return MemorySyncState.MarkCommitPolling(state.ThreadID, taskStatus, nextMemorySyncPollAt(time.Now()))
+		return MemorySyncState.MarkCommitPolling(state.UserID, state.ThreadID, taskStatus, nextMemorySyncPollAt(time.Now()))
 	case "completed":
 		finalCursor := strings.TrimSpace(state.LastAddedMsgID)
 		if finalCursor == "" {
 			finalCursor = strings.TrimSpace(state.LastSyncedMsgID)
 		}
-		return MemorySyncState.MarkReady(state.ThreadID, finalCursor, state.LastCommittedRunID)
+		return MemorySyncState.MarkReady(state.UserID, state.ThreadID, finalCursor, state.LastCommittedRunID)
 	case models.MemorySyncStatusFailed:
-		if err := MemorySyncState.ClearCommitTask(state.ThreadID); err != nil {
+		if err := MemorySyncState.ClearCommitTask(state.UserID, state.ThreadID); err != nil {
 			return err
 		}
 		taskErr = strings.TrimSpace(taskErr)
@@ -212,7 +212,7 @@ func pollSubmittedCommitTask(ctx context.Context, state models.MemorySyncState) 
 		}
 		return fmt.Errorf("%s%s", memorySyncErrCommitTaskFailedPrefix, taskErr)
 	default:
-		if err := MemorySyncState.ClearCommitTask(state.ThreadID); err != nil {
+		if err := MemorySyncState.ClearCommitTask(state.UserID, state.ThreadID); err != nil {
 			return err
 		}
 		return fmt.Errorf("%s%s", memorySyncErrCommitTaskStatusPrefix, taskStatus)

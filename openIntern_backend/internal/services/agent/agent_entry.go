@@ -20,6 +20,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		return nil
 	}
 	state := s.snapshotState()
+	ownerID := ownerIDFromContext(ctx)
 	threadID := input.ThreadID
 	if threadID == "" {
 		threadID = events.GenerateThreadID()
@@ -38,7 +39,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		return err
 	}
 
-	historyMessages, err := s.deps.MessageStore.ListThreadMessages(threadID)
+	historyMessages, err := s.deps.MessageStore.ListThreadMessages(ownerID, threadID)
 	if err != nil {
 		_ = sender.Error(err.Error(), "history_load_failed")
 		log.Printf("RunAgent history load failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
@@ -98,6 +99,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UISender, sender)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyFileUploader, s.deps.FileUploader)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeySandboxBaseURL, state.sandboxBaseURL)
+	ctx = context.WithValue(ctx, builtinTool.ContextKeyUserID, ownerID)
 
 	if isAgentConversationMode(runtimeConfig) {
 		err = s.runAgentModeStreaming(ctx, sender, einoMessages, runtimeConfig, state)
@@ -124,6 +126,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		return err
 	}
 	if userMessage != nil {
+		userMessage.UserID = ownerID
 		persistedMessages = append(persistedMessages, *userMessage)
 	}
 	accumulatedMessages, err := buildAccumulatedMessageModels(
@@ -136,19 +139,22 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 		log.Printf("RunAgent build persisted messages failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
+	for index := range accumulatedMessages {
+		accumulatedMessages[index].UserID = ownerID
+	}
 	persistedMessages = append(persistedMessages, accumulatedMessages...)
 	if err := s.deps.MessageStore.CreateMessages(persistedMessages); err != nil {
 		log.Printf("RunAgent persist failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	if err := s.deps.ThreadStore.TouchThread(threadID); err != nil {
+	if err := s.deps.ThreadStore.TouchThread(ownerID, threadID); err != nil {
 		log.Printf("RunAgent touch thread failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 		return err
 	}
-	if err := scheduleThreadMemorySync(s.deps.MemorySyncStateStore, threadID, runID); err != nil {
+	if err := scheduleThreadMemorySync(s.deps.MemorySyncStateStore, ownerID, threadID, runID); err != nil {
 		log.Printf("RunAgent schedule memory sync failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 	}
-	if err := ensureThreadTitle(ctx, s.deps.ThreadStore, threadID, input.Messages, state.summaryModel); err != nil {
+	if err := ensureThreadTitle(ctx, s.deps.ThreadStore, ownerID, threadID, input.Messages, state.summaryModel); err != nil {
 		log.Printf("RunAgent generate title failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 	}
 
@@ -156,11 +162,11 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 }
 
 // scheduleThreadMemorySync marks the completed run as pending long-term memory synchronization.
-func scheduleThreadMemorySync(store MemorySyncStateStore, threadID, runID string) error {
+func scheduleThreadMemorySync(store MemorySyncStateStore, userID, threadID, runID string) error {
 	if store == nil {
 		return nil
 	}
-	return store.ScheduleThreadSync(threadID, runID)
+	return store.ScheduleThreadSync(userID, threadID, runID)
 }
 
 // runEinoStreaming 消费 runner 事件流并按 AGUI 协议转发到 sender。

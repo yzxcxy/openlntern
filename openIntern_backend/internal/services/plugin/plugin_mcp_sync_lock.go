@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"openIntern/internal/database"
@@ -32,10 +31,10 @@ type mcpSyncLock struct {
 	token string
 }
 
-func tryAcquireMCPPluginSyncLock(pluginID string) (*mcpSyncLock, bool, error) {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
-		return nil, false, errors.New("plugin_id is required")
+func tryAcquireMCPPluginSyncLock(userID string, pluginID string) (*mcpSyncLock, bool, error) {
+	lockID := encodePluginQueueMember(userID, pluginID)
+	if lockID == "" {
+		return nil, false, errors.New("plugin sync lock id is required")
 	}
 
 	redisClient := database.GetRedis()
@@ -51,7 +50,7 @@ func tryAcquireMCPPluginSyncLock(pluginID string) (*mcpSyncLock, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), mcpSyncLockAcquireTimeout)
 	defer cancel()
 
-	key := mcpSyncLockRedisKeyPrefix + pluginID
+	key := mcpSyncLockRedisKeyPrefix + lockID
 	acquired, err := redisClient.SetNX(ctx, key, token, currentMCPSyncLockTTL()).Result()
 	if err != nil || !acquired {
 		return nil, acquired, err

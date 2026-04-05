@@ -197,7 +197,7 @@ func (c *agentModeCompiler) buildModel(detail *AgentDetailView, allowRuntimeMode
 	if strings.TrimSpace(detail.DefaultModelID) == "" {
 		return nil, fmt.Errorf("no model configured for agent")
 	}
-	selection, err := c.service.deps.ModelCatalogResolver.ResolveRuntimeSelection(detail.DefaultModelID, "")
+	selection, err := c.service.deps.ModelCatalogResolver.ResolveRuntimeSelection(c.ownerID, detail.DefaultModelID, "")
 	if err != nil {
 		return nil, err
 	}

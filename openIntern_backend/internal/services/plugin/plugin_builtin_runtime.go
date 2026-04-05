@@ -18,7 +18,11 @@ func (s *PluginService) BuildRuntimeBuiltinTools(ctx context.Context, toolIDs []
 		return nil, nil
 	}
 
-	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeBuiltin, pluginStatusEnabled, toolIDs)
+	userID := userIDFromContext(ctx)
+	if userID == "" {
+		return nil, nil
+	}
+	toolRows, err := dao.Plugin.ListRuntimeTools(userID, pluginRuntimeBuiltin, pluginStatusEnabled, toolIDs)
 	if err != nil {
 		return nil, err
 	}

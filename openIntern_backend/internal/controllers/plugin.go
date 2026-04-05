@@ -17,7 +17,7 @@ import (
 func ListPlugins(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	items, total, err := pluginsvc.Plugin.List(page, pageSize, pluginsvc.PluginListFilter{
+	items, total, err := pluginsvc.Plugin.List(c.GetString("user_id"), page, pageSize, pluginsvc.PluginListFilter{
 		Source:      c.Query("source"),
 		RuntimeType: c.Query("runtime_type"),
 		Status:      c.Query("status"),
@@ -36,7 +36,7 @@ func ListPlugins(c *gin.Context) {
 }
 
 func GetPlugin(c *gin.Context) {
-	item, err := pluginsvc.Plugin.GetByPluginID(strings.TrimSpace(c.Param("id")))
+	item, err := pluginsvc.Plugin.GetByPluginID(c.GetString("user_id"), strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -50,7 +50,7 @@ func CreatePlugin(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	item, err := pluginsvc.Plugin.Create(input)
+	item, err := pluginsvc.Plugin.Create(c.GetString("user_id"), input)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -101,7 +101,7 @@ func UpdatePlugin(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	item, err := pluginsvc.Plugin.Update(strings.TrimSpace(c.Param("id")), input)
+	item, err := pluginsvc.Plugin.Update(c.GetString("user_id"), strings.TrimSpace(c.Param("id")), input)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -125,7 +125,7 @@ func DebugCodePlugin(c *gin.Context) {
 }
 
 func EnablePlugin(c *gin.Context) {
-	item, err := pluginsvc.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), true)
+	item, err := pluginsvc.Plugin.SetEnabled(c.GetString("user_id"), strings.TrimSpace(c.Param("id")), true)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -134,7 +134,7 @@ func EnablePlugin(c *gin.Context) {
 }
 
 func DisablePlugin(c *gin.Context) {
-	item, err := pluginsvc.Plugin.SetEnabled(strings.TrimSpace(c.Param("id")), false)
+	item, err := pluginsvc.Plugin.SetEnabled(c.GetString("user_id"), strings.TrimSpace(c.Param("id")), false)
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -143,7 +143,7 @@ func DisablePlugin(c *gin.Context) {
 }
 
 func SyncPlugin(c *gin.Context) {
-	item, err := pluginsvc.Plugin.Sync(strings.TrimSpace(c.Param("id")))
+	item, err := pluginsvc.Plugin.Sync(c.GetString("user_id"), strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		writePluginError(c, err)
 		return
@@ -152,7 +152,7 @@ func SyncPlugin(c *gin.Context) {
 }
 
 func DeletePlugin(c *gin.Context) {
-	if err := pluginsvc.Plugin.Delete(strings.TrimSpace(c.Param("id"))); err != nil {
+	if err := pluginsvc.Plugin.Delete(c.GetString("user_id"), strings.TrimSpace(c.Param("id"))); err != nil {
 		writePluginError(c, err)
 		return
 	}
@@ -160,7 +160,7 @@ func DeletePlugin(c *gin.Context) {
 }
 
 func ListAvailablePluginsForChat(c *gin.Context) {
-	items, err := pluginsvc.Plugin.ListAvailableForChat()
+	items, err := pluginsvc.Plugin.ListAvailableForChat(c.GetString("user_id"))
 	if err != nil {
 		response.InternalError(c)
 		return

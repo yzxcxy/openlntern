@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"openIntern/internal/dao"
@@ -18,7 +19,11 @@ type MessageService struct{}
 
 var Message = new(MessageService)
 
-func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]models.Message, int64, error) {
+func (s *MessageService) ListMessages(userID, threadID string, page, pageSize int) ([]models.Message, int64, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, 0, errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return nil, 0, errors.New("thread_id is required")
 	}
@@ -29,11 +34,11 @@ func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]mo
 		pageSize = 20
 	}
 
-	if _, err := dao.Thread.GetByThreadID(threadID); err != nil {
+	if _, err := dao.Thread.GetByUserIDAndThreadID(userID, threadID); err != nil {
 		return nil, 0, err
 	}
 
-	key := fmt.Sprintf("messages:%s:%d:%d", threadID, page, pageSize)
+	key := fmt.Sprintf("messages:%s:%s:%d:%d", userID, threadID, page, pageSize)
 	ctx := context.Background()
 	client := database.GetRedis()
 	if client != nil {
@@ -50,7 +55,7 @@ func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]mo
 		}
 	}
 
-	messages, total, err := dao.Message.ListByThreadID(threadID, page, pageSize)
+	messages, total, err := dao.Message.ListByUserIDAndThreadID(userID, threadID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -71,11 +76,15 @@ func (s *MessageService) ListMessages(threadID string, page, pageSize int) ([]mo
 	return messages, total, nil
 }
 
-func (s *MessageService) ListThreadMessages(threadID string) ([]models.Message, error) {
+func (s *MessageService) ListThreadMessages(userID, threadID string) ([]models.Message, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errors.New("user_id is required")
+	}
 	if threadID == "" {
 		return nil, errors.New("thread_id is required")
 	}
-	return dao.Message.ListAllByThreadID(threadID)
+	return dao.Message.ListAllByUserIDAndThreadID(userID, threadID)
 }
 
 func (s *MessageService) CreateMessages(messages []models.Message) error {

@@ -15,6 +15,7 @@ import (
 var ErrPluginNotFound = errors.New("plugin not found")
 
 type PluginListFilter struct {
+	UserID      string
 	Source      string
 	RuntimeType string
 	Status      string
@@ -32,6 +33,13 @@ type PluginDAO struct{}
 var Plugin = new(PluginDAO)
 
 func (d *PluginDAO) Create(plugin *models.Plugin, tools []models.Tool) error {
+	userID := strings.TrimSpace(plugin.UserID)
+	if userID == "" {
+		return ErrPluginNotFound
+	}
+	for i := range tools {
+		tools[i].UserID = userID
+	}
 	return database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(plugin).Error; err != nil {
 			return err
@@ -43,10 +51,17 @@ func (d *PluginDAO) Create(plugin *models.Plugin, tools []models.Tool) error {
 	})
 }
 
-func (d *PluginDAO) Update(pluginID string, plugin *models.Plugin, tools []models.Tool) error {
+func (d *PluginDAO) Update(userID string, pluginID string, plugin *models.Plugin, tools []models.Tool) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ErrPluginNotFound
+	}
+	for i := range tools {
+		tools[i].UserID = userID
+	}
 	return database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.Plugin{}).
-			Where("plugin_id = ?", pluginID).
+			Where("user_id = ? AND plugin_id = ?", userID, pluginID).
 			Updates(map[string]any{
 				"name":         plugin.Name,
 				"description":  plugin.Description,
@@ -62,23 +77,23 @@ func (d *PluginDAO) Update(pluginID string, plugin *models.Plugin, tools []model
 		}
 
 		var existingTools []models.Tool
-		if err := tx.Where("plugin_id = ?", pluginID).Find(&existingTools).Error; err != nil {
+		if err := tx.Where("user_id = ? AND plugin_id = ?", userID, pluginID).Find(&existingTools).Error; err != nil {
 			return err
 		}
 
 		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, tools)
 		if len(removedToolIDs) > 0 {
-			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+			if err := tx.Where("user_id = ? AND tool_id IN ?", userID, removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
 				return err
 			}
-			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
+			if err := tx.Unscoped().Where("user_id = ? AND tool_id IN ?", userID, removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
 				return err
 			}
 		}
 
 		for _, tool := range toolsToUpdate {
 			if err := tx.Model(&models.Tool{}).
-				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, pluginID).
+				Where("user_id = ? AND tool_id = ? AND plugin_id = ?", userID, tool.ToolID, pluginID).
 				Updates(buildToolUpdateMap(tool)).Error; err != nil {
 				return err
 			}
@@ -91,14 +106,32 @@ func (d *PluginDAO) Update(pluginID string, plugin *models.Plugin, tools []model
 	})
 }
 
-func (d *PluginDAO) GetByPluginID(pluginID string) (*models.Plugin, error) {
+func (d *PluginDAO) GetByUserIDAndPluginID(userID string, pluginID string) (*models.Plugin, error) {
+	userID = strings.TrimSpace(userID)
 	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+	if userID == "" || pluginID == "" {
 		return nil, ErrPluginNotFound
 	}
 
 	var item models.Plugin
-	if err := database.DB.Where("plugin_id = ?", pluginID).First(&item).Error; err != nil {
+	if err := database.DB.Where("user_id = ? AND plugin_id = ?", userID, pluginID).First(&item).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPluginNotFound
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (d *PluginDAO) GetBuiltinByUserIDAndName(userID string, name string) (*models.Plugin, error) {
+	userID = strings.TrimSpace(userID)
+	name = strings.TrimSpace(name)
+	if userID == "" || name == "" {
+		return nil, ErrPluginNotFound
+	}
+
+	var item models.Plugin
+	if err := database.DB.Where("user_id = ? AND source = ? AND name = ?", userID, "builtin", name).First(&item).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrPluginNotFound
 		}
@@ -124,37 +157,38 @@ func (d *PluginDAO) List(page, pageSize int, filter PluginListFilter) ([]models.
 	return items, total, nil
 }
 
-func (d *PluginDAO) Delete(pluginID string) error {
+func (d *PluginDAO) Delete(userID string, pluginID string) error {
+	userID = strings.TrimSpace(userID)
 	return database.DB.Transaction(func(tx *gorm.DB) error {
 		var toolIDs []string
-		if err := tx.Model(&models.Tool{}).Where("plugin_id = ?", pluginID).Pluck("tool_id", &toolIDs).Error; err != nil {
+		if err := tx.Model(&models.Tool{}).Where("user_id = ? AND plugin_id = ?", userID, pluginID).Pluck("tool_id", &toolIDs).Error; err != nil {
 			return err
 		}
 		if len(toolIDs) > 0 {
-			if err := tx.Where("tool_id IN ?", toolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+			if err := tx.Where("user_id = ? AND tool_id IN ?", userID, toolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
 				return err
 			}
 		}
-		if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.Tool{}).Error; err != nil {
+		if err := tx.Where("user_id = ? AND plugin_id = ?", userID, pluginID).Delete(&models.Tool{}).Error; err != nil {
 			return err
 		}
-		return tx.Where("plugin_id = ?", pluginID).Delete(&models.Plugin{}).Error
+		return tx.Where("user_id = ? AND plugin_id = ?", userID, pluginID).Delete(&models.Plugin{}).Error
 	})
 }
 
-func (d *PluginDAO) UpdateStatus(pluginID string, status string) error {
-	return database.DB.Model(&models.Plugin{}).Where("plugin_id = ?", pluginID).Update("status", status).Error
+func (d *PluginDAO) UpdateStatus(userID string, pluginID string, status string) error {
+	return database.DB.Model(&models.Plugin{}).Where("user_id = ? AND plugin_id = ?", strings.TrimSpace(userID), pluginID).Update("status", status).Error
 }
 
 // UpdateLastSyncAt 更新插件最近同步时间。
-func (d *PluginDAO) UpdateLastSyncAt(pluginID string, syncedAt time.Time) error {
-	return database.DB.Model(&models.Plugin{}).Where("plugin_id = ?", pluginID).Update("last_sync_at", &syncedAt).Error
+func (d *PluginDAO) UpdateLastSyncAt(userID string, pluginID string, syncedAt time.Time) error {
+	return database.DB.Model(&models.Plugin{}).Where("user_id = ? AND plugin_id = ?", strings.TrimSpace(userID), pluginID).Update("last_sync_at", &syncedAt).Error
 }
 
-func (d *PluginDAO) ListEnabled() ([]models.Plugin, error) {
+func (d *PluginDAO) ListEnabled(userID string) ([]models.Plugin, error) {
 	var plugins []models.Plugin
 	if err := database.DB.
-		Where("status = ?", "enabled").
+		Where("user_id = ? AND status = ?", strings.TrimSpace(userID), "enabled").
 		Order("updated_at DESC").
 		Find(&plugins).Error; err != nil {
 		return nil, err
@@ -163,9 +197,10 @@ func (d *PluginDAO) ListEnabled() ([]models.Plugin, error) {
 }
 
 // ListAll 返回全部插件记录。
-func (d *PluginDAO) ListAll() ([]models.Plugin, error) {
+func (d *PluginDAO) ListAll(userID string) ([]models.Plugin, error) {
 	var plugins []models.Plugin
 	if err := database.DB.
+		Where("user_id = ?", strings.TrimSpace(userID)).
 		Order("updated_at DESC").
 		Find(&plugins).Error; err != nil {
 		return nil, err
@@ -173,14 +208,14 @@ func (d *PluginDAO) ListAll() ([]models.Plugin, error) {
 	return plugins, nil
 }
 
-func (d *PluginDAO) ListByIDsAndRuntimeStatus(pluginIDs []string, runtimeType, status string) ([]models.Plugin, error) {
+func (d *PluginDAO) ListByIDsAndRuntimeStatus(userID string, pluginIDs []string, runtimeType, status string) ([]models.Plugin, error) {
 	if len(pluginIDs) == 0 {
 		return nil, nil
 	}
 
 	var plugins []models.Plugin
 	if err := database.DB.
-		Where("plugin_id IN ? AND runtime_type = ? AND status = ?", pluginIDs, runtimeType, status).
+		Where("user_id = ? AND plugin_id IN ? AND runtime_type = ? AND status = ?", strings.TrimSpace(userID), pluginIDs, runtimeType, status).
 		Find(&plugins).Error; err != nil {
 		return nil, err
 	}
@@ -188,7 +223,22 @@ func (d *PluginDAO) ListByIDsAndRuntimeStatus(pluginIDs []string, runtimeType, s
 }
 
 // ListByRuntimeStatus 返回指定运行时和状态的全部插件。
-func (d *PluginDAO) ListByRuntimeStatus(runtimeType, status string) ([]models.Plugin, error) {
+func (d *PluginDAO) ListByRuntimeStatus(userID, runtimeType, status string) ([]models.Plugin, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+
+	var plugins []models.Plugin
+	if err := database.DB.
+		Where("user_id = ? AND runtime_type = ? AND status = ?", strings.TrimSpace(userID), runtimeType, status).
+		Find(&plugins).Error; err != nil {
+		return nil, err
+	}
+	return plugins, nil
+}
+
+// ListByRuntimeStatusAll 返回全部用户下指定运行时和状态的插件。
+func (d *PluginDAO) ListByRuntimeStatusAll(runtimeType, status string) ([]models.Plugin, error) {
 	if database.DB == nil {
 		return nil, nil
 	}
@@ -202,10 +252,10 @@ func (d *PluginDAO) ListByRuntimeStatus(runtimeType, status string) ([]models.Pl
 	return plugins, nil
 }
 
-func (d *PluginDAO) ListRuntimeTools(runtimeType, status string, toolIDs []string) ([]models.Tool, error) {
+func (d *PluginDAO) ListRuntimeTools(userID, runtimeType, status string, toolIDs []string) ([]models.Tool, error) {
 	query := database.DB.Model(&models.Tool{}).
-		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
-		Where("plugin.runtime_type = ? AND plugin.status = ? AND tool.enabled = ?", runtimeType, status, true)
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id AND plugin.user_id = tool.user_id").
+		Where("tool.user_id = ? AND plugin.runtime_type = ? AND plugin.status = ? AND tool.enabled = ?", strings.TrimSpace(userID), runtimeType, status, true)
 	if len(toolIDs) > 0 {
 		query = query.Where("tool.tool_id IN ?", toolIDs)
 	}
@@ -218,7 +268,7 @@ func (d *PluginDAO) ListRuntimeTools(runtimeType, status string, toolIDs []strin
 }
 
 // ListEnabledRuntimeToolRecords 根据 tool_id 列表过滤可运行工具并返回运行时类型。
-func (d *PluginDAO) ListEnabledRuntimeToolRecords(toolIDs []string, runtimeTypes []string) ([]EnabledRuntimeToolRecord, error) {
+func (d *PluginDAO) ListEnabledRuntimeToolRecords(userID string, toolIDs []string, runtimeTypes []string) ([]EnabledRuntimeToolRecord, error) {
 	toolIDs = util.NormalizeUniqueStringList(toolIDs)
 	if len(toolIDs) == 0 {
 		return []EnabledRuntimeToolRecord{}, nil
@@ -227,8 +277,8 @@ func (d *PluginDAO) ListEnabledRuntimeToolRecords(toolIDs []string, runtimeTypes
 	query := database.DB.
 		Table("tool").
 		Select("tool.tool_id AS tool_id, plugin.runtime_type AS runtime_type").
-		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
-		Where("tool.tool_id IN ? AND tool.enabled = ? AND plugin.status = ?", toolIDs, true, "enabled")
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id AND plugin.user_id = tool.user_id").
+		Where("tool.user_id = ? AND tool.tool_id IN ? AND tool.enabled = ? AND plugin.status = ?", strings.TrimSpace(userID), toolIDs, true, "enabled")
 	if len(runtimeTypes) > 0 {
 		query = query.Where("plugin.runtime_type IN ?", runtimeTypes)
 	}
@@ -241,7 +291,7 @@ func (d *PluginDAO) ListEnabledRuntimeToolRecords(toolIDs []string, runtimeTypes
 }
 
 // ListEnabledToolsByIDs 返回指定 tool_id 对应的启用态工具定义，用于运行时可见性映射。
-func (d *PluginDAO) ListEnabledToolsByIDs(toolIDs []string) ([]models.Tool, error) {
+func (d *PluginDAO) ListEnabledToolsByIDs(userID string, toolIDs []string) ([]models.Tool, error) {
 	toolIDs = util.NormalizeUniqueStringList(toolIDs)
 	if len(toolIDs) == 0 {
 		return []models.Tool{}, nil
@@ -251,15 +301,15 @@ func (d *PluginDAO) ListEnabledToolsByIDs(toolIDs []string) ([]models.Tool, erro
 	if err := database.DB.
 		Table("tool").
 		Select("tool.*").
-		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id").
-		Where("tool.tool_id IN ? AND tool.enabled = ? AND plugin.status = ?", toolIDs, true, "enabled").
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id AND plugin.user_id = tool.user_id").
+		Where("tool.user_id = ? AND tool.tool_id IN ? AND tool.enabled = ? AND plugin.status = ?", strings.TrimSpace(userID), toolIDs, true, "enabled").
 		Find(&tools).Error; err != nil {
 		return nil, err
 	}
 	return tools, nil
 }
 
-func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, error) {
+func (d *PluginDAO) LoadToolMap(userID string, pluginIDs []string) (map[string][]models.Tool, error) {
 	result := make(map[string][]models.Tool, len(pluginIDs))
 	if len(pluginIDs) == 0 {
 		return result, nil
@@ -267,7 +317,7 @@ func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, e
 
 	var tools []models.Tool
 	if err := database.DB.
-		Where("plugin_id IN ?", pluginIDs).
+		Where("user_id = ? AND plugin_id IN ?", strings.TrimSpace(userID), pluginIDs).
 		Order("updated_at DESC").
 		Find(&tools).Error; err != nil {
 		return nil, err
@@ -279,33 +329,37 @@ func (d *PluginDAO) LoadToolMap(pluginIDs []string) (map[string][]models.Tool, e
 	return result, nil
 }
 
-func (d *PluginDAO) ListToolsByPluginID(pluginID string) ([]models.Tool, error) {
+func (d *PluginDAO) ListToolsByUserIDAndPluginID(userID string, pluginID string) ([]models.Tool, error) {
 	var tools []models.Tool
-	if err := database.DB.Where("plugin_id = ?", pluginID).Find(&tools).Error; err != nil {
+	if err := database.DB.Where("user_id = ? AND plugin_id = ?", strings.TrimSpace(userID), pluginID).Find(&tools).Error; err != nil {
 		return nil, err
 	}
 	return tools, nil
 }
 
-func (d *PluginDAO) ReplaceToolsAndUpdateSyncTime(pluginID string, syncedTools []models.Tool, syncedAt time.Time) error {
-	existingTools, err := d.ListToolsByPluginID(pluginID)
+func (d *PluginDAO) ReplaceToolsAndUpdateSyncTime(userID string, pluginID string, syncedTools []models.Tool, syncedAt time.Time) error {
+	userID = strings.TrimSpace(userID)
+	existingTools, err := d.ListToolsByUserIDAndPluginID(userID, pluginID)
 	if err != nil {
 		return err
+	}
+	for i := range syncedTools {
+		syncedTools[i].UserID = userID
 	}
 
 	return database.DB.Transaction(func(tx *gorm.DB) error {
 		toolsToUpdate, toolsToCreate, removedToolIDs := diffPluginTools(existingTools, syncedTools)
 		if len(removedToolIDs) > 0 {
-			if err := tx.Where("tool_id IN ?", removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
+			if err := tx.Where("user_id = ? AND tool_id IN ?", userID, removedToolIDs).Delete(&models.PluginDefault{}).Error; err != nil {
 				return err
 			}
-			if err := tx.Unscoped().Where("tool_id IN ?", removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
+			if err := tx.Unscoped().Where("user_id = ? AND tool_id IN ?", userID, removedToolIDs).Delete(&models.Tool{}).Error; err != nil {
 				return err
 			}
 		}
 		for _, tool := range toolsToUpdate {
 			if err := tx.Model(&models.Tool{}).
-				Where("tool_id = ? AND plugin_id = ?", tool.ToolID, pluginID).
+				Where("user_id = ? AND tool_id = ? AND plugin_id = ?", userID, tool.ToolID, pluginID).
 				Updates(buildToolUpdateMap(tool)).Error; err != nil {
 				return err
 			}
@@ -316,12 +370,15 @@ func (d *PluginDAO) ReplaceToolsAndUpdateSyncTime(pluginID string, syncedTools [
 			}
 		}
 		return tx.Model(&models.Plugin{}).
-			Where("plugin_id = ?", pluginID).
+			Where("user_id = ? AND plugin_id = ?", userID, pluginID).
 			Update("last_sync_at", &syncedAt).Error
 	})
 }
 
 func applyPluginFilters(db *gorm.DB, filter PluginListFilter) *gorm.DB {
+	if userID := strings.TrimSpace(filter.UserID); userID != "" {
+		db = db.Where("user_id = ?", userID)
+	}
 	if filter.Source != "" {
 		db = db.Where("source = ?", filter.Source)
 	}

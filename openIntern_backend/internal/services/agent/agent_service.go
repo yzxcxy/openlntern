@@ -19,12 +19,12 @@ type RuntimeModelSelection struct {
 }
 
 type MessageStore interface {
-	ListThreadMessages(threadID string) ([]models.Message, error)
+	ListThreadMessages(userID, threadID string) ([]models.Message, error)
 	CreateMessages(messages []models.Message) error
 }
 
 type MemorySyncStateStore interface {
-	ScheduleThreadSync(threadID, runID string) error
+	ScheduleThreadSync(userID, threadID, runID string) error
 }
 
 type MemoryRetriever interface {
@@ -32,18 +32,18 @@ type MemoryRetriever interface {
 }
 
 type ThreadContextSnapshotStore interface {
-	GetLatestByThreadID(threadID string) (*models.ThreadContextSnapshot, error)
+	GetLatestByThreadID(userID, threadID string) (*models.ThreadContextSnapshot, error)
 	Create(item *models.ThreadContextSnapshot) error
 }
 
 type ThreadStore interface {
-	GetThreadByThreadID(threadID string) (*models.Thread, error)
-	UpdateThreadTitle(threadID, title string) error
-	TouchThread(threadID string) error
+	GetThreadByThreadID(userID, threadID string) (*models.Thread, error)
+	UpdateThreadTitle(userID, threadID, title string) error
+	TouchThread(userID, threadID string) error
 }
 
 type ModelCatalogResolver interface {
-	ResolveRuntimeSelection(modelID, providerID string) (*RuntimeModelSelection, error)
+	ResolveRuntimeSelection(userID, modelID, providerID string) (*RuntimeModelSelection, error)
 }
 
 type ModelProviderKeyResolver interface {

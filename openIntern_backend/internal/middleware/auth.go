@@ -30,13 +30,12 @@ func AuthRequired() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		refreshedToken, expiresAt, err := accountsvc.GenerateToken(claims.UserID, claims.Role)
+		refreshedToken, expiresAt, err := accountsvc.GenerateToken(claims.UserID)
 		if err == nil {
 			c.Header("X-Access-Token", refreshedToken)
 			c.Header("X-Token-Expires", strconv.FormatInt(expiresAt, 10))
 		}
 		c.Set("user_id", claims.UserID)
-		c.Set("role", claims.Role)
 		c.Next()
 	}
 }

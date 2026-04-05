@@ -97,6 +97,26 @@ end
 return 0
 `
 
+func encodePluginQueueMember(userID string, pluginID string) string {
+	userID = strings.TrimSpace(userID)
+	pluginID = strings.TrimSpace(pluginID)
+	if userID == "" || pluginID == "" {
+		return ""
+	}
+	return userID + ":" + pluginID
+}
+
+func decodePluginQueueMember(value string) (string, string, bool) {
+	value = strings.TrimSpace(value)
+	parts := strings.SplitN(value, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	userID := strings.TrimSpace(parts[0])
+	pluginID := strings.TrimSpace(parts[1])
+	return userID, pluginID, userID != "" && pluginID != ""
+}
+
 func initPluginMCPSync(cfg config.PluginConfig) {
 	mcpSyncDelay = durationFromSeconds(cfg.MCPSyncDelaySeconds, defaultMCPSyncDelay)
 	mcpSyncPollInterval = durationFromSeconds(cfg.MCPSyncPollSeconds, defaultMCPSyncPollInterval)
@@ -121,9 +141,9 @@ func durationFromSeconds(seconds int, fallback time.Duration) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func (s *PluginService) queueMCPPluginSync(pluginID string, delay time.Duration) error {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+func (s *PluginService) queueMCPPluginSync(userID string, pluginID string, delay time.Duration) error {
+	member := encodePluginQueueMember(userID, pluginID)
+	if member == "" {
 		return nil
 	}
 	if delay < 0 {
@@ -135,12 +155,12 @@ func (s *PluginService) queueMCPPluginSync(pluginID string, delay time.Duration)
 		return errors.New("mcp sync queue requires redis")
 	}
 
-	return runMCPPluginSyncQueueScript(redisClient, enqueueMCPPluginSyncScript, pluginID, time.Now().Add(delay).UnixMilli())
+	return runMCPPluginSyncQueueScript(redisClient, enqueueMCPPluginSyncScript, member, time.Now().Add(delay).UnixMilli())
 }
 
-func (s *PluginService) seedMCPPluginSync(pluginID string, delay time.Duration) error {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+func (s *PluginService) seedMCPPluginSync(userID string, pluginID string, delay time.Duration) error {
+	member := encodePluginQueueMember(userID, pluginID)
+	if member == "" {
 		return nil
 	}
 	if delay < 0 {
@@ -152,12 +172,12 @@ func (s *PluginService) seedMCPPluginSync(pluginID string, delay time.Duration) 
 		return errors.New("mcp sync queue requires redis")
 	}
 
-	return runMCPPluginSyncQueueScript(redisClient, seedMCPPluginSyncScript, pluginID, time.Now().Add(delay).UnixMilli())
+	return runMCPPluginSyncQueueScript(redisClient, seedMCPPluginSyncScript, member, time.Now().Add(delay).UnixMilli())
 }
 
-func (s *PluginService) clearMCPPluginSync(pluginID string) {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+func (s *PluginService) clearMCPPluginSync(userID string, pluginID string) {
+	member := encodePluginQueueMember(userID, pluginID)
+	if member == "" {
 		return
 	}
 	redisClient := database.GetRedis()
@@ -166,12 +186,12 @@ func (s *PluginService) clearMCPPluginSync(pluginID string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := redisClient.ZRem(ctx, mcpSyncQueueRedisKey, pluginID).Err(); err != nil {
-		log.Printf("clear mcp sync queue failed plugin_id=%s err=%v", pluginID, err)
+	if err := redisClient.ZRem(ctx, mcpSyncQueueRedisKey, member).Err(); err != nil {
+		log.Printf("clear mcp sync queue failed user_id=%s plugin_id=%s err=%v", userID, pluginID, err)
 	}
 }
 
-func runMCPPluginSyncQueueScript(redisClient *redis.Client, script string, pluginID string, runAt int64) error {
+func runMCPPluginSyncQueueScript(redisClient *redis.Client, script string, member string, runAt int64) error {
 	if redisClient == nil {
 		return errors.New("mcp sync queue requires redis")
 	}
@@ -183,14 +203,14 @@ func runMCPPluginSyncQueueScript(redisClient *redis.Client, script string, plugi
 		ctx,
 		script,
 		[]string{mcpSyncQueueRedisKey},
-		pluginID,
+		member,
 		strconv.FormatInt(runAt, 10),
 	).Err()
 }
 
-func (s *PluginService) setMCPPluginSyncRunAt(pluginID string, runAt int64) error {
-	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" {
+func (s *PluginService) setMCPPluginSyncRunAt(userID string, pluginID string, runAt int64) error {
+	member := encodePluginQueueMember(userID, pluginID)
+	if member == "" {
 		return nil
 	}
 
@@ -204,19 +224,19 @@ func (s *PluginService) setMCPPluginSyncRunAt(pluginID string, runAt int64) erro
 
 	return redisClient.ZAdd(ctx, mcpSyncQueueRedisKey, redis.Z{
 		Score:  float64(runAt),
-		Member: pluginID,
+		Member: member,
 	}).Err()
 }
 
-func (s *PluginService) markMCPPluginSyncInProgress(pluginID string) (int64, error) {
+func (s *PluginService) markMCPPluginSyncInProgress(userID string, pluginID string) (int64, error) {
 	runAt := time.Now().Add(currentMCPSyncLockTTL()).UnixMilli()
-	return runAt, s.setMCPPluginSyncRunAt(pluginID, runAt)
+	return runAt, s.setMCPPluginSyncRunAt(userID, pluginID, runAt)
 }
 
-func (s *PluginService) finalizeMCPPluginSync(pluginID string, processingRunAt int64, failed bool) error {
-	delay, ok := s.nextMCPSyncDelay(pluginID, failed)
+func (s *PluginService) finalizeMCPPluginSync(userID string, pluginID string, processingRunAt int64, failed bool) error {
+	delay, ok := s.nextMCPSyncDelay(userID, pluginID, failed)
 	if !ok {
-		s.clearMCPPluginSync(pluginID)
+		s.clearMCPPluginSync(userID, pluginID)
 		return nil
 	}
 
@@ -229,11 +249,12 @@ func (s *PluginService) finalizeMCPPluginSync(pluginID string, processingRunAt i
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	member := encodePluginQueueMember(userID, pluginID)
 	return redisClient.Eval(
 		ctx,
 		finalizeMCPPluginSyncScript,
 		[]string{mcpSyncQueueRedisKey},
-		pluginID,
+		member,
 		strconv.FormatInt(processingRunAt, 10),
 		strconv.FormatInt(nextRunAt, 10),
 	).Err()
@@ -274,8 +295,8 @@ func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int
 		return err
 	}
 
-	for _, pluginID := range ids {
-		s.triggerScheduledMCPSync(pluginID)
+	for _, member := range ids {
+		s.triggerScheduledMCPSync(member)
 	}
 
 	return nil
@@ -284,24 +305,28 @@ func (s *PluginService) processQueuedMCPSyncTasks(ctx context.Context, limit int
 // scheduleAllEnabledMCPSyncs 在进程启动时将全部启用中的 MCP 插件放入延时队列，
 // 确保队列具备完整初始集，后续由 worker 在成功/失败后自行续期。
 func (s *PluginService) scheduleAllEnabledMCPSyncs() error {
-	plugins, err := dao.Plugin.ListByRuntimeStatus(pluginRuntimeMCP, pluginStatusEnabled)
+	plugins, err := dao.Plugin.ListByRuntimeStatusAll(pluginRuntimeMCP, pluginStatusEnabled)
 	if err != nil {
 		return err
 	}
 
 	for _, plugin := range plugins {
-		if err := s.seedMCPPluginSync(plugin.PluginID, 0); err != nil {
-			log.Printf("enqueue initial mcp sync failed plugin_id=%s err=%v", plugin.PluginID, err)
+		if err := s.seedMCPPluginSync(plugin.UserID, plugin.PluginID, 0); err != nil {
+			log.Printf("enqueue initial mcp sync failed user_id=%s plugin_id=%s err=%v", plugin.UserID, plugin.PluginID, err)
 		}
 	}
 
 	return nil
 }
 
-func (s *PluginService) triggerScheduledMCPSync(pluginID string) {
-	lock, acquired, err := tryAcquireMCPPluginSyncLock(pluginID)
+func (s *PluginService) triggerScheduledMCPSync(member string) {
+	userID, pluginID, ok := decodePluginQueueMember(member)
+	if !ok {
+		return
+	}
+	lock, acquired, err := tryAcquireMCPPluginSyncLock(userID, pluginID)
 	if err != nil {
-		log.Printf("acquire mcp sync lock failed plugin_id=%s err=%v", pluginID, err)
+		log.Printf("acquire mcp sync lock failed user_id=%s plugin_id=%s err=%v", userID, pluginID, err)
 		return
 	}
 	if !acquired {
@@ -309,27 +334,27 @@ func (s *PluginService) triggerScheduledMCPSync(pluginID string) {
 	}
 	defer func() {
 		if releaseErr := lock.Release(); releaseErr != nil {
-			log.Printf("release mcp sync lock failed plugin_id=%s err=%v", pluginID, releaseErr)
+			log.Printf("release mcp sync lock failed user_id=%s plugin_id=%s err=%v", userID, pluginID, releaseErr)
 		}
 	}()
 
-	plugin, err := s.getPluginRecord(pluginID)
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		if errors.Is(err, dao.ErrPluginNotFound) {
-			s.clearMCPPluginSync(pluginID)
+			s.clearMCPPluginSync(userID, pluginID)
 			return
 		}
-		log.Printf("load mcp plugin failed plugin_id=%s err=%v", pluginID, err)
+		log.Printf("load mcp plugin failed user_id=%s plugin_id=%s err=%v", userID, pluginID, err)
 		return
 	}
 	if plugin.RuntimeType != pluginRuntimeMCP || plugin.Status != pluginStatusEnabled {
-		s.clearMCPPluginSync(pluginID)
+		s.clearMCPPluginSync(userID, pluginID)
 		return
 	}
 
-	processingRunAt, err := s.markMCPPluginSyncInProgress(pluginID)
+	processingRunAt, err := s.markMCPPluginSyncInProgress(userID, pluginID)
 	if err != nil {
-		log.Printf("mark mcp sync in progress failed plugin_id=%s err=%v", pluginID, err)
+		log.Printf("mark mcp sync in progress failed user_id=%s plugin_id=%s err=%v", userID, pluginID, err)
 		return
 	}
 
@@ -338,15 +363,15 @@ func (s *PluginService) triggerScheduledMCPSync(pluginID string) {
 
 	syncErr := s.syncMCPPluginRecord(syncCtx, plugin, true)
 	if syncErr != nil {
-		log.Printf("scheduled mcp sync failed plugin_id=%s err=%v", pluginID, syncErr)
+		log.Printf("scheduled mcp sync failed user_id=%s plugin_id=%s err=%v", userID, pluginID, syncErr)
 	}
-	if finalizeErr := s.finalizeMCPPluginSync(pluginID, processingRunAt, syncErr != nil); finalizeErr != nil {
-		log.Printf("finalize mcp sync schedule failed plugin_id=%s err=%v", pluginID, finalizeErr)
+	if finalizeErr := s.finalizeMCPPluginSync(userID, pluginID, processingRunAt, syncErr != nil); finalizeErr != nil {
+		log.Printf("finalize mcp sync schedule failed user_id=%s plugin_id=%s err=%v", userID, pluginID, finalizeErr)
 	}
 }
 
-func (s *PluginService) nextMCPSyncDelay(pluginID string, failed bool) (time.Duration, bool) {
-	plugin, err := s.getPluginRecord(pluginID)
+func (s *PluginService) nextMCPSyncDelay(userID string, pluginID string, failed bool) (time.Duration, bool) {
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return 0, false
 	}
@@ -368,8 +393,8 @@ func (s *PluginService) nextMCPSyncDelay(pluginID string, failed bool) (time.Dur
 	return mcpSyncRefreshWindow, true
 }
 
-func (s *PluginService) syncMCPPluginNow(ctx context.Context, pluginID string, allowDisabled bool) error {
-	lock, acquired, err := tryAcquireMCPPluginSyncLock(pluginID)
+func (s *PluginService) syncMCPPluginNow(ctx context.Context, userID string, pluginID string, allowDisabled bool) error {
+	lock, acquired, err := tryAcquireMCPPluginSyncLock(userID, pluginID)
 	if err != nil {
 		return err
 	}
@@ -378,11 +403,11 @@ func (s *PluginService) syncMCPPluginNow(ctx context.Context, pluginID string, a
 	}
 	defer func() {
 		if releaseErr := lock.Release(); releaseErr != nil {
-			log.Printf("release mcp sync lock failed plugin_id=%s err=%v", pluginID, releaseErr)
+			log.Printf("release mcp sync lock failed user_id=%s plugin_id=%s err=%v", userID, pluginID, releaseErr)
 		}
 	}()
 
-	return s.syncMCPPluginNowLocked(ctx, pluginID, allowDisabled)
+	return s.syncMCPPluginNowLocked(ctx, userID, pluginID, allowDisabled)
 }
 
 func buildMCPSyncContext(ctx context.Context) (context.Context, func()) {
@@ -397,8 +422,8 @@ func buildMCPSyncContext(ctx context.Context) (context.Context, func()) {
 	return context.WithTimeout(syncCtx, mcpSyncTimeout)
 }
 
-func (s *PluginService) syncMCPPluginNowLocked(ctx context.Context, pluginID string, allowDisabled bool) error {
-	plugin, err := s.getPluginRecord(pluginID)
+func (s *PluginService) syncMCPPluginNowLocked(ctx context.Context, userID string, pluginID string, allowDisabled bool) error {
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return nil
@@ -419,7 +444,7 @@ func (s *PluginService) syncMCPPluginNowLocked(ctx context.Context, pluginID str
 }
 
 // SyncMCPPluginToOpenViking 立即拉取 MCP 工具并同步到 MySQL/OpenViking，供迁移脚本使用。
-func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, pluginID string) error {
+func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, userID string, pluginID string) error {
 	pluginID = strings.TrimSpace(pluginID)
 	if pluginID == "" {
 		return errors.New("plugin_id is required")
@@ -428,7 +453,7 @@ func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, pluginID 
 		ctx = context.Background()
 	}
 
-	plugin, err := s.getPluginRecord(pluginID)
+	plugin, err := s.getPluginRecord(userID, pluginID)
 	if err != nil {
 		return err
 	}
@@ -436,7 +461,7 @@ func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, pluginID 
 		return errors.New("only mcp plugins support sync")
 	}
 
-	lock, acquired, err := tryAcquireMCPPluginSyncLock(pluginID)
+	lock, acquired, err := tryAcquireMCPPluginSyncLock(userID, pluginID)
 	if err != nil {
 		return err
 	}
@@ -445,7 +470,7 @@ func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, pluginID 
 	}
 	defer func() {
 		if releaseErr := lock.Release(); releaseErr != nil {
-			log.Printf("release mcp sync lock failed plugin_id=%s err=%v", pluginID, releaseErr)
+			log.Printf("release mcp sync lock failed user_id=%s plugin_id=%s err=%v", userID, pluginID, releaseErr)
 		}
 	}()
 
@@ -466,25 +491,25 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 		return err
 	}
 
-	existingTools, err := dao.Plugin.ListToolsByPluginID(plugin.PluginID)
+	existingTools, err := dao.Plugin.ListToolsByUserIDAndPluginID(plugin.UserID, plugin.PluginID)
 	if err != nil {
 		return err
 	}
 
-	syncedTools, err := buildSyncedMCPToolRecords(plugin.PluginID, remoteTools, existingTools)
+	syncedTools, err := buildSyncedMCPToolRecords(plugin.UserID, plugin.PluginID, remoteTools, existingTools)
 	if err != nil {
 		return err
 	}
 	syncedAt := time.Now()
 
 	if !hasMCPToolRecordChanges(existingTools, syncedTools) {
-		if err := dao.Plugin.UpdateLastSyncAt(plugin.PluginID, syncedAt); err != nil {
+		if err := dao.Plugin.UpdateLastSyncAt(plugin.UserID, plugin.PluginID, syncedAt); err != nil {
 			return err
 		}
 		if enqueueOpenVikingSync {
 			return nil
 		}
-		return s.SyncPluginToolsToOpenViking(ctx, plugin.PluginID)
+		return s.SyncPluginToolsToOpenViking(ctx, plugin.UserID, plugin.PluginID)
 	}
 
 	if enqueueOpenVikingSync {
@@ -493,17 +518,17 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 		}
 	}
 
-	if err := dao.Plugin.ReplaceToolsAndUpdateSyncTime(plugin.PluginID, syncedTools, syncedAt); err != nil {
+	if err := dao.Plugin.ReplaceToolsAndUpdateSyncTime(plugin.UserID, plugin.PluginID, syncedTools, syncedAt); err != nil {
 		return err
 	}
 
 	if enqueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(plugin.PluginID, 0); err != nil {
+		if err := s.queueOpenVikingPluginReconcile(plugin.UserID, plugin.PluginID, 0); err != nil {
 			return err
 		}
 		return nil
 	}
-	return s.SyncPluginToolsToOpenViking(ctx, plugin.PluginID)
+	return s.SyncPluginToolsToOpenViking(ctx, plugin.UserID, plugin.PluginID)
 }
 
 type mcpToolComparable struct {
@@ -663,7 +688,7 @@ func shouldTryAlternateMCPProtocol(configured string, attempted string, err erro
 	}
 }
 
-func buildSyncedMCPToolRecords(pluginID string, remoteTools []mcp.Tool, existingTools []models.Tool) ([]models.Tool, error) {
+func buildSyncedMCPToolRecords(userID string, pluginID string, remoteTools []mcp.Tool, existingTools []models.Tool) ([]models.Tool, error) {
 	byName := make(map[string]models.Tool, len(existingTools))
 	for _, tool := range existingTools {
 		byName[tool.ToolName] = tool
@@ -711,6 +736,7 @@ func buildSyncedMCPToolRecords(pluginID string, remoteTools []mcp.Tool, existing
 		}
 
 		synced = append(synced, models.Tool{
+			UserID:           userID,
 			ToolID:           toolID,
 			PluginID:         pluginID,
 			ToolName:         toolName,
@@ -759,7 +785,11 @@ func (s *PluginService) BuildAllRuntimeMCPTools(ctx context.Context) ([]einoTool
 }
 
 func (s *PluginService) buildRuntimeMCPTools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, func(), error) {
-	toolRows, err := dao.Plugin.ListRuntimeTools(pluginRuntimeMCP, pluginStatusEnabled, toolIDs)
+	userID := userIDFromContext(ctx)
+	if userID == "" {
+		return nil, nil, nil
+	}
+	toolRows, err := dao.Plugin.ListRuntimeTools(userID, pluginRuntimeMCP, pluginStatusEnabled, toolIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -780,7 +810,7 @@ func (s *PluginService) buildRuntimeMCPTools(ctx context.Context, toolIDs []stri
 	}
 	sort.Strings(pluginIDList)
 
-	plugins, err := dao.Plugin.ListByIDsAndRuntimeStatus(pluginIDList, pluginRuntimeMCP, pluginStatusEnabled)
+	plugins, err := dao.Plugin.ListByIDsAndRuntimeStatus(userID, pluginIDList, pluginRuntimeMCP, pluginStatusEnabled)
 	if err != nil {
 		return nil, nil, err
 	}

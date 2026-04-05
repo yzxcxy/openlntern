@@ -111,7 +111,7 @@ func (s *Service) compressInputContext(ctx context.Context, input *types.RunAgen
 	if !settings.Enabled || len(input.Messages) == 0 {
 		return input, stats, nil
 	}
-	latestSnapshot := s.loadLatestThreadContextSnapshot(input.ThreadID)
+	latestSnapshot := s.loadLatestThreadContextSnapshot(ctx, input.ThreadID)
 
 	workingMessages, summaryText, currentSnapshot := buildCompressionWorkingSet(input.Messages, latestSnapshot)
 	if currentSnapshot != nil {
@@ -327,7 +327,7 @@ func (s *Service) resolveRuntimeContextWindow(ctx context.Context, runtimeConfig
 	if modelID == "" && providerID == "" {
 		return 0
 	}
-	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(modelID, providerID)
+	selection, err := s.deps.ModelCatalogResolver.ResolveRuntimeSelection(ownerIDFromContext(ctx), modelID, providerID)
 	if err != nil || selection == nil || selection.Model == nil {
 		return 0
 	}
@@ -466,15 +466,19 @@ func prependSystemSummaryMessage(messages []types.Message, summaryMessage types.
 }
 
 // loadLatestThreadContextSnapshot reads latest snapshot and hides store errors from request path.
-func (s *Service) loadLatestThreadContextSnapshot(threadID string) *models.ThreadContextSnapshot {
+func (s *Service) loadLatestThreadContextSnapshot(ctx context.Context, threadID string) *models.ThreadContextSnapshot {
 	if s == nil || s.deps.ThreadContextSnapshotStore == nil {
+		return nil
+	}
+	userID := ownerIDFromContext(ctx)
+	if userID == "" {
 		return nil
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil
 	}
-	item, err := s.deps.ThreadContextSnapshotStore.GetLatestByThreadID(threadID)
+	item, err := s.deps.ThreadContextSnapshotStore.GetLatestByThreadID(userID, threadID)
 	if err != nil {
 		return nil
 	}

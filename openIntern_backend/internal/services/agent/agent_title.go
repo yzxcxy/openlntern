@@ -11,11 +11,14 @@ import (
 )
 
 // ensureThreadTitle 在线程无标题时基于最近用户输入生成并写回标题。
-func ensureThreadTitle(ctx context.Context, threadStore ThreadStore, threadID string, messages []types.Message, titleModel einoModel.ToolCallingChatModel) error {
+func ensureThreadTitle(ctx context.Context, threadStore ThreadStore, userID, threadID string, messages []types.Message, titleModel einoModel.ToolCallingChatModel) error {
+	if strings.TrimSpace(userID) == "" {
+		return nil
+	}
 	if threadID == "" {
 		return nil
 	}
-	thread, err := threadStore.GetThreadByThreadID(threadID)
+	thread, err := threadStore.GetThreadByThreadID(userID, threadID)
 	if err != nil || thread == nil {
 		return err
 	}
@@ -34,7 +37,7 @@ func ensureThreadTitle(ctx context.Context, threadStore ThreadStore, threadID st
 	if title == "" {
 		return nil
 	}
-	return threadStore.UpdateThreadTitle(thread.ThreadID, title)
+	return threadStore.UpdateThreadTitle(userID, thread.ThreadID, title)
 }
 
 // extractTitleSource 提取可用于生成标题的最近一条用户文本内容。

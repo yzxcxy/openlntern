@@ -12,7 +12,6 @@ var authExpire time.Duration
 
 type TokenClaims struct {
 	UserID string `json:"user_id"`
-	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -24,7 +23,7 @@ func InitAuth(secret string, expireMinutes int) {
 	authExpire = time.Duration(expireMinutes) * time.Minute
 }
 
-func GenerateToken(userID, role string) (string, int64, error) {
+func GenerateToken(userID string) (string, int64, error) {
 	if authSecret == "" {
 		return "", 0, errors.New("auth secret not configured")
 	}
@@ -32,7 +31,6 @@ func GenerateToken(userID, role string) (string, int64, error) {
 	expiresAt := now.Add(authExpire)
 	claims := TokenClaims{
 		UserID: userID,
-		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),

@@ -1,0 +1,69 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: openintern-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: open_intern
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - openintern_mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4
+    container_name: openintern-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - openintern_redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
+    container_name: openintern-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - openintern_minio_data:/data
+    command: server /data --console-address ":9001"
+
+  openviking:
+    image: ghcr.io/volcengine/openviking:latest
+    container_name: openintern-openviking
+    restart: unless-stopped
+    ports:
+      - "1933:1933"
+      - "8020:8020"
+    volumes:
+      - ./openIntern_backend/ov.conf:/app/ov.conf:ro
+      - openintern_openviking_workspace:/Users/fqc/project/OpenViking
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:1933/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  openintern_mysql_data:
+  openintern_redis_data:
+  openintern_minio_data:
+  openintern_openviking_workspace:

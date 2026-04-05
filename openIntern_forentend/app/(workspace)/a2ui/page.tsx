@@ -41,7 +41,6 @@ type UserInfo = {
   user_id?: string | number;
   username?: string;
   email?: string;
-  role?: string;
 };
 
 export default function A2uiPage() {
