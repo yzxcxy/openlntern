@@ -5,6 +5,7 @@
 _eino/
 .codex/
 .claude/
+.worktrees/
 .swp.gemini
 .gemini/
 .mcp.json
