@@ -164,7 +164,6 @@ func InitPlugin(cfg config.PluginConfig) {
 	}
 	builtinPluginDefinitions = definitions
 	initPluginMCPSync(cfg)
-	initPluginOpenVikingSync(cfg)
 }
 
 func GetDefaultPluginIconURL() string {
@@ -198,8 +197,7 @@ func (s *PluginService) Create(userID string, input UpsertPluginInput) (*PluginV
 		return nil, err
 	}
 	shouldQueueMCPSync := plugin.RuntimeType == pluginRuntimeMCP && plugin.Status == pluginStatusEnabled
-	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
-	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
+	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync); err != nil {
 		return nil, err
 	}
 	if err := dao.Plugin.Create(plugin, tools); err != nil {
@@ -207,11 +205,6 @@ func (s *PluginService) Create(userID string, input UpsertPluginInput) (*PluginV
 	}
 	if shouldQueueMCPSync {
 		if err := s.queueMCPPluginSync(plugin.UserID, plugin.PluginID, mcpSyncDelay); err != nil {
-			return nil, err
-		}
-	}
-	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(plugin.UserID, plugin.PluginID, openVikingSyncDelay); err != nil {
 			return nil, err
 		}
 	}
@@ -228,8 +221,7 @@ func (s *PluginService) Update(userID string, pluginID string, input UpsertPlugi
 		return nil, err
 	}
 	shouldQueueMCPSync := plugin.RuntimeType == pluginRuntimeMCP && plugin.Status == pluginStatusEnabled
-	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
-	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
+	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync); err != nil {
 		return nil, err
 	}
 	if err := dao.Plugin.Update(userID, pluginID, plugin, tools); err != nil {
@@ -241,11 +233,6 @@ func (s *PluginService) Update(userID string, pluginID string, input UpsertPlugi
 		}
 	} else {
 		s.clearMCPPluginSync(userID, pluginID)
-	}
-	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(userID, plugin.PluginID, openVikingSyncDelay); err != nil {
-			return nil, err
-		}
 	}
 	return s.GetByPluginID(userID, pluginID)
 }
@@ -309,20 +296,10 @@ func (s *PluginService) Delete(userID string, pluginID string) error {
 	if plugin.Source == pluginSourceBuiltin {
 		return errors.New("builtin plugin is read-only")
 	}
-	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
-	if err := s.ensureSyncQueuesReady(false, shouldQueueOpenVikingSync); err != nil {
-		return err
-	}
 	if err := dao.Plugin.Delete(userID, pluginID); err != nil {
 		return err
 	}
 	s.clearMCPPluginSync(userID, pluginID)
-	s.clearOpenVikingPluginTasks(userID, pluginID)
-	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginCleanup(userID, pluginID, 0); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -339,8 +316,7 @@ func (s *PluginService) SetEnabled(userID string, pluginID string, enabled bool)
 		status = pluginStatusEnabled
 	}
 	shouldQueueMCPSync := plugin.RuntimeType == pluginRuntimeMCP && enabled
-	shouldQueueOpenVikingSync := dao.Plugin.ToolStoreConfigured()
-	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync, shouldQueueOpenVikingSync); err != nil {
+	if err := s.ensureSyncQueuesReady(shouldQueueMCPSync); err != nil {
 		return nil, err
 	}
 	if err := dao.Plugin.UpdateStatus(userID, pluginID, status); err != nil {
@@ -353,11 +329,6 @@ func (s *PluginService) SetEnabled(userID string, pluginID string, enabled bool)
 			}
 		} else {
 			s.clearMCPPluginSync(userID, pluginID)
-		}
-	}
-	if shouldQueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(userID, pluginID, openVikingSyncDelay); err != nil {
-			return nil, err
 		}
 	}
 	return s.GetByPluginID(userID, pluginID)

@@ -13,19 +13,17 @@ import (
 )
 
 const (
-	ToolName             = "tool_search"
-	defaultRequestedTopK = 4
-	maxRequestedTopK     = 8
-	intentParamDesc      = "描述你当前需要的工具能力，例如：查询襄阳实时天气、读取网页内容、搜索 Go 1.26 发布说明。不要直接复制整段用户原话。"
-	keywordsParamDesc    = "补充关键实体词列表，例如城市名、产品名、版本号。只有在 intent 里没有明确覆盖时再传。"
-	topKParamDesc        = "期望加载的工具数量，建议保持较小值，范围 1-8，默认 4。"
+	ToolName                  = "tool_search"
+	defaultRequestedMaxResult = 5
+	maxRequestedMaxResult     = 8
+	queryParamDesc            = "用于查找工具的查询字符串。可使用 select:tool_name 直接选择工具，或输入关键词进行搜索。"
+	maxResultsParamDesc       = "期望返回的工具数量，范围 1-8，默认 5。"
 )
 
-// Input 定义给模型暴露的最小检索参数集合。
+// Input 定义给模型暴露的 Claude Code 风格检索参数集合。
 type Input struct {
-	Intent   string   `json:"intent" jsonschema_description:"描述当前需要的工具能力。"`
-	Keywords []string `json:"keywords,omitempty" jsonschema_description:"补充实体词或关键词。"`
-	TopK     int      `json:"top_k,omitempty" jsonschema_description:"限制希望返回的工具数量，范围 1-8。"`
+	Query      string `json:"query" jsonschema_description:"Query to find deferred tools. Use select:tool_name for direct selection, or keywords to search."`
+	MaxResults int    `json:"max_results,omitempty" jsonschema_description:"Maximum number of results to return, between 1 and 8."`
 }
 
 // Result 仅保留后续可见性控制所需的最小工具名列表。
@@ -46,22 +44,22 @@ func NewTool(_ context.Context) (einoTool.BaseTool, error) {
 
 func buildToolDescription() string {
 	return strings.Join([]string{
-		"搜索插件工具库，并在后续推理中加载最相关的工具。",
-		"当你当前看不到合适工具，但明确需要外部能力时使用。",
-		"intent: " + intentParamDesc,
-		"keywords: " + keywordsParamDesc,
-		"top_k: " + topKParamDesc,
+		"获取当前延迟加载工具中最相关的工具定义，供后续调用。",
+		"当你需要的工具当前不可见时使用。",
+		`支持三种查询形式：select:tool_a,tool_b；普通关键词检索；以及 +required optional 形式的必选词搜索。`,
+		"query: " + queryParamDesc,
+		"max_results: " + maxResultsParamDesc,
 	}, " ")
 }
 
 func runToolSearch(ctx context.Context, input Input) (string, error) {
-	query, err := buildQuery(input)
-	if err != nil {
-		return "", err
+	query := strings.TrimSpace(input.Query)
+	if query == "" {
+		return "", fmt.Errorf("query is required")
 	}
 
 	matches, err := plugin.Plugin.SearchRuntimeTools(ctx, query, plugin.ToolSearchOptions{
-		TopK: normalizeRequestedTopK(input.TopK),
+		TopK: normalizeRequestedMaxResults(input.MaxResults),
 	})
 	if err != nil {
 		return "", err
@@ -86,26 +84,12 @@ func runToolSearch(ctx context.Context, input Input) (string, error) {
 	return string(output), nil
 }
 
-func buildQuery(input Input) (string, error) {
-	intent := strings.TrimSpace(input.Intent)
-	if intent == "" {
-		return "", fmt.Errorf("intent is required")
-	}
-
-	queryParts := []string{intent}
-	keywords := util.NormalizeUniqueStringList(input.Keywords)
-	if len(keywords) > 0 {
-		queryParts = append(queryParts, strings.Join(keywords, " "))
-	}
-	return strings.Join(queryParts, "\n"), nil
-}
-
-func normalizeRequestedTopK(value int) int {
+func normalizeRequestedMaxResults(value int) int {
 	if value <= 0 {
-		return defaultRequestedTopK
+		return defaultRequestedMaxResult
 	}
-	if value > maxRequestedTopK {
-		return maxRequestedTopK
+	if value > maxRequestedMaxResult {
+		return maxRequestedMaxResult
 	}
 	return value
 }

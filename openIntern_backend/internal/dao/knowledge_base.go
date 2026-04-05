@@ -92,7 +92,7 @@ func (d *KnowledgeBaseDAO) List(ctx context.Context) ([]KnowledgeBaseItem, error
 	return items, nil
 }
 
-// isReservedTopLevelDir 判断是否是系统保留目录（例如工具索引目录）。
+// isReservedTopLevelDir 判断是否是系统保留目录。
 func (d *KnowledgeBaseDAO) isReservedTopLevelDir(name string) bool {
 	name = strings.Trim(strings.TrimSpace(name), "/")
 	if name == "" {
@@ -108,25 +108,7 @@ func (d *KnowledgeBaseDAO) isReservedTopLevelDir(name string) bool {
 
 // reservedTopLevelDirs 返回资源根目录下需要在知识库列表中忽略的目录名。
 func (d *KnowledgeBaseDAO) reservedTopLevelDirs() map[string]struct{} {
-	result := make(map[string]struct{})
-	root := strings.TrimRight(strings.TrimSpace(d.RootURI()), "/") + "/"
-	toolRoot := normalizeToolStoreURI(Plugin.ToolStoreRootURI())
-	if toolRoot == "" || !strings.HasPrefix(toolRoot, root) {
-		return result
-	}
-	relative := strings.Trim(strings.TrimPrefix(toolRoot, root), "/")
-	if relative == "" {
-		return result
-	}
-	topLevel := relative
-	if idx := strings.Index(topLevel, "/"); idx >= 0 {
-		topLevel = topLevel[:idx]
-	}
-	topLevel = strings.TrimSpace(topLevel)
-	if topLevel != "" {
-		result[topLevel] = struct{}{}
-	}
-	return result
+	return map[string]struct{}{}
 }
 
 func (d *KnowledgeBaseDAO) Tree(ctx context.Context, name string) ([]ResourceEntry, error) {

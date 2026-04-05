@@ -28,6 +28,16 @@ type EnabledRuntimeToolRecord struct {
 	RuntimeType string `gorm:"column:runtime_type"`
 }
 
+// EnabledRuntimeToolSearchRow 表示本地 tool_search 所需的最小联合视图。
+type EnabledRuntimeToolSearchRow struct {
+	ToolID            string `gorm:"column:tool_id"`
+	ToolName          string `gorm:"column:tool_name"`
+	Description       string `gorm:"column:description"`
+	RuntimeType       string `gorm:"column:runtime_type"`
+	PluginName        string `gorm:"column:plugin_name"`
+	PluginDescription string `gorm:"column:plugin_description"`
+}
+
 type PluginDAO struct{}
 
 var Plugin = new(PluginDAO)
@@ -307,6 +317,27 @@ func (d *PluginDAO) ListEnabledToolsByIDs(userID string, toolIDs []string) ([]mo
 		return nil, err
 	}
 	return tools, nil
+}
+
+// ListEnabledRuntimeToolSearchRows 返回本地工具搜索所需的启用态工具视图。
+func (d *PluginDAO) ListEnabledRuntimeToolSearchRows(userID string, runtimeTypes []string) ([]EnabledRuntimeToolSearchRow, error) {
+	query := database.DB.
+		Table("tool").
+		Select(
+			"tool.tool_id AS tool_id, tool.tool_name AS tool_name, tool.description AS description, "+
+				"plugin.runtime_type AS runtime_type, plugin.name AS plugin_name, plugin.description AS plugin_description",
+		).
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id AND plugin.user_id = tool.user_id").
+		Where("tool.user_id = ? AND tool.enabled = ? AND plugin.status = ?", strings.TrimSpace(userID), true, "enabled")
+	if len(runtimeTypes) > 0 {
+		query = query.Where("plugin.runtime_type IN ?", runtimeTypes)
+	}
+
+	var rows []EnabledRuntimeToolSearchRow
+	if err := query.Order("tool.tool_name ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (d *PluginDAO) LoadToolMap(userID string, pluginIDs []string) (map[string][]models.Tool, error) {

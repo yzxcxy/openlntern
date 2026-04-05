@@ -45,17 +45,13 @@ type COSConfig struct {
 }
 
 type PluginConfig struct {
-	BuiltinManifestPath          string `yaml:"builtin_manifest_path" json:"builtin_manifest_path"`
-	DefaultIconURL               string `yaml:"default_icon_url" json:"default_icon_url"`
-	MCPSyncDelaySeconds          int    `yaml:"mcp_sync_delay_seconds" json:"mcp_sync_delay_seconds"`
-	MCPSyncPollSeconds           int    `yaml:"mcp_sync_poll_seconds" json:"mcp_sync_poll_seconds"`
-	MCPSyncIntervalSeconds       int    `yaml:"mcp_sync_interval_seconds" json:"mcp_sync_interval_seconds"`
-	MCPSyncTimeoutSeconds        int    `yaml:"mcp_sync_timeout_seconds" json:"mcp_sync_timeout_seconds"`
-	MCPSyncRetrySeconds          int    `yaml:"mcp_sync_retry_seconds" json:"mcp_sync_retry_seconds"`
-	OpenVikingSyncDelaySeconds   int    `yaml:"openviking_sync_delay_seconds" json:"openviking_sync_delay_seconds"`
-	OpenVikingSyncPollSeconds    int    `yaml:"openviking_sync_poll_seconds" json:"openviking_sync_poll_seconds"`
-	OpenVikingSyncTimeoutSeconds int    `yaml:"openviking_sync_timeout_seconds" json:"openviking_sync_timeout_seconds"`
-	OpenVikingSyncRetrySeconds   int    `yaml:"openviking_sync_retry_seconds" json:"openviking_sync_retry_seconds"`
+	BuiltinManifestPath    string `yaml:"builtin_manifest_path" json:"builtin_manifest_path"`
+	DefaultIconURL         string `yaml:"default_icon_url" json:"default_icon_url"`
+	MCPSyncDelaySeconds    int    `yaml:"mcp_sync_delay_seconds" json:"mcp_sync_delay_seconds"`
+	MCPSyncPollSeconds     int    `yaml:"mcp_sync_poll_seconds" json:"mcp_sync_poll_seconds"`
+	MCPSyncIntervalSeconds int    `yaml:"mcp_sync_interval_seconds" json:"mcp_sync_interval_seconds"`
+	MCPSyncTimeoutSeconds  int    `yaml:"mcp_sync_timeout_seconds" json:"mcp_sync_timeout_seconds"`
+	MCPSyncRetrySeconds    int    `yaml:"mcp_sync_retry_seconds" json:"mcp_sync_retry_seconds"`
 }
 
 type LLMConfig struct {
@@ -84,7 +80,6 @@ type OpenVikingConfig struct {
 	BaseURL                    string `yaml:"base_url" json:"base_url"`
 	APIKey                     string `yaml:"api_key" json:"api_key,omitempty"`
 	SkillsRoot                 string `yaml:"skills_root" json:"skills_root"`
-	ToolsRoot                  string `yaml:"tools_root" json:"tools_root"`
 	TimeoutSeconds             int    `yaml:"timeout_seconds" json:"timeout_seconds"`
 	MemorySearchTimeoutSeconds int    `yaml:"memory_search_timeout_seconds" json:"memory_search_timeout_seconds"`
 	MemorySyncDelaySeconds     int    `yaml:"memory_sync_delay_seconds" json:"memory_sync_delay_seconds"`

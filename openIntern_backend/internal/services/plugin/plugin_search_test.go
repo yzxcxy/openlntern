@@ -23,8 +23,8 @@ func TestNormalizeToolSearchBounds(t *testing.T) {
 	if normalizeToolSearchTopK(0) != defaultToolSearchTopK {
 		t.Fatalf("unexpected default topK")
 	}
-	if normalizeToolSearchTopK(5) != defaultToolSearchTopK {
-		t.Fatalf("topK should stay fixed")
+	if normalizeToolSearchTopK(5) != 5 {
+		t.Fatalf("topK should preserve explicit values within bounds")
 	}
 	if normalizeToolSearchMaxMCPTools(-1) != defaultToolSearchMaxMCPTools {
 		t.Fatalf("unexpected default maxMCPTools")
@@ -34,18 +34,24 @@ func TestNormalizeToolSearchBounds(t *testing.T) {
 	}
 }
 
-// TestNormalizeToolSearchScoreThreshold verifies score threshold fallback and bounds.
-func TestNormalizeToolSearchScoreThreshold(t *testing.T) {
-	if normalizeToolSearchScoreThreshold(0) != defaultToolSearchScoreThreshold {
-		t.Fatalf("unexpected default score threshold")
+// TestParseToolSearchQuery verifies select and required-term parsing.
+func TestParseToolSearchQuery(t *testing.T) {
+	selectQuery, ok := parseToolSearchQuery("select:tool_a, tool_b")
+	if !ok || !selectQuery.IsSelect {
+		t.Fatalf("expected select query to parse successfully")
 	}
-	if defaultToolSearchScoreThreshold != 0 {
-		t.Fatalf("default score threshold should stay disabled")
+	if len(selectQuery.SelectedNames) != 2 {
+		t.Fatalf("unexpected selected names: %#v", selectQuery.SelectedNames)
 	}
-	if normalizeToolSearchScoreThreshold(0.6) != 0.6 {
-		t.Fatalf("unexpected score threshold")
+
+	keywordQuery, ok := parseToolSearchQuery("+slack send")
+	if !ok || keywordQuery.IsSelect {
+		t.Fatalf("expected keyword query to parse successfully")
 	}
-	if normalizeToolSearchScoreThreshold(1.5) != 1 {
-		t.Fatalf("score threshold should be capped at 1")
+	if len(keywordQuery.RequiredTerms) != 1 || keywordQuery.RequiredTerms[0] != "slack" {
+		t.Fatalf("unexpected required terms: %#v", keywordQuery.RequiredTerms)
+	}
+	if len(keywordQuery.OptionalTerms) != 1 || keywordQuery.OptionalTerms[0] != "send" {
+		t.Fatalf("unexpected optional terms: %#v", keywordQuery.OptionalTerms)
 	}
 }

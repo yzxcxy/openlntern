@@ -61,7 +61,7 @@ openIntern/
 - `pnpm`
 - MySQL
 - Redis
-- Docker / Docker Compose（用于托管 OpenViking）
+- Docker / Docker Compose（如需托管 OpenViking 的 memory / skills 能力）
 - 可选：Sandbox 服务，默认读取 `http://127.0.0.1:8081`
 
 ## 配置
@@ -89,13 +89,14 @@ redis:
 tools:
   sandbox:
     url: "http://127.0.0.1:8081"
-  openviking:
+ openviking:
     base_url: "http://127.0.0.1:1933"
 ```
 
 说明：
 
-- OpenViking 的连接参数仍然由 [openIntern_backend/config.yaml](/Users/fqc/project/agent/openIntern/openIntern_backend/config.yaml) 中的 `tools.openviking` 提供，供后端业务能力调用。
+- OpenViking 的连接参数仍然由 [openIntern_backend/config.yaml](/Users/fqc/project/agent/openIntern/openIntern_backend/config.yaml) 中的 `tools.openviking` 提供，供 memory 与 skills 等后端能力调用。
+- `tool_search` 已改为本地关键词匹配，不再依赖 OpenViking 工具索引。
 - OpenViking 的服务启动、停止和内部参数管理不再由 openIntern 前后端负责。
 
 安全说明：
@@ -136,7 +137,7 @@ pnpm install
 pnpm dev
 ```
 
-3. 如需 OpenViking，请先通过仓库根目录的 Docker Compose 启动对应容器
+3. 如需 OpenViking 的 memory / skills 能力，请先通过仓库根目录的 Docker Compose 启动对应容器
 
 ```bash
 docker compose up -d openviking

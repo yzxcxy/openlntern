@@ -361,7 +361,7 @@ func (s *PluginService) triggerScheduledMCPSync(member string) {
 	syncCtx, cancel := buildMCPSyncContext(context.Background())
 	defer cancel()
 
-	syncErr := s.syncMCPPluginRecord(syncCtx, plugin, true)
+	syncErr := s.syncMCPPluginRecord(syncCtx, plugin)
 	if syncErr != nil {
 		log.Printf("scheduled mcp sync failed user_id=%s plugin_id=%s err=%v", userID, pluginID, syncErr)
 	}
@@ -440,11 +440,11 @@ func (s *PluginService) syncMCPPluginNowLocked(ctx context.Context, userID strin
 	syncCtx, cancel := buildMCPSyncContext(ctx)
 	defer cancel()
 
-	return s.syncMCPPluginRecord(syncCtx, plugin, true)
+	return s.syncMCPPluginRecord(syncCtx, plugin)
 }
 
-// SyncMCPPluginToOpenViking 立即拉取 MCP 工具并同步到 MySQL/OpenViking，供迁移脚本使用。
-func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, userID string, pluginID string) error {
+// SyncMCPPluginTools 立即拉取 MCP 工具并同步到 MySQL，供运维脚本复用。
+func (s *PluginService) SyncMCPPluginTools(ctx context.Context, userID string, pluginID string) error {
 	pluginID = strings.TrimSpace(pluginID)
 	if pluginID == "" {
 		return errors.New("plugin_id is required")
@@ -477,11 +477,11 @@ func (s *PluginService) SyncMCPPluginToOpenViking(ctx context.Context, userID st
 	syncCtx, cancel := buildMCPSyncContext(ctx)
 	defer cancel()
 
-	return s.syncMCPPluginRecord(syncCtx, plugin, false)
+	return s.syncMCPPluginRecord(syncCtx, plugin)
 }
 
-// syncMCPPluginRecord 同步 MCP 插件工具快照，支持队列对账或直接对账 OpenViking。
-func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.Plugin, enqueueOpenVikingSync bool) error {
+// syncMCPPluginRecord 同步 MCP 插件工具快照到 MySQL。
+func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.Plugin) error {
 	if plugin == nil {
 		return fmt.Errorf("plugin not found")
 	}
@@ -506,29 +506,13 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 		if err := dao.Plugin.UpdateLastSyncAt(plugin.UserID, plugin.PluginID, syncedAt); err != nil {
 			return err
 		}
-		if enqueueOpenVikingSync {
-			return nil
-		}
-		return s.SyncPluginToolsToOpenViking(ctx, plugin.UserID, plugin.PluginID)
-	}
-
-	if enqueueOpenVikingSync {
-		if err := s.ensureSyncQueuesReady(false, dao.Plugin.ToolStoreConfigured()); err != nil {
-			return err
-		}
+		return nil
 	}
 
 	if err := dao.Plugin.ReplaceToolsAndUpdateSyncTime(plugin.UserID, plugin.PluginID, syncedTools, syncedAt); err != nil {
 		return err
 	}
-
-	if enqueueOpenVikingSync {
-		if err := s.queueOpenVikingPluginReconcile(plugin.UserID, plugin.PluginID, 0); err != nil {
-			return err
-		}
-		return nil
-	}
-	return s.SyncPluginToolsToOpenViking(ctx, plugin.UserID, plugin.PluginID)
+	return nil
 }
 
 type mcpToolComparable struct {
