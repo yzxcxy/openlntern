@@ -79,7 +79,7 @@ func (s *Service) InitEino(summaryCfg config.LLMConfig, toolsCfg config.ToolsCon
 		return nil, err
 	}
 
-	// A2UI/COS 已切换为内建插件显式绑定，这里只保留全局默认可用的 Skill 工具。
+	// A2UI/对象存储能力已切换为内建插件显式绑定，这里只保留全局默认可用的 Skill 工具。
 	allTools := append([]einoTool.BaseTool{}, skillTools...)
 
 	s.setState(runtimeState{

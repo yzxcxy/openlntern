@@ -34,11 +34,13 @@ type ConfigResponse = {
     base_url?: string;
     provider?: string;
   };
-  cos?: {
-    secret_id?: string;
+  minio?: {
+    endpoint?: string;
+    access_key?: string;
     secret_key?: string;
     bucket?: string;
-    region?: string;
+    use_ssl?: boolean;
+    public_base_url?: string;
   };
   apmplus?: {
     host?: string;
@@ -166,7 +168,7 @@ export default function SettingsPage() {
         return (
           <SystemSettings
             summaryLLM={config?.summary_llm}
-            cos={config?.cos}
+            minio={config?.minio}
             apmplus={config?.apmplus}
             onSave={handleSave}
             saving={saving}

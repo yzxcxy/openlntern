@@ -12,11 +12,13 @@ type SummaryLLMConfig = {
   provider?: string;
 };
 
-type COSConfig = {
-  secret_id?: string;
+type MinIOConfig = {
+  endpoint?: string;
+  access_key?: string;
   secret_key?: string;
   bucket?: string;
-  region?: string;
+  use_ssl?: boolean;
+  public_base_url?: string;
 };
 
 type APMPlusConfig = {
@@ -28,24 +30,26 @@ type APMPlusConfig = {
 
 type Props = {
   summaryLLM?: SummaryLLMConfig;
-  cos?: COSConfig;
+  minio?: MinIOConfig;
   apmplus?: APMPlusConfig;
   onSave: (section: string, updates: Record<string, unknown>) => void;
   saving: boolean;
 };
 
-export function SystemSettings({ summaryLLM, cos, apmplus, onSave, saving }: Props) {
+export function SystemSettings({ summaryLLM, minio, apmplus, onSave, saving }: Props) {
   // SummaryLLM state
   const [summaryModel, setSummaryModel] = useState("");
   const [summaryApiKey, setSummaryApiKey] = useState("");
   const [summaryBaseUrl, setSummaryBaseUrl] = useState("");
   const [summaryProvider, setSummaryProvider] = useState("deepseek");
 
-  // COS state
-  const [cosSecretId, setCosSecretId] = useState("");
-  const [cosSecretKey, setCosSecretKey] = useState("");
-  const [cosBucket, setCosBucket] = useState("");
-  const [cosRegion, setCosRegion] = useState("");
+  // MinIO state
+  const [minioEndpoint, setMinioEndpoint] = useState("");
+  const [minioAccessKey, setMinioAccessKey] = useState("");
+  const [minioSecretKey, setMinioSecretKey] = useState("");
+  const [minioBucket, setMinioBucket] = useState("");
+  const [minioUseSSL, setMinioUseSSL] = useState(false);
+  const [minioPublicBaseUrl, setMinioPublicBaseUrl] = useState("");
 
   // APMPlus state
   const [apmHost, setApmHost] = useState("");
@@ -61,19 +65,21 @@ export function SystemSettings({ summaryLLM, cos, apmplus, onSave, saving }: Pro
       if (summaryLLM.base_url !== undefined) setSummaryBaseUrl(summaryLLM.base_url);
       if (summaryLLM.provider !== undefined) setSummaryProvider(summaryLLM.provider);
     }
-    if (cos) {
-      if (cos.secret_id !== undefined) setCosSecretId(cos.secret_id);
-      if (cos.secret_key !== undefined) setCosSecretKey(cos.secret_key);
-      if (cos.bucket !== undefined) setCosBucket(cos.bucket);
-      if (cos.region !== undefined) setCosRegion(cos.region);
+    if (minio) {
+      if (minio.endpoint !== undefined) setMinioEndpoint(minio.endpoint);
+      if (minio.bucket !== undefined) setMinioBucket(minio.bucket);
+      if (minio.use_ssl !== undefined) setMinioUseSSL(minio.use_ssl);
+      if (minio.public_base_url !== undefined) setMinioPublicBaseUrl(minio.public_base_url);
     }
+    setMinioAccessKey("");
+    setMinioSecretKey("");
     if (apmplus) {
       if (apmplus.host !== undefined) setApmHost(apmplus.host);
       if (apmplus.app_key !== undefined) setApmAppKey(apmplus.app_key);
       if (apmplus.service_name !== undefined) setApmServiceName(apmplus.service_name);
       if (apmplus.release !== undefined) setApmRelease(apmplus.release);
     }
-  }, [summaryLLM, cos, apmplus]);
+  }, [summaryLLM, minio, apmplus]);
 
   const handleSaveSummaryLLM = () => {
     const updates: Record<string, unknown> = {
@@ -87,18 +93,20 @@ export function SystemSettings({ summaryLLM, cos, apmplus, onSave, saving }: Pro
     onSave("summary_llm", updates);
   };
 
-  const handleSaveCOS = () => {
+  const handleSaveMinIO = () => {
     const updates: Record<string, unknown> = {
-      bucket: cosBucket,
-      region: cosRegion,
+      endpoint: minioEndpoint,
+      bucket: minioBucket,
+      use_ssl: minioUseSSL,
+      public_base_url: minioPublicBaseUrl,
     };
-    if (cosSecretId.trim()) {
-      updates.secret_id = cosSecretId.trim();
+    if (minioAccessKey.trim()) {
+      updates.access_key = minioAccessKey.trim();
     }
-    if (cosSecretKey.trim()) {
-      updates.secret_key = cosSecretKey.trim();
+    if (minioSecretKey.trim()) {
+      updates.secret_key = minioSecretKey.trim();
     }
-    onSave("cos", updates);
+    onSave("minio", updates);
   };
 
   const handleSaveAPMPlus = () => {
@@ -194,31 +202,43 @@ export function SystemSettings({ summaryLLM, cos, apmplus, onSave, saving }: Pro
         </div>
       </div>
 
-      {/* COS Section */}
+      {/* MinIO Section */}
       <div className="space-y-4 border-t border-[var(--color-border-default)] pt-6">
         <div>
           <h3 className="text-base font-semibold text-[var(--color-text-primary)]">
-            对象存储配置 (COS)
+            对象存储配置 (MinIO)
           </h3>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            腾讯云对象存储服务配置，用于文件上传和存储
+            MinIO 对象存储服务配置，用于文件上传和存储
           </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              Secret ID
+              Endpoint
+            </label>
+            <div className="mt-2 max-w-md">
+              <UiInput
+                value={minioEndpoint}
+                onChange={(e) => setMinioEndpoint(e.target.value)}
+                placeholder="minio.example.com:9000"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
+              Access Key
             </label>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              当前: {cos?.secret_id || "未设置"}
+              当前: {minio?.access_key || "未设置"}
             </p>
             <div className="mt-2 max-w-md">
               <UiInput
                 type="password"
-                value={cosSecretId}
-                onChange={(e) => setCosSecretId(e.target.value)}
-                placeholder="输入新的 Secret ID"
+                value={minioAccessKey}
+                onChange={(e) => setMinioAccessKey(e.target.value)}
+                placeholder="输入新的 Access Key"
               />
             </div>
           </div>
@@ -227,13 +247,13 @@ export function SystemSettings({ summaryLLM, cos, apmplus, onSave, saving }: Pro
               Secret Key
             </label>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              当前: {cos?.secret_key || "未设置"}
+              当前: {minio?.secret_key || "未设置"}
             </p>
             <div className="mt-2 max-w-md">
               <UiInput
                 type="password"
-                value={cosSecretKey}
-                onChange={(e) => setCosSecretKey(e.target.value)}
+                value={minioSecretKey}
+                onChange={(e) => setMinioSecretKey(e.target.value)}
                 placeholder="输入新的 Secret Key"
               />
             </div>
@@ -244,28 +264,45 @@ export function SystemSettings({ summaryLLM, cos, apmplus, onSave, saving }: Pro
             </label>
             <div className="mt-2 max-w-md">
               <UiInput
-                value={cosBucket}
-                onChange={(e) => setCosBucket(e.target.value)}
-                placeholder="my-bucket-1234567890"
+                value={minioBucket}
+                onChange={(e) => setMinioBucket(e.target.value)}
+                placeholder="openintern"
               />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
-              Region
+              Use SSL
             </label>
             <div className="mt-2 max-w-md">
+              <UiSelect
+                value={minioUseSSL ? "true" : "false"}
+                onChange={(e) => setMinioUseSSL(e.target.value === "true")}
+              >
+                <option value="true">是</option>
+                <option value="false">否</option>
+              </UiSelect>
+            </div>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)]">
+              Public Base URL
+            </label>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              可选，用于拼接公开访问链接
+            </p>
+            <div className="mt-2 max-w-md">
               <UiInput
-                value={cosRegion}
-                onChange={(e) => setCosRegion(e.target.value)}
-                placeholder="ap-guangzhou"
+                value={minioPublicBaseUrl}
+                onChange={(e) => setMinioPublicBaseUrl(e.target.value)}
+                placeholder="https://cdn.example.com"
               />
             </div>
           </div>
         </div>
 
         <div className="flex justify-end">
-          <UiButton onClick={handleSaveCOS} disabled={saving}>
+          <UiButton onClick={handleSaveMinIO} disabled={saving}>
             {saving ? "保存中..." : "保存存储配置"}
           </UiButton>
         </div>
