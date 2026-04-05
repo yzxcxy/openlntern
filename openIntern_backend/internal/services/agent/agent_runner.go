@@ -71,12 +71,11 @@ func (s *Service) resolveRuntimeToolSet(ctx context.Context, runtimeConfig *Agen
 		staticTools: append([]einoTool.BaseTool{}, state.staticAgentTools...),
 	}
 
-	sandboxTools, sandboxCleanup, err := builtinTool.GetSandboxMCPTools(ctx, state.sandboxBaseURL)
+	sandboxTool, err := builtinTool.GetSandboxExecuteBashTool(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load builtin sandbox tool failed: %w", err)
 	}
-	resolved.cleanup = sandboxCleanup
-	resolved.staticTools = append(resolved.staticTools, sandboxTools...)
+	resolved.staticTools = append(resolved.staticTools, sandboxTool)
 	if runtimeConfig != nil && len(runtimeConfig.KnowledgeBaseNames) > 0 {
 		knowledgeBaseTools, err := builtinTool.GetKnowledgeBaseTools(ctx, runtimeConfig.KnowledgeBaseNames)
 		if err != nil {

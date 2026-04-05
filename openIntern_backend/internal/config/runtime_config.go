@@ -236,8 +236,34 @@ func updateAgentConfig(cfg *AgentConfig, updates map[string]interface{}) {
 
 func updateToolsConfig(cfg *ToolsConfig, updates map[string]interface{}) {
 	if sandboxUpdates, ok := updates["sandbox"].(map[string]interface{}); ok {
-		if url, ok := sandboxUpdates["url"].(string); ok {
-			cfg.Sandbox.Url = url
+		if enabled, ok := sandboxUpdates["enabled"].(bool); ok {
+			cfg.Sandbox.Enabled = &enabled
+		}
+		if provider, ok := sandboxUpdates["provider"].(string); ok {
+			cfg.Sandbox.Provider = provider
+		}
+		if idleTTL, ok := sandboxUpdates["idle_ttl_seconds"].(float64); ok {
+			cfg.Sandbox.IdleTTLSeconds = int(idleTTL)
+		}
+		if createTimeout, ok := sandboxUpdates["create_timeout_seconds"].(float64); ok {
+			cfg.Sandbox.CreateTimeoutSeconds = int(createTimeout)
+		}
+		if recycleInterval, ok := sandboxUpdates["recycle_interval_seconds"].(float64); ok {
+			cfg.Sandbox.RecycleIntervalSeconds = int(recycleInterval)
+		}
+		if healthcheckTimeout, ok := sandboxUpdates["healthcheck_timeout_seconds"].(float64); ok {
+			cfg.Sandbox.HealthcheckTimeoutSeconds = int(healthcheckTimeout)
+		}
+		if dockerUpdates, ok := sandboxUpdates["docker"].(map[string]interface{}); ok {
+			if image, ok := dockerUpdates["image"].(string); ok {
+				cfg.Sandbox.Docker.Image = image
+			}
+			if host, ok := dockerUpdates["host"].(string); ok {
+				cfg.Sandbox.Docker.Host = host
+			}
+			if network, ok := dockerUpdates["network"].(string); ok {
+				cfg.Sandbox.Docker.Network = network
+			}
 		}
 	}
 	if memoryUpdates, ok := updates["memory"].(map[string]interface{}); ok {

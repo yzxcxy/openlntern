@@ -98,7 +98,6 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UIService, s.deps.A2UIService)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UISender, sender)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyFileUploader, s.deps.FileUploader)
-	ctx = context.WithValue(ctx, builtinTool.ContextKeySandboxBaseURL, state.sandboxBaseURL)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyUserID, ownerID)
 
 	if isAgentConversationMode(runtimeConfig) {

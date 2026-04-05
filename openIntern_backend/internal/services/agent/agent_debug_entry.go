@@ -85,7 +85,7 @@ func (s *Service) RunDebugAgent(ctx context.Context, w io.Writer, input *types.R
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UIService, s.deps.A2UIService)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyA2UISender, sender)
 	ctx = context.WithValue(ctx, builtinTool.ContextKeyFileUploader, s.deps.FileUploader)
-	ctx = context.WithValue(ctx, builtinTool.ContextKeySandboxBaseURL, state.sandboxBaseURL)
+	ctx = context.WithValue(ctx, builtinTool.ContextKeyUserID, ownerID)
 
 	if err := s.runDebugAgentModeStreaming(ctx, sender, einoMessages, runtimeConfig, state, debugDetail); err != nil {
 		_ = sender.Error(err.Error(), "eino_run_failed")

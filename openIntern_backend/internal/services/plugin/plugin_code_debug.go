@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	sandboxsvc "openIntern/internal/services/sandbox"
 	"strings"
 	"time"
 )
@@ -16,10 +17,6 @@ type CodeDebugInput struct {
 }
 
 func (s *PluginService) DebugCodeTool(ctx context.Context, input CodeDebugInput) (any, error) {
-	if strings.TrimSpace(sandboxBaseURL) == "" {
-		return nil, errors.New("sandbox base url not configured")
-	}
-
 	code := strings.TrimSpace(input.Code)
 	if code == "" {
 		return nil, errors.New("code is required")
@@ -40,9 +37,14 @@ func (s *PluginService) DebugCodeTool(ctx context.Context, input CodeDebugInput)
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	userID := userIDFromContext(ctx)
+	instance, err := sandboxsvc.Lifecycle.GetOrCreate(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	output, err := RunCodeInSandbox(ctx, &http.Client{
 		Timeout: time.Duration(timeoutMS) * time.Millisecond,
-	}, sandboxBaseURL, SandboxCodeRunInput{
+	}, instance.Endpoint, SandboxCodeRunInput{
 		CodeLanguage: codeLanguage,
 		Code:         wrappedCode,
 		Input:        input.Input,
@@ -51,6 +53,7 @@ func (s *PluginService) DebugCodeTool(ctx context.Context, input CodeDebugInput)
 	if err != nil {
 		return nil, err
 	}
+	_ = sandboxsvc.Lifecycle.Touch(ctx, userID)
 
 	result, err := ParseSandboxCodeExecutionOutput(output)
 	if err != nil {

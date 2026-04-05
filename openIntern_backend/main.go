@@ -10,6 +10,7 @@ import (
 	agentsvc "openIntern/internal/services/agent"
 	memorysvc "openIntern/internal/services/memory"
 	pluginsvc "openIntern/internal/services/plugin"
+	sandboxsvc "openIntern/internal/services/sandbox"
 	storagesvc "openIntern/internal/services/storage"
 )
 
@@ -33,6 +34,13 @@ func main() {
 	database.InitContextStore(cfg.Tools.OpenViking)
 	memorysvc.InitMemory(cfg.Tools)
 	memorysvc.InitMemorySync()
+	sandboxShutdown, err := sandboxsvc.Init(cfg.Tools.Sandbox)
+	if err != nil {
+		log.Fatalf("failed to init sandbox service: %v", err)
+	}
+	if sandboxShutdown != nil {
+		defer sandboxShutdown()
+	}
 	shutdown, err := agentsvc.InitEino(cfg.SummaryLLM, cfg.Tools, cfg.Agent, cfg.ContextCompression, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)
