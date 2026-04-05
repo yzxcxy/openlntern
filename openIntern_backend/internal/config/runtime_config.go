@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -15,7 +16,7 @@ type RuntimeConfig struct {
 	ContextCompression ContextCompressionConfig `json:"context_compression" yaml:"context_compression"`
 	Plugin             PluginConfig             `json:"plugin" yaml:"plugin"`
 	SummaryLLM         LLMConfig                `json:"summary_llm" yaml:"summary_llm"`
-	COS                COSConfig                `json:"cos" yaml:"cos"`
+	MinIO              MinIOConfig              `json:"minio" yaml:"minio"`
 	APMPlus            APMPlusConfig            `json:"apmplus" yaml:"apmplus"`
 }
 
@@ -26,7 +27,7 @@ type RuntimeConfigResponse struct {
 	ContextCompression ContextCompressionConfig `json:"context_compression"`
 	Plugin             PluginConfig             `json:"plugin"`
 	SummaryLLM         LLMConfigResponse        `json:"summary_llm"`
-	COS                COSConfigResponse        `json:"cos"`
+	MinIO              MinIOConfigResponse      `json:"minio"`
 	APMPlus            APMPlusConfigResponse    `json:"apmplus"`
 }
 
@@ -38,12 +39,14 @@ type LLMConfigResponse struct {
 	Provider string `json:"provider"`
 }
 
-// COSConfigResponse COS配置响应（敏感字段脱敏）
-type COSConfigResponse struct {
-	SecretID  string `json:"secret_id,omitempty"`
-	SecretKey string `json:"secret_key,omitempty"`
-	Bucket    string `json:"bucket"`
-	Region    string `json:"region"`
+// MinIOConfigResponse MinIO配置响应（敏感字段脱敏）
+type MinIOConfigResponse struct {
+	Endpoint      string `json:"endpoint"`
+	AccessKey     string `json:"access_key,omitempty"`
+	SecretKey     string `json:"secret_key,omitempty"`
+	Bucket        string `json:"bucket"`
+	UseSSL        bool   `json:"use_ssl"`
+	PublicBaseURL string `json:"public_base_url"`
 }
 
 // APMPlusConfigResponse APMPlus配置响应（敏感字段脱敏）
@@ -62,11 +65,19 @@ type ToolsConfigResponse struct {
 
 // 全局配置管理
 var (
-	globalConfig   *Config
-	globalRuntime  *RuntimeConfig
-	configMu       sync.RWMutex
-	configFilePath string
+	globalConfig          *Config
+	globalRuntime         *RuntimeConfig
+	configMu              sync.RWMutex
+	configFilePath        string
+	minioRuntimeRefresher func(MinIOConfig) error
 )
+
+// RegisterMinIORuntimeRefresher 注册 MinIO 运行时刷新函数（由存储层在启动时注入）。
+func RegisterMinIORuntimeRefresher(refresher func(MinIOConfig) error) {
+	configMu.Lock()
+	defer configMu.Unlock()
+	minioRuntimeRefresher = refresher
+}
 
 // InitRuntime 初始化运行时配置
 func InitRuntime(cfg *Config, cfgPath string) {
@@ -83,7 +94,7 @@ func InitRuntime(cfg *Config, cfgPath string) {
 		ContextCompression: cfg.ContextCompression,
 		Plugin:             cfg.Plugin,
 		SummaryLLM:         cfg.SummaryLLM,
-		COS:                cfg.COS,
+		MinIO:              cfg.MinIO,
 		APMPlus:            cfg.APMPlus,
 	}
 }
@@ -112,48 +123,80 @@ func GetConfig() *Config {
 func UpdateRuntimeConfig(updates map[string]interface{}) error {
 	configMu.Lock()
 	defer configMu.Unlock()
+	if globalConfig == nil || globalRuntime == nil {
+		return nil
+	}
 
-	// 更新运行时配置
+	// 先在副本上应用更新，确保保存和刷新成功前不污染内存态。
+	stagedRuntime := *globalRuntime
+	stagedConfig := *globalConfig
+	previousMinIO := globalConfig.MinIO
+	minioChanged := false
+
 	if agentUpdates, ok := updates["agent"].(map[string]interface{}); ok {
-		updateAgentConfig(&globalRuntime.Agent, agentUpdates)
-		globalConfig.Agent = globalRuntime.Agent
+		updateAgentConfig(&stagedRuntime.Agent, agentUpdates)
+		stagedConfig.Agent = stagedRuntime.Agent
 	}
 	if toolsUpdates, ok := updates["tools"].(map[string]interface{}); ok {
-		updateToolsConfig(&globalRuntime.Tools, toolsUpdates)
-		globalConfig.Tools = globalRuntime.Tools
+		updateToolsConfig(&stagedRuntime.Tools, toolsUpdates)
+		stagedConfig.Tools = stagedRuntime.Tools
 	}
 	if ccUpdates, ok := updates["context_compression"].(map[string]interface{}); ok {
-		updateContextCompressionConfig(&globalRuntime.ContextCompression, ccUpdates)
-		globalConfig.ContextCompression = globalRuntime.ContextCompression
+		updateContextCompressionConfig(&stagedRuntime.ContextCompression, ccUpdates)
+		stagedConfig.ContextCompression = stagedRuntime.ContextCompression
 	}
 	if pluginUpdates, ok := updates["plugin"].(map[string]interface{}); ok {
-		updatePluginConfig(&globalRuntime.Plugin, pluginUpdates)
-		globalConfig.Plugin = globalRuntime.Plugin
+		updatePluginConfig(&stagedRuntime.Plugin, pluginUpdates)
+		stagedConfig.Plugin = stagedRuntime.Plugin
 	}
 	if summaryLLMUpdates, ok := updates["summary_llm"].(map[string]interface{}); ok {
-		updateLLMConfig(&globalRuntime.SummaryLLM, summaryLLMUpdates)
-		globalConfig.SummaryLLM = globalRuntime.SummaryLLM
+		updateLLMConfig(&stagedRuntime.SummaryLLM, summaryLLMUpdates)
+		stagedConfig.SummaryLLM = stagedRuntime.SummaryLLM
 	}
-	if cosUpdates, ok := updates["cos"].(map[string]interface{}); ok {
-		updateCOSConfig(&globalRuntime.COS, cosUpdates)
-		globalConfig.COS = globalRuntime.COS
+	if minioUpdates, ok := updates["minio"].(map[string]interface{}); ok {
+		updateMinIOConfig(&stagedRuntime.MinIO, minioUpdates)
+		stagedConfig.MinIO = stagedRuntime.MinIO
+		minioChanged = true
 	}
 	if apmPlusUpdates, ok := updates["apmplus"].(map[string]interface{}); ok {
-		updateAPMPlusConfig(&globalRuntime.APMPlus, apmPlusUpdates)
-		globalConfig.APMPlus = globalRuntime.APMPlus
+		updateAPMPlusConfig(&stagedRuntime.APMPlus, apmPlusUpdates)
+		stagedConfig.APMPlus = stagedRuntime.APMPlus
 	}
 
-	// 写回配置文件
-	return saveConfigToFile()
+	// MinIO 变更先做运行时刷新校验，避免把不可用配置写入磁盘。
+	if minioChanged {
+		if err := refreshMinIORuntimeLocked(stagedConfig.MinIO); err != nil {
+			return err
+		}
+	}
+	// 落盘失败时回滚已刷新成功的 MinIO 运行时，避免运行态和持久化态分叉。
+	if err := saveConfigToFileWith(&stagedConfig); err != nil {
+		if minioChanged {
+			if rollbackErr := refreshMinIORuntimeLocked(previousMinIO); rollbackErr != nil {
+				return fmt.Errorf("failed to save config: %w; additionally failed to rollback minio runtime: %v", err, rollbackErr)
+			}
+		}
+		return err
+	}
+	globalConfig = &stagedConfig
+	globalRuntime = &stagedRuntime
+	return nil
 }
 
 // saveConfigToFile 保存配置到文件
 func saveConfigToFile() error {
+	return saveConfigToFileWith(globalConfig)
+}
+
+func saveConfigToFileWith(cfg *Config) error {
 	if configFilePath == "" {
 		return nil
 	}
+	if cfg == nil {
+		return nil
+	}
 
-	data, err := yaml.Marshal(globalConfig)
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
@@ -166,8 +209,15 @@ func ReloadConfig() error {
 	configMu.Lock()
 	defer configMu.Unlock()
 
-	// 重新加载配置文件
-	cfg := LoadConfig(configFilePath)
+	// 重新严格加载配置文件，避免读取失败时静默回退为空配置。
+	cfg, err := LoadConfigStrict(configFilePath)
+	if err != nil {
+		return err
+	}
+	// 先验证运行时存储客户端可重建，再替换全局配置，避免半更新状态。
+	if err := refreshMinIORuntimeLocked(cfg.MinIO); err != nil {
+		return err
+	}
 	globalConfig = cfg
 
 	globalRuntime = &RuntimeConfig{
@@ -176,11 +226,18 @@ func ReloadConfig() error {
 		ContextCompression: cfg.ContextCompression,
 		Plugin:             cfg.Plugin,
 		SummaryLLM:         cfg.SummaryLLM,
-		COS:                cfg.COS,
+		MinIO:              cfg.MinIO,
 		APMPlus:            cfg.APMPlus,
 	}
 
 	return nil
+}
+
+func refreshMinIORuntimeLocked(minioCfg MinIOConfig) error {
+	if minioRuntimeRefresher == nil {
+		return nil
+	}
+	return minioRuntimeRefresher(minioCfg)
 }
 
 // ToResponse 转换为前端响应格式（脱敏敏感字段）
@@ -199,11 +256,13 @@ func (r *RuntimeConfig) ToResponse() RuntimeConfigResponse {
 			BaseURL:  r.SummaryLLM.BaseURL,
 			Provider: r.SummaryLLM.Provider,
 		},
-		COS: COSConfigResponse{
-			SecretID:  maskAPIKey(r.COS.SecretID),
-			SecretKey: maskAPIKey(r.COS.SecretKey),
-			Bucket:    r.COS.Bucket,
-			Region:    r.COS.Region,
+		MinIO: MinIOConfigResponse{
+			Endpoint:      r.MinIO.Endpoint,
+			AccessKey:     maskAPIKey(r.MinIO.AccessKey),
+			SecretKey:     maskAPIKey(r.MinIO.SecretKey),
+			Bucket:        r.MinIO.Bucket,
+			UseSSL:        r.MinIO.UseSSL,
+			PublicBaseURL: r.MinIO.PublicBaseURL,
 		},
 		APMPlus: APMPlusConfigResponse{
 			Host:        r.APMPlus.Host,
@@ -318,18 +377,24 @@ func updateLLMConfig(cfg *LLMConfig, updates map[string]interface{}) {
 	}
 }
 
-func updateCOSConfig(cfg *COSConfig, updates map[string]interface{}) {
-	if v, ok := updates["secret_id"].(string); ok && v != "" {
-		cfg.SecretID = v
+func updateMinIOConfig(cfg *MinIOConfig, updates map[string]interface{}) {
+	if v, ok := updates["endpoint"].(string); ok {
+		cfg.Endpoint = v
 	}
-	if v, ok := updates["secret_key"].(string); ok && v != "" {
+	if v, ok := updates["access_key"].(string); ok {
+		cfg.AccessKey = v
+	}
+	if v, ok := updates["secret_key"].(string); ok {
 		cfg.SecretKey = v
 	}
 	if v, ok := updates["bucket"].(string); ok {
 		cfg.Bucket = v
 	}
-	if v, ok := updates["region"].(string); ok {
-		cfg.Region = v
+	if v, ok := updates["use_ssl"].(bool); ok {
+		cfg.UseSSL = v
+	}
+	if v, ok := updates["public_base_url"].(string); ok {
+		cfg.PublicBaseURL = v
 	}
 }
 

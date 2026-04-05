@@ -19,6 +19,9 @@ func main() {
 
 	// 初始化运行时配置
 	config.InitRuntime(cfg, "config.yaml")
+	config.RegisterMinIORuntimeRefresher(func(minioCfg config.MinIOConfig) error {
+		return storagesvc.InitObjectStorage(minioCfg)
+	})
 
 	if err := database.Init(cfg.MySQL.DSN); err != nil {
 		log.Fatalf("failed to connect database: %v", err)
@@ -27,7 +30,7 @@ func main() {
 		log.Fatalf("failed to init redis: %v", err)
 	}
 	accountsvc.InitAuth(cfg.JWT.Secret, cfg.JWT.ExpireMinutes)
-	if err := storagesvc.InitFile(cfg.COS); err != nil {
+	if err := storagesvc.InitObjectStorage(cfg.MinIO); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
 	pluginsvc.InitPlugin(cfg.Plugin)

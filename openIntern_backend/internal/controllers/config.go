@@ -22,7 +22,7 @@ type UpdateConfigRequest struct {
 	ContextCompression map[string]interface{} `json:"context_compression,omitempty"`
 	Plugin             map[string]interface{} `json:"plugin,omitempty"`
 	SummaryLLM         map[string]interface{} `json:"summary_llm,omitempty"`
-	COS                map[string]interface{} `json:"cos,omitempty"`
+	MinIO              map[string]interface{} `json:"minio,omitempty"`
 	APMPlus            map[string]interface{} `json:"apmplus,omitempty"`
 }
 
@@ -50,8 +50,8 @@ func UpdateConfig(c *gin.Context) {
 	if req.SummaryLLM != nil {
 		updates["summary_llm"] = req.SummaryLLM
 	}
-	if req.COS != nil {
-		updates["cos"] = req.COS
+	if req.MinIO != nil {
+		updates["minio"] = req.MinIO
 	}
 	if req.APMPlus != nil {
 		updates["apmplus"] = req.APMPlus

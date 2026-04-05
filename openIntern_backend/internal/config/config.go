@@ -13,7 +13,7 @@ type Config struct {
 	MySQL              MySQLConfig              `yaml:"mysql"`
 	Redis              RedisConfig              `yaml:"redis"`
 	JWT                JWTConfig                `yaml:"jwt"`
-	COS                COSConfig                `yaml:"cos"`
+	MinIO              MinIOConfig              `yaml:"minio"`
 	Plugin             PluginConfig             `yaml:"plugin"`
 	SummaryLLM         LLMConfig                `yaml:"summary_llm"`
 	Tools              ToolsConfig              `yaml:"tools"`
@@ -37,11 +37,13 @@ type RedisConfig struct {
 	DB       int    `yaml:"db"`
 }
 
-type COSConfig struct {
-	SecretID  string `yaml:"secret_id" json:"secret_id,omitempty"`
-	SecretKey string `yaml:"secret_key" json:"secret_key,omitempty"`
-	Bucket    string `yaml:"bucket" json:"bucket"`
-	Region    string `yaml:"region" json:"region"`
+type MinIOConfig struct {
+	Endpoint      string `yaml:"endpoint" json:"endpoint"`
+	AccessKey     string `yaml:"access_key" json:"access_key,omitempty"`
+	SecretKey     string `yaml:"secret_key" json:"secret_key,omitempty"`
+	Bucket        string `yaml:"bucket" json:"bucket"`
+	UseSSL        bool   `yaml:"use_ssl" json:"use_ssl"`
+	PublicBaseURL string `yaml:"public_base_url" json:"public_base_url"`
 }
 
 type PluginConfig struct {
@@ -121,17 +123,36 @@ type ContextCompressionConfig struct {
 }
 
 func LoadConfig(configFile string) *Config {
+	cfg, err := loadConfig(configFile, false)
+	if err != nil {
+		return &Config{}
+	}
+	return cfg
+}
+
+// LoadConfigStrict 严格加载配置文件：读取或解析失败时直接返回错误。
+func LoadConfigStrict(configFile string) (*Config, error) {
+	return loadConfig(configFile, true)
+}
+
+func loadConfig(configFile string, strict bool) (*Config, error) {
 	cfg := &Config{}
 	data, err := os.ReadFile(configFile)
 	if err != nil {
-		return cfg
+		if strict {
+			return nil, err
+		}
+		return cfg, nil
 	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
+		if strict {
+			return nil, err
+		}
 		log.Fatalf("failed to parse config.yaml: %v", err)
 	}
 	// 配置文件里的相对路径统一按 config.yaml 所在目录解析，避免不同启动目录下表现不一致。
 	if cfg.Plugin.BuiltinManifestPath != "" && !filepath.IsAbs(cfg.Plugin.BuiltinManifestPath) {
 		cfg.Plugin.BuiltinManifestPath = filepath.Join(filepath.Dir(configFile), cfg.Plugin.BuiltinManifestPath)
 	}
-	return cfg
+	return cfg, nil
 }
