@@ -16,8 +16,8 @@ import (
 
 // A2UIServiceInterface 供 list/get 使用的 A2UI 查询接口，由 services 注入到 context
 type A2UIServiceInterface interface {
-	ListA2UIs(page, pageSize int, keyword string) ([]models.A2UI, int64, error)
-	GetA2UIByID(id string) (*models.A2UI, error)
+	ListA2UIs(userID string, page, pageSize int, keyword string) ([]models.A2UI, int64, error)
+	GetA2UIByID(userID, id string) (*models.A2UI, error)
 }
 
 var (
@@ -32,6 +32,7 @@ type contextKey string
 const (
 	ContextKeyA2UISender  contextKey = "openintern_a2ui_sender"
 	ContextKeyA2UIService contextKey = "openintern_a2ui_service"
+	ContextKeyUserID      contextKey = "openintern_user_id"
 )
 
 // ListA2UIsInput 列出可访问 A2UI 的入参（无参数，一次返回全部）
@@ -55,7 +56,8 @@ func listA2UIsImpl(ctx context.Context, input ListA2UIsInput) (string, error) {
 	if svc == nil {
 		return "", errA2UIServiceNotInCtx
 	}
-	a2uiList, _, err := svc.ListA2UIs(1, listA2UIsLimit, "")
+	userID, _ := ctx.Value(ContextKeyUserID).(string)
+	a2uiList, _, err := svc.ListA2UIs(strings.TrimSpace(userID), 1, listA2UIsLimit, "")
 	if err != nil {
 		return "", err
 	}
@@ -88,7 +90,8 @@ func getA2UIImpl(ctx context.Context, input GetA2UIInput) (string, error) {
 	if strings.TrimSpace(input.A2UIID) == "" {
 		return "", errA2UIIDRequired
 	}
-	a, err := svc.GetA2UIByID(input.A2UIID)
+	userID, _ := ctx.Value(ContextKeyUserID).(string)
+	a, err := svc.GetA2UIByID(strings.TrimSpace(userID), input.A2UIID)
 	if err != nil {
 		return "", err
 	}
@@ -112,7 +115,8 @@ func sendA2UIImpl(ctx context.Context, input SendA2UIInput) (string, error) {
 		return "", errA2UIIDRequired
 	}
 
-	a, err := svc.GetA2UIByID(input.A2UIID)
+	userID, _ := ctx.Value(ContextKeyUserID).(string)
+	a, err := svc.GetA2UIByID(strings.TrimSpace(userID), input.A2UIID)
 	if err != nil {
 		return "", err
 	}

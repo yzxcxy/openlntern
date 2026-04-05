@@ -146,7 +146,7 @@ func (s *AgentDefinitionService) Create(ctx context.Context, ownerID string, inp
 	if err := dao.Agent.Create(item); err != nil {
 		return nil, err
 	}
-	if err := dao.AgentBinding.ReplaceByAgentID(item.AgentID, buildBindings(item.AgentID, normalized)); err != nil {
+	if err := dao.AgentBinding.ReplaceByAgentID(ownerID, item.AgentID, buildBindings(ownerID, item.AgentID, normalized)); err != nil {
 		return nil, err
 	}
 	return s.Get(ownerID, item.AgentID)
@@ -175,7 +175,7 @@ func (s *AgentDefinitionService) Update(ctx context.Context, ownerID, agentID st
 	if _, err := dao.Agent.UpdateByAgentIDAndOwner(item.AgentID, ownerID, updates); err != nil {
 		return nil, err
 	}
-	if err := dao.AgentBinding.ReplaceByAgentID(item.AgentID, buildBindings(item.AgentID, normalized)); err != nil {
+	if err := dao.AgentBinding.ReplaceByAgentID(ownerID, item.AgentID, buildBindings(ownerID, item.AgentID, normalized)); err != nil {
 		return nil, err
 	}
 	return s.Get(ownerID, item.AgentID)
@@ -206,7 +206,7 @@ func (s *AgentDefinitionService) BuildDebugDetail(ctx context.Context, ownerID s
 		DefaultModelID:       strings.TrimSpace(input.DefaultModelID),
 		AgentMemoryEnabled:   input.AgentMemoryEnabled,
 	}
-	return buildAgentDetailView(item, buildBindings(agentID, normalized), loadModelName(item.DefaultModelID))
+	return buildAgentDetailView(item, buildBindings(ownerID, agentID, normalized), loadModelName(item.DefaultModelID))
 }
 
 func (s *AgentDefinitionService) Get(ownerID, agentID string) (*AgentDetailView, error) {
@@ -214,7 +214,7 @@ func (s *AgentDefinitionService) Get(ownerID, agentID string) (*AgentDetailView,
 	if err != nil {
 		return nil, err
 	}
-	bindings, err := dao.AgentBinding.ListByAgentID(item.AgentID)
+	bindings, err := dao.AgentBinding.ListByAgentID(ownerID, item.AgentID)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (s *AgentDefinitionService) Get(ownerID, agentID string) (*AgentDetailView,
 
 func (s *AgentDefinitionService) List(ownerID string, page, pageSize int, filter AgentListFilter) ([]AgentListItem, int64, error) {
 	items, total, err := dao.Agent.List(page, pageSize, dao.AgentListFilter{
-		OwnerID:   strings.TrimSpace(ownerID),
+		UserID:    strings.TrimSpace(ownerID),
 		Keyword:   strings.TrimSpace(filter.Keyword),
 		AgentType: normalizeOptionalAgentType(filter.AgentType),
 		Status:    normalizeOptionalAgentStatus(filter.Status),
@@ -236,7 +236,7 @@ func (s *AgentDefinitionService) List(ownerID string, page, pageSize int, filter
 	for _, item := range items {
 		agentIDs = append(agentIDs, item.AgentID)
 	}
-	bindings, err := dao.AgentBinding.ListByAgentIDs(agentIDs)
+	bindings, err := dao.AgentBinding.ListByAgentIDs(ownerID, agentIDs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -300,7 +300,7 @@ func (s *AgentDefinitionService) Delete(ownerID, agentID string) error {
 		}
 		return fmt.Errorf("agent is still referenced by enabled supervisors: %s", strings.Join(names, ", "))
 	}
-	if err := dao.AgentBinding.DeleteByAgentID(item.AgentID); err != nil {
+	if err := dao.AgentBinding.DeleteByAgentID(ownerID, item.AgentID); err != nil {
 		return err
 	}
 	_, err = dao.Agent.DeleteByAgentIDAndOwner(item.AgentID, ownerID)
@@ -414,7 +414,7 @@ func validateAgentGraph(ownerID, currentAgentID string, currentSubAgentIDs []str
 	for _, item := range allAgents {
 		agentIDs = append(agentIDs, item.AgentID)
 	}
-	bindings, err := dao.AgentBinding.ListByAgentIDs(agentIDs)
+	bindings, err := dao.AgentBinding.ListByAgentIDs(ownerID, agentIDs)
 	if err != nil {
 		return err
 	}
@@ -481,11 +481,12 @@ func (s *AgentDefinitionService) validateForEnable(ctx context.Context, ownerID 
 	return err
 }
 
-func buildBindings(agentID string, normalized *normalizedBindings) []models.AgentBinding {
+func buildBindings(userID, agentID string, normalized *normalizedBindings) []models.AgentBinding {
 	result := make([]models.AgentBinding, 0, len(normalized.toolIDs)+len(normalized.skillNames)+len(normalized.knowledgeBaseNames)+len(normalized.subAgentIDs))
 	appendBindings := func(bindingType string, ids []string) {
 		for idx, id := range ids {
 			result = append(result, models.AgentBinding{
+				UserID:          userID,
 				AgentID:         agentID,
 				BindingType:     bindingType,
 				BindingTargetID: id,

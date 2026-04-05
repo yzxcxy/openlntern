@@ -8,7 +8,7 @@ import (
 )
 
 type AgentListFilter struct {
-	OwnerID   string
+	UserID    string
 	Keyword   string
 	AgentType string
 	Status    string
@@ -32,19 +32,19 @@ func (d *AgentDAO) GetByAgentID(agentID string) (*models.Agent, error) {
 
 func (d *AgentDAO) GetByAgentIDAndOwner(agentID, ownerID string) (*models.Agent, error) {
 	var item models.Agent
-	if err := database.DB.Where("agent_id = ? AND owner_id = ?", agentID, ownerID).First(&item).Error; err != nil {
+	if err := database.DB.Where("agent_id = ? AND user_id = ?", agentID, ownerID).First(&item).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
 func (d *AgentDAO) UpdateByAgentIDAndOwner(agentID, ownerID string, updates map[string]any) (int64, error) {
-	result := database.DB.Model(&models.Agent{}).Where("agent_id = ? AND owner_id = ?", agentID, ownerID).Updates(updates)
+	result := database.DB.Model(&models.Agent{}).Where("agent_id = ? AND user_id = ?", agentID, ownerID).Updates(updates)
 	return result.RowsAffected, result.Error
 }
 
 func (d *AgentDAO) DeleteByAgentIDAndOwner(agentID, ownerID string) (int64, error) {
-	result := database.DB.Where("agent_id = ? AND owner_id = ?", agentID, ownerID).Delete(&models.Agent{})
+	result := database.DB.Where("agent_id = ? AND user_id = ?", agentID, ownerID).Delete(&models.Agent{})
 	return result.RowsAffected, result.Error
 }
 
@@ -52,8 +52,8 @@ func (d *AgentDAO) List(page, pageSize int, filter AgentListFilter) ([]models.Ag
 	_, pageSize, offset := normalizePagination(page, pageSize, 10)
 
 	query := database.DB.Model(&models.Agent{})
-	if ownerID := strings.TrimSpace(filter.OwnerID); ownerID != "" {
-		query = query.Where("owner_id = ?", ownerID)
+	if userID := strings.TrimSpace(filter.UserID); userID != "" {
+		query = query.Where("user_id = ?", userID)
 	}
 	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
 		pattern := "%" + keyword + "%"
@@ -85,7 +85,7 @@ func (d *AgentDAO) ListByAgentIDs(ownerID string, agentIDs []string) ([]models.A
 	}
 	query := database.DB.Model(&models.Agent{}).Where("agent_id IN ?", agentIDs)
 	if ownerID = strings.TrimSpace(ownerID); ownerID != "" {
-		query = query.Where("owner_id = ?", ownerID)
+		query = query.Where("user_id = ?", ownerID)
 	}
 	var items []models.Agent
 	if err := query.Find(&items).Error; err != nil {
@@ -96,7 +96,7 @@ func (d *AgentDAO) ListByAgentIDs(ownerID string, agentIDs []string) ([]models.A
 
 func (d *AgentDAO) ListAllByOwner(ownerID string) ([]models.Agent, error) {
 	var items []models.Agent
-	if err := database.DB.Where("owner_id = ?", ownerID).Order("updated_at DESC").Find(&items).Error; err != nil {
+	if err := database.DB.Where("user_id = ?", ownerID).Order("updated_at DESC").Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil
@@ -104,7 +104,7 @@ func (d *AgentDAO) ListAllByOwner(ownerID string) ([]models.Agent, error) {
 
 func (d *AgentDAO) ListEnabledByOwner(ownerID string) ([]models.Agent, error) {
 	var items []models.Agent
-	if err := database.DB.Where("owner_id = ? AND status = ?", ownerID, "enabled").Order("sort ASC").Order("updated_at DESC").Find(&items).Error; err != nil {
+	if err := database.DB.Where("user_id = ? AND status = ?", ownerID, "enabled").Order("sort ASC").Order("updated_at DESC").Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil
