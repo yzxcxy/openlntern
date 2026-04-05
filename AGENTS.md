@@ -1,7 +1,7 @@
 # openIntern 协作说明
 
 ## 1) 仓库结构
-- `openIntern_backend`：Go 后端服务（Gin + GORM + Redis + Milvus）。
+- `openIntern_backend`：Go 后端服务（Gin + GORM + Redis）。
 - `openIntern_forentend`：Next.js 前端（TypeScript，目录名按仓库现状保留 `forentend` 拼写）。
 - `go`：本地 AG-UI Go SDK，后端 `go.mod` 里通过 `replace` 指向该目录。
 - `scripts`：项目脚本。
