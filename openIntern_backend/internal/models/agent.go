@@ -10,8 +10,8 @@ import (
 type Agent struct {
 	ID uint `gorm:"primarykey" json:"-"`
 
-	AgentID string `gorm:"column:agent_id;uniqueIndex;not null;size:36" json:"agent_id"`
-	OwnerID string `gorm:"column:owner_id;index;not null;size:36" json:"owner_id"`
+	UserID  string `gorm:"column:user_id;uniqueIndex:ux_agent_user_agent,priority:1;index;not null;size:36" json:"user_id"`
+	AgentID string `gorm:"column:agent_id;uniqueIndex:ux_agent_user_agent,priority:2;not null;size:36" json:"agent_id"`
 
 	Name                string `gorm:"index;not null;size:120" json:"name"`
 	Description         string `gorm:"type:text" json:"description"`

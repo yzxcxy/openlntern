@@ -10,10 +10,11 @@ import (
 // ModelCatalog stores model-level metadata independent from provider credentials.
 type ModelCatalog struct {
 	ID      uint   `gorm:"primarykey" json:"-"`
-	ModelID string `gorm:"column:model_id;uniqueIndex;not null;size:36" json:"model_id"`
+	UserID  string `gorm:"column:user_id;uniqueIndex:ux_model_catalog_user_model,priority:1;uniqueIndex:ux_model_catalog_user_provider_key,priority:1;index;not null;size:36" json:"user_id"`
+	ModelID string `gorm:"column:model_id;uniqueIndex:ux_model_catalog_user_model,priority:2;not null;size:36" json:"model_id"`
 
-	ProviderID       string `gorm:"index;not null;size:36" json:"provider_id"`
-	ModelKey         string `gorm:"index;not null;size:120" json:"model_key"`
+	ProviderID       string `gorm:"uniqueIndex:ux_model_catalog_user_provider_key,priority:2;index;not null;size:36" json:"provider_id"`
+	ModelKey         string `gorm:"uniqueIndex:ux_model_catalog_user_provider_key,priority:3;index;not null;size:120" json:"model_key"`
 	Name             string `gorm:"index;not null;size:120" json:"name"`
 	Avatar           string `gorm:"size:255" json:"avatar"`
 	CapabilitiesJSON string `gorm:"type:text" json:"capabilities_json"`

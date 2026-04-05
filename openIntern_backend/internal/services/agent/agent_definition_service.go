@@ -127,7 +127,7 @@ func (s *AgentDefinitionService) Create(ctx context.Context, ownerID string, inp
 	}
 	item := &models.Agent{
 		AgentID:               uuid.NewString(),
-		OwnerID:               ownerID,
+		UserID:                ownerID,
 		Status:                AgentStatusDraft,
 		Name:                  strings.TrimSpace(input.Name),
 		Description:           strings.TrimSpace(input.Description),
@@ -194,7 +194,7 @@ func (s *AgentDefinitionService) BuildDebugDetail(ctx context.Context, ownerID s
 	}
 	item := models.Agent{
 		AgentID:              agentID,
-		OwnerID:              ownerID,
+		UserID:               ownerID,
 		Status:               AgentStatusDraft,
 		Name:                 strings.TrimSpace(input.Name),
 		Description:          strings.TrimSpace(input.Description),
@@ -504,7 +504,7 @@ func buildAgentDetailView(item models.Agent, bindings []models.AgentBinding, mod
 	grouped := splitBindings(bindings)
 	return &AgentDetailView{
 		AgentID:            item.AgentID,
-		OwnerID:            item.OwnerID,
+		OwnerID:            item.UserID,
 		Name:               item.Name,
 		Description:        item.Description,
 		AgentType:          item.AgentType,
@@ -533,7 +533,7 @@ func buildAgentListItem(item models.Agent, bindings []models.AgentBinding, model
 	grouped := splitBindings(bindings)
 	return AgentListItem{
 		AgentID:            item.AgentID,
-		OwnerID:            item.OwnerID,
+		OwnerID:            item.UserID,
 		Name:               item.Name,
 		Description:        item.Description,
 		AgentType:          item.AgentType,

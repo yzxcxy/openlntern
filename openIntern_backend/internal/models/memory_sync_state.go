@@ -30,7 +30,8 @@ const (
 // MemorySyncState stores the long-term memory sync cursor for a chat thread.
 type MemorySyncState struct {
 	ID                 uint       `gorm:"primarykey" json:"-"`
-	ThreadID           string     `gorm:"column:thread_id;uniqueIndex;not null;size:64" json:"thread_id"`
+	UserID             string     `gorm:"column:user_id;uniqueIndex:ux_memory_sync_state_user_thread,priority:1;index;not null;size:36" json:"user_id"`
+	ThreadID           string     `gorm:"column:thread_id;uniqueIndex:ux_memory_sync_state_user_thread,priority:2;not null;size:64" json:"thread_id"`
 	LastAddedMsgID     string     `gorm:"column:last_added_msg_id;size:64" json:"last_added_msg_id"`
 	LastSyncedMsgID    string     `gorm:"column:last_synced_msg_id;size:64" json:"last_synced_msg_id"`
 	LastCommittedRunID string     `gorm:"column:last_committed_run_id;size:64" json:"last_committed_run_id"`

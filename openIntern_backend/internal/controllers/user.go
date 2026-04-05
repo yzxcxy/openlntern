@@ -68,7 +68,7 @@ func Login(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	token, expiresAt, err := accountsvc.GenerateToken(user.UserID, user.Role)
+	token, expiresAt, err := accountsvc.GenerateToken(user.UserID, "")
 	if err != nil {
 		response.InternalError(c)
 		return

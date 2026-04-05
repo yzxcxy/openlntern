@@ -10,7 +10,8 @@ import (
 // ThreadContextSnapshot stores rolling compression snapshots for a chat thread.
 type ThreadContextSnapshot struct {
 	ID         uint   `gorm:"primarykey" json:"-"`
-	SnapshotID string `gorm:"column:snapshot_id;uniqueIndex;not null;size:64" json:"snapshot_id"`
+	UserID     string `gorm:"column:user_id;uniqueIndex:ux_thread_snapshot_user_snapshot,priority:1;index;not null;size:36" json:"user_id"`
+	SnapshotID string `gorm:"column:snapshot_id;uniqueIndex:ux_thread_snapshot_user_snapshot,priority:2;not null;size:64" json:"snapshot_id"`
 	ThreadID   string `gorm:"column:thread_id;index;not null;size:64" json:"thread_id"`
 
 	CompressionIndex  int    `gorm:"column:compression_index;index;not null" json:"compression_index"`
