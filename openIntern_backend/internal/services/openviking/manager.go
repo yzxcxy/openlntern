@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -291,16 +290,4 @@ func findOpenVikingExecutable() (string, error) {
 	}
 
 	return "", fmt.Errorf("openviking-server not found in PATH or common locations")
-}
-
-// maskAPIKey 脱敏 API Key（复用 config 包的函数）
-func maskAPIKey(key string) string {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return ""
-	}
-	if len(key) <= 8 {
-		return "***"
-	}
-	return key[:3] + "***" + key[len(key)-3:]
 }

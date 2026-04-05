@@ -7,3 +7,7 @@ _eino/
 .claude/
 .swp.gemini
 .gemini/
+.mcp.json
+.setting/
+evals/promptfoo/.env.promptfoo.local
+evals/promptfoo/.promptfoo/

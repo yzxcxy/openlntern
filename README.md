@@ -193,6 +193,16 @@ cd openIntern_backend
 go run main.go
 ```
 
+Promptfoo 评测：
+
+```bash
+cd evals/promptfoo
+npm run test
+npm run eval
+```
+
+评测接入说明见 [evals/promptfoo/README.md](/Users/fqc/project/agent/openIntern/evals/promptfoo/README.md)。
+
 ## 协作约定摘录
 
 结合仓库内 [AGENTS.md](/Users/fqc/project/agent/openIntern/AGENTS.md)，开发时建议遵守：

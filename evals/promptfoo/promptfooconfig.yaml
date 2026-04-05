@@ -1,0 +1,22 @@
+description: openIntern promptfoo evals
+
+prompts:
+  - "{{input}}"
+
+providers:
+  - file://./providers/openintern-chat.mjs
+
+tests:
+  - description: chat smoke
+    vars:
+      input: "介绍一下 openIntern 的核心模块"
+    assert:
+      - type: contains
+        value: "openIntern"
+      - type: contains-any
+        value:
+          - "前端"
+          - "后端"
+          - "智能体"
+          - "Agent"
+          - "知识库"

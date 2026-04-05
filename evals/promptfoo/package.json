@@ -1,0 +1,11 @@
+{
+  "name": "openintern-promptfoo-evals",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ./tests/*.test.mjs",
+    "eval": "npx promptfoo@latest eval --config ./promptfooconfig.yaml --env-file ./.env.promptfoo.local",
+    "view": "npx promptfoo@latest view",
+    "validate": "npx promptfoo@latest validate --config ./promptfooconfig.yaml"
+  }
+}
