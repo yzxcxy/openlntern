@@ -4,7 +4,6 @@ export type StoredUser = {
   email?: string;
   phone?: string;
   avatar?: string;
-  role?: string;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;

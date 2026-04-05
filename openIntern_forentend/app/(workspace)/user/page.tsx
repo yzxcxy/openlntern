@@ -13,7 +13,6 @@ type UserInfo = {
   email?: string;
   phone?: string;
   avatar?: string;
-  role?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -70,13 +69,13 @@ export default function UserPage() {
   };
 
   const fetchUser = useCallback(
-    async (userId: string, showLoading: boolean) => {
+    async (showLoading: boolean) => {
       if (showLoading) {
         setLoading(true);
       }
       setError("");
       try {
-        const data = await requestBackend<UserInfo>(`/v1/users/${userId}`, {
+        const data = await requestBackend<UserInfo>("/v1/users/me", {
           fallbackMessage: "获取用户信息失败",
           router,
         });
@@ -104,7 +103,7 @@ export default function UserPage() {
         const parsed = JSON.parse(storedUser);
         applyUser(parsed);
         if (parsed?.user_id) {
-          fetchUser(parsed.user_id, true);
+          fetchUser(true);
           return;
         }
       } catch {
@@ -136,7 +135,7 @@ export default function UserPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const data = await requestBackend<{ url?: string }>(`/v1/users/${userInfo.user_id}/avatar`, {
+      const data = await requestBackend<{ url?: string }>("/v1/users/me/avatar", {
         method: "POST",
         body: formData,
         fallbackMessage: "头像上传失败",
@@ -199,7 +198,7 @@ export default function UserPage() {
         setPassword("");
         return;
       }
-      await requestBackend(`/v1/users/${userInfo.user_id}`, {
+      await requestBackend("/v1/users/me", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -208,7 +207,7 @@ export default function UserPage() {
         fallbackMessage: "更新失败",
         router,
       });
-      await fetchUser(userInfo.user_id, false);
+      await fetchUser(false);
       setEditing(false);
       setPassword("");
       setSuccess("信息更新成功");
@@ -244,9 +243,6 @@ export default function UserPage() {
                   <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">
                     {displayName}
                   </h1>
-                  <span className="rounded-full bg-[rgba(37,99,255,0.08)] px-2.5 py-1 text-xs font-medium text-[var(--color-action-primary)]">
-                    {userInfo?.role || "普通用户"}
-                  </span>
                 </div>
                 <div className="mt-1 text-sm text-[var(--color-text-muted)]">
                   {userInfo?.email || "建议补充邮箱，方便通知与找回"}
@@ -570,10 +566,10 @@ export default function UserPage() {
                         >
                           <path d="M12 2l3 6 6 .8-4.5 4.2 1 6-5.5-3-5.5 3 1-6L3 8.8 9 8l3-6z" />
                         </svg>
-                        角色
+                        账号类型
                       </div>
                       <div className="mt-1 text-[var(--color-text-primary)]">
-                        {userInfo?.role || "-"}
+                        当前账号
                       </div>
                     </div>
                   </div>
@@ -666,9 +662,9 @@ export default function UserPage() {
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <span className="text-[var(--color-text-muted)]">账号角色</span>
+                  <span className="text-[var(--color-text-muted)]">账号类型</span>
                   <span className="text-right text-[var(--color-text-primary)]">
-                    {userInfo?.role || "-"}
+                    当前账号
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-3">

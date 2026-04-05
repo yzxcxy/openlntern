@@ -8,7 +8,7 @@ import (
 	storagesvc "openIntern/internal/services/storage"
 	"path"
 	"path/filepath"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -68,7 +68,7 @@ func Login(c *gin.Context) {
 		response.Unauthorized(c)
 		return
 	}
-	token, expiresAt, err := accountsvc.GenerateToken(user.UserID, "")
+	token, expiresAt, err := accountsvc.GenerateToken(user.UserID)
 	if err != nil {
 		response.InternalError(c)
 		return
@@ -80,9 +80,9 @@ func Login(c *gin.Context) {
 	})
 }
 
-// GetUser 获取用户
-func GetUser(c *gin.Context) {
-	userID := c.Param("id")
+// GetCurrentUser 获取当前登录用户
+func GetCurrentUser(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	user, err := accountsvc.User.GetUserByUserID(userID)
 	if err != nil {
 		response.NotFound(c, "user not found")
@@ -91,9 +91,9 @@ func GetUser(c *gin.Context) {
 	response.JSONSuccess(c, http.StatusOK, user)
 }
 
-// UpdateUser 更新用户
-func UpdateUser(c *gin.Context) {
-	userID := c.Param("id")
+// UpdateCurrentUser 更新当前登录用户
+func UpdateCurrentUser(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
 		response.BadRequest(c)
@@ -108,8 +108,8 @@ func UpdateUser(c *gin.Context) {
 	response.JSONMessage(c, http.StatusOK, "user updated successfully")
 }
 
-func UploadAvatar(c *gin.Context) {
-	userID := c.Param("id")
+func UploadCurrentUserAvatar(c *gin.Context) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		response.BadRequest(c)
@@ -136,34 +136,5 @@ func UploadAvatar(c *gin.Context) {
 	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"key": key,
 		"url": url,
-	})
-}
-
-// DeleteUser 删除用户
-func DeleteUser(c *gin.Context) {
-	userID := c.Param("id")
-	if err := accountsvc.User.DeleteUser(userID); err != nil {
-		response.InternalError(c)
-		return
-	}
-	response.JSONMessage(c, http.StatusOK, "user deleted successfully")
-}
-
-// ListUsers 获取用户列表
-func ListUsers(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-
-	users, total, err := accountsvc.User.ListUsers(page, pageSize)
-	if err != nil {
-		response.InternalError(c)
-		return
-	}
-
-	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"data":  users,
-		"total": total,
-		"page":  page,
-		"size":  pageSize,
 	})
 }
