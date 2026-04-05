@@ -5,7 +5,7 @@ plugins:
     source: "builtin"
     runtime_type: "builtin"
     status: "enabled"
-    icon: "https://open-intern-1307855818.cos.ap-guangzhou.myqcloud.com/plugin/icon/a2ui.png"
+    icon: "public/plugin/icon/a2ui.png"
     tools:
       - tool_id: "6c3a0f46-7d52-4c9b-8b62-2ab0de110011"
         tool_name: "list_a2uis"
@@ -94,16 +94,16 @@ plugins:
           }
 
   - plugin_id: "6c3a0f46-7d52-4c9b-8b62-2ab0de110002"
-    name: "COS"
-    description: "内建 COS 工具集合，用于把沙箱文件上传到对象存储。"
+    name: "Object Storage"
+    description: "内建对象存储工具集合，用于把沙箱文件上传到 MinIO 用户空间。"
     source: "builtin"
     runtime_type: "builtin"
     status: "enabled"
-    icon: "https://open-intern-1307855818.cos.ap-guangzhou.myqcloud.com/plugin/icon/cos.png"
+    icon: "public/plugin/icon/object-storage.png"
     tools:
       - tool_id: "6c3a0f46-7d52-4c9b-8b62-2ab0de110021"
-        tool_name: "upload_to_cos"
-        description: "从沙箱绝对路径读取文件并上传到 COS，入参为 cos_key 与 sandbox_path（必须是绝对路径，例如 /tmp/output.md），返回 url；失败时会明确指出是参数校验、沙箱读文件还是 COS 上传阶段出错。"
+        tool_name: "upload_to_object_storage"
+        description: "从沙箱绝对路径读取文件并上传到对象存储，入参为 purpose、scope_segments、sandbox_path（必须是绝对路径）与可选 content_type；返回 key 与 url。"
         tool_response_mode: "non_streaming"
         enabled: true
         timeout_ms: 30000
@@ -112,16 +112,27 @@ plugins:
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
             "properties": {
-              "cos_key": {
+              "purpose": {
                 "type": "string",
-                "description": "COS 对象路径（Object Key）"
+                "description": "对象用途：chat/avatar/plugin"
+              },
+              "scope_segments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "可选对象作用域分段，每项必须是单个路径段"
               },
               "sandbox_path": {
                 "type": "string",
                 "description": "沙箱内文件绝对路径，例如 /tmp/output.md"
+              },
+              "content_type": {
+                "type": "string",
+                "description": "可选，文件 MIME 类型，例如 text/markdown"
               }
             },
-            "required": ["cos_key", "sandbox_path"],
+            "required": ["purpose", "sandbox_path"],
             "additionalProperties": false
           }
         output_schema_json: |
@@ -129,8 +140,9 @@ plugins:
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
             "properties": {
+              "key": { "type": "string" },
               "url": { "type": "string" }
             },
-            "required": ["url"],
+            "required": ["key", "url"],
             "additionalProperties": false
           }

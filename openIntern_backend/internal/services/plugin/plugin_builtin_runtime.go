@@ -51,13 +51,13 @@ func loadBuiltinRuntimeToolCatalog(ctx context.Context) (map[string]einoTool.Bas
 	if err != nil {
 		return nil, err
 	}
-	cosTools, err := builtinTool.GetCOSTools(ctx)
+	objectStorageTools, err := builtinTool.GetObjectStorageTools(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	catalog := make(map[string]einoTool.BaseTool, len(a2uiTools)+len(cosTools))
-	for _, tool := range append(a2uiTools, cosTools...) {
+	catalog := make(map[string]einoTool.BaseTool, len(a2uiTools)+len(objectStorageTools))
+	for _, tool := range append(a2uiTools, objectStorageTools...) {
 		info, err := tool.Info(ctx)
 		if err != nil {
 			return nil, err

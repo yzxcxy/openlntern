@@ -115,7 +115,7 @@ func buildBuiltinPluginDefinition(item builtinPluginManifestPlugin) (builtinPlug
 		PluginID:    pluginID,
 		Name:        name,
 		Description: strings.TrimSpace(item.Description),
-		Icon:        normalizePluginIcon(strings.TrimSpace(item.Icon)),
+		Icon:        normalizePluginIconForStorage(strings.TrimSpace(item.Icon)),
 		Source:      source,
 		RuntimeType: runtimeType,
 		Status:      status,

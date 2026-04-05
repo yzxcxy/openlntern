@@ -176,6 +176,40 @@ func normalizeObjectKey(key string) string {
 	return strings.TrimPrefix(strings.TrimSpace(strings.ReplaceAll(key, "\\", "/")), "/")
 }
 
+// BuildPublicObjectURL resolves a stable public object key (public/...) into a full accessible URL.
+func BuildPublicObjectURL(publicObjectKey string) (string, error) {
+	key := normalizeObjectKey(publicObjectKey)
+	if !strings.HasPrefix(key, "public/") {
+		return "", errors.New("public object key must start with public/")
+	}
+
+	liveStoreMu.RLock()
+	store := objectStore
+	liveStoreMu.RUnlock()
+	if store != nil {
+		return store.BuildObjectURL(key)
+	}
+
+	cfg := config.GetConfig().MinIO
+	if base := strings.TrimRight(strings.TrimSpace(cfg.PublicBaseURL), "/"); base != "" {
+		return base + "/" + key, nil
+	}
+
+	endpoint, err := normalizeMinIOEndpoint(cfg.Endpoint)
+	if err != nil {
+		return "", err
+	}
+	bucket := strings.TrimSpace(cfg.Bucket)
+	if endpoint == "" || bucket == "" {
+		return "", errors.New("minio config incomplete")
+	}
+	scheme := "http"
+	if cfg.UseSSL {
+		scheme = "https"
+	}
+	return scheme + "://" + endpoint + "/" + bucket + "/" + key, nil
+}
+
 type FileService struct{}
 
 var File = new(FileService)

@@ -6,12 +6,9 @@ import (
 	"openIntern/internal/response"
 	accountsvc "openIntern/internal/services/account"
 	storagesvc "openIntern/internal/services/storage"
-	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 // CreateUser 创建用户
@@ -115,6 +112,11 @@ func UploadCurrentUserAvatar(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
+	detectedContentType, err := detectImageContentType(fileHeader)
+	if err != nil {
+		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "only image files are supported")
+		return
+	}
 	file, err := fileHeader.Open()
 	if err != nil {
 		response.InternalError(c)
@@ -122,19 +124,21 @@ func UploadCurrentUserAvatar(c *gin.Context) {
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(fileHeader.Filename)
-	key := path.Join("avatar", userID, uuid.NewString()+ext)
-	url, err := storagesvc.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
+	uploaded, err := storagesvc.ObjectStorage.UploadUserObject(c.Request.Context(), userID, storagesvc.UploadUserObjectSpec{
+		Purpose:          storagesvc.ObjectPurposeAvatar,
+		OriginalFileName: strings.TrimSpace(fileHeader.Filename),
+		ContentType:      detectedContentType,
+	}, file, fileHeader.Size)
 	if err != nil {
 		response.InternalError(c)
 		return
 	}
-	if err := accountsvc.User.UpdateUser(userID, map[string]interface{}{"avatar": url}); err != nil {
+	if err := accountsvc.User.UpdateUser(userID, map[string]interface{}{"avatar": uploaded.URL}); err != nil {
 		response.InternalError(c)
 		return
 	}
 	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"key": key,
-		"url": url,
+		"key": uploaded.Key,
+		"url": uploaded.URL,
 	})
 }

@@ -8,12 +8,8 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"path"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 
 	storagesvc "openIntern/internal/services/storage"
 )
@@ -44,7 +40,7 @@ type ChatUploadService struct{}
 // ChatUpload provides chat attachment upload capabilities.
 var ChatUpload = new(ChatUploadService)
 
-// Upload uploads a chat attachment to COS and returns the uploaded asset metadata.
+// Upload uploads a chat attachment and returns the uploaded asset metadata.
 func (s *ChatUploadService) Upload(ctx context.Context, ownerID string, threadID string, fileHeader *multipart.FileHeader) (*ChatUploadAsset, error) {
 	if fileHeader == nil {
 		return nil, newChatUploadValidationError("file is required")
@@ -74,17 +70,22 @@ func (s *ChatUploadService) Upload(ctx context.Context, ownerID string, threadID
 		fileHeader.Header.Set("Content-Type", mimeType)
 	}
 
-	objectKey := buildChatUploadObjectKey(ownerID, threadID, fileHeader.Filename, mimeType)
-	url, err := storagesvc.File.UploadWithKey(ctx, objectKey, file, fileHeader)
+	normalizedFileName := normalizeFileName(fileHeader.Filename, mimeType)
+	uploaded, err := storagesvc.ObjectStorage.UploadUserObject(ctx, ownerID, storagesvc.UploadUserObjectSpec{
+		Purpose:          storagesvc.ObjectPurposeChat,
+		ScopeSegments:    []string{threadID},
+		OriginalFileName: normalizedFileName,
+		ContentType:      mimeType,
+	}, file, fileHeader.Size)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ChatUploadAsset{
-		Key:       objectKey,
-		URL:       url,
+		Key:       uploaded.Key,
+		URL:       uploaded.URL,
 		MIMEType:  mimeType,
-		FileName:  normalizeFileName(fileHeader.Filename, mimeType),
+		FileName:  normalizedFileName,
 		Size:      fileHeader.Size,
 		MediaKind: classifyMediaKind(mimeType),
 	}, nil
@@ -118,20 +119,6 @@ func detectUploadedFileMIME(fileHeader *multipart.FileHeader) (string, error) {
 		return strings.ToLower(contentType), nil
 	}
 	return strings.TrimSpace(strings.ToLower(detected)), nil
-}
-
-// buildChatUploadObjectKey builds object key using owner/thread/date namespaces.
-func buildChatUploadObjectKey(ownerID string, threadID string, fileName string, mimeType string) string {
-	ownerSeg := sanitizePathSegment(ownerID, "anonymous")
-	threadSeg := sanitizePathSegment(threadID, "default")
-	ext := chooseFileExtension(fileName, mimeType)
-	return path.Join(
-		"chat",
-		ownerSeg,
-		threadSeg,
-		time.Now().Format("20060102"),
-		uuid.NewString()+ext,
-	)
 }
 
 // chooseFileExtension chooses file extension from original name first, then MIME type.
@@ -172,30 +159,6 @@ func classifyMediaKind(mimeType string) string {
 	default:
 		return "file"
 	}
-}
-
-// sanitizePathSegment sanitizes a path segment and applies a fallback when empty.
-func sanitizePathSegment(value string, fallback string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return fallback
-	}
-	var builder strings.Builder
-	for _, r := range trimmed {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '-' || r == '_' {
-			builder.WriteRune(r)
-			continue
-		}
-		builder.WriteRune('_')
-	}
-	result := strings.Trim(builder.String(), "_")
-	if result == "" {
-		return fallback
-	}
-	return result
 }
 
 // newChatUploadValidationError wraps validation errors with a shared sentinel.

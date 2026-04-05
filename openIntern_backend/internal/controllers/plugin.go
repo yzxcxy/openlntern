@@ -5,13 +5,10 @@ import (
 	"openIntern/internal/response"
 	pluginsvc "openIntern/internal/services/plugin"
 	storagesvc "openIntern/internal/services/storage"
-	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 func ListPlugins(c *gin.Context) {
@@ -70,8 +67,8 @@ func UploadPluginIcon(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
-	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
+	detectedContentType, err := detectImageContentType(fileHeader)
+	if err != nil {
 		response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, "only image files are supported")
 		return
 	}
@@ -82,16 +79,19 @@ func UploadPluginIcon(c *gin.Context) {
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(fileHeader.Filename)
-	key := path.Join("plugin", "icon", uuid.NewString()+ext)
-	url, err := storagesvc.File.UploadWithKey(c.Request.Context(), key, file, fileHeader)
+	uploaded, err := storagesvc.ObjectStorage.UploadUserObject(c.Request.Context(), strings.TrimSpace(c.GetString("user_id")), storagesvc.UploadUserObjectSpec{
+		Purpose:          storagesvc.ObjectPurposePlugin,
+		ScopeSegments:    []string{"icon"},
+		OriginalFileName: strings.TrimSpace(fileHeader.Filename),
+		ContentType:      detectedContentType,
+	}, file, fileHeader.Size)
 	if err != nil {
 		response.InternalError(c)
 		return
 	}
 	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"key": key,
-		"url": url,
+		"key": uploaded.Key,
+		"url": uploaded.URL,
 	})
 }
 

@@ -12,6 +12,7 @@ import (
 	"openIntern/internal/models"
 	kbsvc "openIntern/internal/services/kb"
 	modelsvc "openIntern/internal/services/model"
+	storagesvc "openIntern/internal/services/storage"
 	"openIntern/internal/util"
 
 	"github.com/google/uuid"
@@ -32,8 +33,8 @@ const (
 	AgentBindingSubAgent = "sub_agent"
 
 	maxAgentCompileDepth = 3
-	// Keep backend-created agent avatars aligned with the frontend default avatar.
-	defaultAgentAvatarURL = "https://open-intern-1307855818.cos.ap-guangzhou.myqcloud.com/avatar/openIntern%40200%C3%97200.jpg"
+	// Keep backend-created agent avatars aligned to the stable public object key.
+	defaultAgentAvatarObjectKey = "public/system/avatar/openintern-default.jpg"
 )
 
 type AgentDefinitionService struct{}
@@ -61,48 +62,48 @@ type UpsertAgentInput struct {
 }
 
 type AgentListItem struct {
-	AgentID             string    `json:"agent_id"`
-	OwnerID             string    `json:"owner_id"`
-	Name                string    `json:"name"`
-	Description         string    `json:"description"`
-	AgentType           string    `json:"agent_type"`
-	Status              string    `json:"status"`
-	AvatarURL           string    `json:"avatar_url"`
-	DefaultModelID      string    `json:"default_model_id"`
-	DefaultModelName    string    `json:"default_model_name"`
-	AgentMemoryEnabled  bool      `json:"agent_memory_enabled"`
-	ToolCount           int       `json:"tool_count"`
-	SkillCount          int       `json:"skill_count"`
-	KnowledgeBaseCount  int       `json:"knowledge_base_count"`
-	SubAgentCount       int       `json:"sub_agent_count"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	AgentID            string    `json:"agent_id"`
+	OwnerID            string    `json:"owner_id"`
+	Name               string    `json:"name"`
+	Description        string    `json:"description"`
+	AgentType          string    `json:"agent_type"`
+	Status             string    `json:"status"`
+	AvatarURL          string    `json:"avatar_url"`
+	DefaultModelID     string    `json:"default_model_id"`
+	DefaultModelName   string    `json:"default_model_name"`
+	AgentMemoryEnabled bool      `json:"agent_memory_enabled"`
+	ToolCount          int       `json:"tool_count"`
+	SkillCount         int       `json:"skill_count"`
+	KnowledgeBaseCount int       `json:"knowledge_base_count"`
+	SubAgentCount      int       `json:"sub_agent_count"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type AgentDetailView struct {
-	AgentID             string    `json:"agent_id"`
-	OwnerID             string    `json:"owner_id"`
-	Name                string    `json:"name"`
-	Description         string    `json:"description"`
-	AgentType           string    `json:"agent_type"`
-	Status              string    `json:"status"`
-	SystemPrompt        string    `json:"system_prompt"`
-	AvatarURL           string    `json:"avatar_url"`
-	ChatBackgroundJSON  string    `json:"chat_background_json"`
-	ExampleQuestions    []string  `json:"example_questions"`
-	DefaultModelID      string    `json:"default_model_id"`
-	DefaultModelName    string    `json:"default_model_name"`
-	AgentMemoryEnabled  bool      `json:"agent_memory_enabled"`
-	ToolIDs             []string  `json:"tool_ids"`
-	SkillNames          []string  `json:"skill_names"`
-	KnowledgeBaseNames  []string  `json:"knowledge_base_names"`
-	SubAgentIDs         []string  `json:"sub_agent_ids"`
-	ToolCount           int       `json:"tool_count"`
-	SkillCount          int       `json:"skill_count"`
-	KnowledgeBaseCount  int       `json:"knowledge_base_count"`
-	SubAgentCount       int       `json:"sub_agent_count"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	AgentID            string    `json:"agent_id"`
+	OwnerID            string    `json:"owner_id"`
+	Name               string    `json:"name"`
+	Description        string    `json:"description"`
+	AgentType          string    `json:"agent_type"`
+	Status             string    `json:"status"`
+	SystemPrompt       string    `json:"system_prompt"`
+	AvatarURL          string    `json:"avatar_url"`
+	ChatBackgroundJSON string    `json:"chat_background_json"`
+	ExampleQuestions   []string  `json:"example_questions"`
+	DefaultModelID     string    `json:"default_model_id"`
+	DefaultModelName   string    `json:"default_model_name"`
+	AgentMemoryEnabled bool      `json:"agent_memory_enabled"`
+	ToolIDs            []string  `json:"tool_ids"`
+	SkillNames         []string  `json:"skill_names"`
+	KnowledgeBaseNames []string  `json:"knowledge_base_names"`
+	SubAgentIDs        []string  `json:"sub_agent_ids"`
+	ToolCount          int       `json:"tool_count"`
+	SkillCount         int       `json:"skill_count"`
+	KnowledgeBaseCount int       `json:"knowledge_base_count"`
+	SubAgentCount      int       `json:"sub_agent_count"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type EnabledAgentOption struct {
@@ -126,18 +127,18 @@ func (s *AgentDefinitionService) Create(ctx context.Context, ownerID string, inp
 		return nil, errors.New("owner_id is required")
 	}
 	item := &models.Agent{
-		AgentID:               uuid.NewString(),
-		UserID:                ownerID,
-		Status:                AgentStatusDraft,
-		Name:                  strings.TrimSpace(input.Name),
-		Description:           strings.TrimSpace(input.Description),
-		AgentType:             normalizeAgentType(input.AgentType),
-		SystemPrompt:          strings.TrimSpace(input.SystemPrompt),
-		AvatarURL:             normalizeAgentAvatarURL(input.AvatarURL),
-		ChatBackgroundJSON:    strings.TrimSpace(input.ChatBackgroundJSON),
-		DefaultModelID:        strings.TrimSpace(input.DefaultModelID),
-		AgentMemoryEnabled:    input.AgentMemoryEnabled,
-		ExampleQuestionsJSON:  mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
+		AgentID:              uuid.NewString(),
+		UserID:               ownerID,
+		Status:               AgentStatusDraft,
+		Name:                 strings.TrimSpace(input.Name),
+		Description:          strings.TrimSpace(input.Description),
+		AgentType:            normalizeAgentType(input.AgentType),
+		SystemPrompt:         strings.TrimSpace(input.SystemPrompt),
+		AvatarURL:            normalizeAgentAvatarForStorage(input.AvatarURL),
+		ChatBackgroundJSON:   strings.TrimSpace(input.ChatBackgroundJSON),
+		DefaultModelID:       strings.TrimSpace(input.DefaultModelID),
+		AgentMemoryEnabled:   input.AgentMemoryEnabled,
+		ExampleQuestionsJSON: mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
 	}
 	normalized, err := s.validateAndNormalizeInput(ctx, ownerID, item.AgentID, input)
 	if err != nil {
@@ -166,7 +167,7 @@ func (s *AgentDefinitionService) Update(ctx context.Context, ownerID, agentID st
 		"description":            strings.TrimSpace(input.Description),
 		"agent_type":             normalizeAgentType(input.AgentType),
 		"system_prompt":          strings.TrimSpace(input.SystemPrompt),
-		"avatar_url":             normalizeAgentAvatarURL(input.AvatarURL),
+		"avatar_url":             normalizeAgentAvatarForStorage(input.AvatarURL),
 		"chat_background_json":   strings.TrimSpace(input.ChatBackgroundJSON),
 		"example_questions_json": mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
 		"default_model_id":       strings.TrimSpace(input.DefaultModelID),
@@ -200,7 +201,7 @@ func (s *AgentDefinitionService) BuildDebugDetail(ctx context.Context, ownerID s
 		Description:          strings.TrimSpace(input.Description),
 		AgentType:            normalizeAgentType(input.AgentType),
 		SystemPrompt:         strings.TrimSpace(input.SystemPrompt),
-		AvatarURL:            normalizeAgentAvatarURL(input.AvatarURL),
+		AvatarURL:            normalizeAgentAvatarForStorage(input.AvatarURL),
 		ChatBackgroundJSON:   strings.TrimSpace(input.ChatBackgroundJSON),
 		ExampleQuestionsJSON: mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
 		DefaultModelID:       strings.TrimSpace(input.DefaultModelID),
@@ -321,7 +322,7 @@ func (s *AgentDefinitionService) ListEnabledOptions(ownerID string) ([]EnabledAg
 			Description:        item.Description,
 			AgentType:          item.AgentType,
 			Status:             item.Status,
-			AvatarURL:          normalizeAgentAvatarURL(item.AvatarURL),
+			AvatarURL:          resolveAgentAvatarForView(item.AvatarURL),
 			ChatBackgroundJSON: item.ChatBackgroundJSON,
 			DefaultModelID:     item.DefaultModelID,
 			DefaultModelName:   modelNames[item.DefaultModelID],
@@ -511,7 +512,7 @@ func buildAgentDetailView(item models.Agent, bindings []models.AgentBinding, mod
 		AgentType:          item.AgentType,
 		Status:             item.Status,
 		SystemPrompt:       item.SystemPrompt,
-		AvatarURL:          normalizeAgentAvatarURL(item.AvatarURL),
+		AvatarURL:          resolveAgentAvatarForView(item.AvatarURL),
 		ChatBackgroundJSON: item.ChatBackgroundJSON,
 		ExampleQuestions:   parseExampleQuestions(item.ExampleQuestionsJSON),
 		DefaultModelID:     item.DefaultModelID,
@@ -539,7 +540,7 @@ func buildAgentListItem(item models.Agent, bindings []models.AgentBinding, model
 		Description:        item.Description,
 		AgentType:          item.AgentType,
 		Status:             item.Status,
-		AvatarURL:          normalizeAgentAvatarURL(item.AvatarURL),
+		AvatarURL:          resolveAgentAvatarForView(item.AvatarURL),
 		DefaultModelID:     item.DefaultModelID,
 		DefaultModelName:   modelName,
 		AgentMemoryEnabled: item.AgentMemoryEnabled,
@@ -560,12 +561,23 @@ func groupBindingsByAgentID(bindings []models.AgentBinding) map[string][]models.
 	return result
 }
 
-func normalizeAgentAvatarURL(raw string) string {
+func normalizeAgentAvatarForStorage(raw string) string {
 	trimmed := strings.TrimSpace(raw)
-	if trimmed != "" {
-		return trimmed
+	return trimmed
+}
+
+func resolveAgentAvatarForView(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		trimmed = defaultAgentAvatarObjectKey
 	}
-	return defaultAgentAvatarURL
+	if strings.HasPrefix(trimmed, "public/") {
+		url, err := storagesvc.BuildPublicObjectURL(trimmed)
+		if err == nil {
+			return url
+		}
+	}
+	return trimmed
 }
 
 func splitBindings(bindings []models.AgentBinding) map[string][]string {

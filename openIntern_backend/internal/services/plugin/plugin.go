@@ -9,6 +9,7 @@ import (
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
+	storagesvc "openIntern/internal/services/storage"
 	"openIntern/internal/util"
 	"strconv"
 	"strings"
@@ -166,7 +167,7 @@ func InitPlugin(cfg config.PluginConfig) {
 }
 
 func GetDefaultPluginIconURL() string {
-	return pluginDefaultIconURL
+	return resolvePluginIconForView("")
 }
 
 func (s *PluginService) EnsureBuiltinPluginsForUser(userID string) error {
@@ -378,7 +379,7 @@ func (s *PluginService) ListAvailableForChat(userID string) ([]ChatPluginView, e
 			PluginID:    plugin.PluginID,
 			Name:        plugin.Name,
 			Description: plugin.Description,
-			Icon:        normalizePluginIcon(plugin.Icon),
+			Icon:        resolvePluginIconForView(plugin.Icon),
 			Source:      plugin.Source,
 			RuntimeType: plugin.RuntimeType,
 			Tools:       lightTools,
@@ -457,7 +458,7 @@ func (s *PluginService) prepareDefinition(userID string, pluginID string, input 
 		PluginID:    nextPluginID,
 		Name:        name,
 		Description: strings.TrimSpace(input.Description),
-		Icon:        normalizePluginIcon(input.Icon),
+		Icon:        normalizePluginIconForStorage(input.Icon),
 		Source:      source,
 		RuntimeType: runtimeType,
 		Status:      status,
@@ -657,10 +658,24 @@ func (s *PluginService) loadToolMap(userID string, pluginIDs []string) (map[stri
 	return dao.Plugin.LoadToolMap(userID, pluginIDs)
 }
 
-func normalizePluginIcon(value string) string {
+func normalizePluginIconForStorage(value string) string {
 	icon := strings.TrimSpace(value)
 	if icon == "" {
-		return pluginDefaultIconURL
+		return strings.TrimSpace(pluginDefaultIconURL)
+	}
+	return icon
+}
+
+func resolvePluginIconForView(value string) string {
+	icon := strings.TrimSpace(value)
+	if icon == "" {
+		icon = strings.TrimSpace(pluginDefaultIconURL)
+	}
+	if strings.HasPrefix(icon, "public/") {
+		resolved, err := storagesvc.BuildPublicObjectURL(icon)
+		if err == nil {
+			return resolved
+		}
 	}
 	return icon
 }
@@ -747,7 +762,7 @@ func buildPluginView(plugin models.Plugin, tools []models.Tool) PluginView {
 		PluginID:    plugin.PluginID,
 		Name:        plugin.Name,
 		Description: plugin.Description,
-		Icon:        normalizePluginIcon(plugin.Icon),
+		Icon:        resolvePluginIconForView(plugin.Icon),
 		Source:      plugin.Source,
 		RuntimeType: plugin.RuntimeType,
 		Status:      plugin.Status,
