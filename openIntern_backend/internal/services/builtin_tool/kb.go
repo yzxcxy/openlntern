@@ -56,7 +56,7 @@ func readKnowledgeBaseEntryImpl(ctx context.Context, input ReadKnowledgeBaseEntr
 	if !uriAllowedInKnowledgeBases(uri, allowedPrefixes) {
 		return "", errKBEntryOutOfScope
 	}
-	content, err := kbsvc.KnowledgeBase.ReadContent(ctx, uri)
+	content, err := kbsvc.KnowledgeBase.ReadContentByURI(ctx, uri)
 	if err != nil {
 		return "", err
 	}

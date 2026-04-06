@@ -8,10 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import {
-  readValidToken,
-  requestBackend,
-} from "../auth";
+import { readStoredUser, readValidToken, requestBackend } from "../auth";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
 import { UiConfirmDialog as ConfirmDialog } from "../../components/ui/UiConfirmDialog";
@@ -19,14 +16,12 @@ import { UiModal as Modal } from "../../components/ui/UiModal";
 
 type KnowledgeBase = {
   name?: string;
-  uri?: string;
 };
 
 type TreeEntry = {
-  rel_path?: string;
+  path?: string;
   name?: string;
-  isDir?: boolean;
-  uri?: string;
+  is_dir?: boolean;
   size?: number;
 };
 
@@ -46,8 +41,7 @@ const buildNodeKey = (segments: string[], isDir: boolean) => {
 };
 
 const normalizeRelPath = (relPath: string) => {
-  const trimmed = relPath.replace(/^\/+/, "");
-  return trimmed;
+  return relPath.replace(/^\/+/, "");
 };
 
 const readString = (...values: unknown[]) => {
@@ -99,75 +93,7 @@ const splitPath = (relPath: string) => {
   return relPath.split("/").filter(Boolean);
 };
 
-const buildKbInnerPrefix = (kbName: string) =>
-  `viking://resources/${kbName}/${kbName}/`;
-
-const decodeUriForMatch = (uri: string) => {
-  try {
-    return decodeURI(uri);
-  } catch {
-    return uri;
-  }
-};
-
-const parseEntryUriPath = (kbName: string, uri?: string) => {
-  if (!kbName) return "";
-  if (!uri) return "";
-  const innerPrefix = buildKbInnerPrefix(kbName);
-  if (uri.startsWith(innerPrefix)) {
-    return uri.slice(innerPrefix.length);
-  }
-  const decoded = decodeUriForMatch(uri);
-  if (!decoded.startsWith(innerPrefix)) return "";
-  return decoded.slice(innerPrefix.length);
-};
-
-const normalizeTreeEntries = (entries: unknown, kbName: string): TreeEntry[] => {
-  if (!Array.isArray(entries)) {
-    return [];
-  }
-
-  return entries.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return [];
-    }
-
-    const raw = entry as Record<string, unknown>;
-    const uri = readString(raw.uri, raw.path, raw.Path);
-    let relPath = readString(raw.rel_path, raw.relPath, raw.RelPath);
-    if (!relPath && uri) {
-      relPath = parseEntryUriPath(kbName, uri);
-    }
-
-    const isDir =
-      readBoolean(raw.isDir, raw.is_dir, raw.IsDir) ||
-      readString(raw.type, raw.Type).toLowerCase() === "dir" ||
-      relPath.endsWith("/") ||
-      uri.endsWith("/");
-
-    let normalizedUri = uri;
-    if (!normalizedUri && kbName && relPath) {
-      const normalizedPath = normalizeRelPath(relPath);
-      const innerPrefix = buildKbInnerPrefix(kbName);
-      normalizedUri = normalizedPath ? `${innerPrefix}${normalizedPath}` : innerPrefix;
-    }
-    if (isDir && normalizedUri && !normalizedUri.endsWith("/")) {
-      normalizedUri = `${normalizedUri}/`;
-    }
-
-    return [
-      {
-        rel_path: relPath,
-        name: readString(raw.name, raw.Name),
-        isDir,
-        uri: normalizedUri,
-        size: readNumber(raw.size, raw.Size),
-      },
-    ];
-  });
-};
-
-const buildTreeNodes = (entries: TreeEntry[], kbName: string) => {
+const buildTreeNodes = (entries: TreeEntry[]): TreeNode[] => {
   const rootNodes: TreeNode[] = [];
   const nodeMap = new Map<string, TreeNode>();
 
@@ -209,10 +135,10 @@ const buildTreeNodes = (entries: TreeEntry[], kbName: string) => {
   };
 
   entries.forEach((entry) => {
-    const rawPath = entry.rel_path ? normalizeRelPath(entry.rel_path) : parseEntryUriPath(kbName, entry.uri);
+    const rawPath = entry.path ? normalizeRelPath(entry.path) : "";
     if (!rawPath) return;
     let relPath = normalizeRelPath(rawPath);
-    const isDir = entry.isDir || relPath.endsWith("/");
+    const isDir = entry.is_dir || relPath.endsWith("/");
     if (isDir && !relPath.endsWith("/")) {
       relPath = `${relPath}/`;
     }
@@ -242,26 +168,6 @@ const buildTreeNodes = (entries: TreeEntry[], kbName: string) => {
 
   sortNodes(rootNodes);
   return rootNodes;
-};
-
-const getParentDir = (pathValue: string) => {
-  const trimmed = pathValue.replace(/\/+$/, "");
-  const parts = trimmed.split("/").filter(Boolean);
-  if (parts.length <= 1) return "";
-  return `${parts.slice(0, -1).join("/")}/`;
-};
-
-const getBaseName = (pathValue: string) => {
-  const trimmed = pathValue.replace(/\/+$/, "");
-  const parts = trimmed.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? "";
-};
-
-const buildUri = (kbName: string, relPath: string) => {
-  const normalized = relPath.replace(/^\/+/, "");
-  const base = buildKbInnerPrefix(kbName);
-  if (!normalized) return base;
-  return `${base}${normalized}`;
 };
 
 const joinClasses = (...classes: Array<string | false | null | undefined>) =>
@@ -400,7 +306,6 @@ const TreeItem = ({
   level,
   selectedNode,
   onSelect,
-  onDelete,
   onPreview,
   expandedNodes,
   toggleExpand,
@@ -409,7 +314,6 @@ const TreeItem = ({
   level: number;
   selectedNode: TreeNode | null;
   onSelect: (node: TreeNode) => void;
-  onDelete: (node: TreeNode) => void;
   onPreview: (node: TreeNode) => void;
   expandedNodes: Set<string>;
   toggleExpand: (key: string) => void;
@@ -472,17 +376,6 @@ const TreeItem = ({
             <IconEye className="h-4 w-4" />
           </UiButton>
         )}
-        <UiButton
-          variant="ghost"
-          size="sm"
-          className="opacity-0 group-hover:opacity-100"
-          onClick={(e: MouseEvent) => {
-            e.stopPropagation();
-            onDelete(node);
-          }}
-        >
-          <IconDelete className="h-4 w-4" />
-        </UiButton>
       </div>
       {node.isDir && hasChildren && isExpanded && (
         <div>
@@ -493,7 +386,6 @@ const TreeItem = ({
               level={level + 1}
               selectedNode={selectedNode}
               onSelect={onSelect}
-              onDelete={onDelete}
               onPreview={onPreview}
               expandedNodes={expandedNodes}
               toggleExpand={toggleExpand}
@@ -518,14 +410,10 @@ export default function KnowledgeBasePage() {
   const [createName, setCreateName] = useState("");
   const [createFile, setCreateFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [deleteKbVisible, setDeleteKbVisible] = useState(false);
-  const [deleteEntryVisible, setDeleteEntryVisible] = useState(false);
-  const [pendingEntry, setPendingEntry] = useState<TreeNode | null>(null);
   const [deletingKb, setDeletingKb] = useState(false);
-  const [deletingEntry, setDeletingEntry] = useState(false);
 
   // File preview state
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -578,14 +466,19 @@ export default function KnowledgeBasePage() {
       setTreeLoading(true);
       setErrorMessage("");
       try {
-        const data = await requestBackend<unknown[]>(
+        const data = await requestBackend<TreeEntry[]>(
           `/v1/kbs/${encodeURIComponent(kbName)}/tree`,
           {
             fallbackMessage: "获取知识库文件失败",
             router,
           }
         );
-        const entries = normalizeTreeEntries(data.data, kbName);
+        const entries = (data.data ?? []).map((entry: TreeEntry) => ({
+          path: readString(entry.path),
+          name: readString(entry.name),
+          is_dir: readBoolean(entry.is_dir),
+          size: readNumber(entry.size),
+        }));
         setTreeEntries(entries);
         // Auto expand all nodes
         const allKeys = new Set<string>();
@@ -597,7 +490,7 @@ export default function KnowledgeBasePage() {
             }
           });
         };
-        const treeNodes = buildTreeNodes(entries, kbName);
+        const treeNodes = buildTreeNodes(entries);
         collectKeys(treeNodes);
         setExpandedNodes(allKeys);
       } catch (err) {
@@ -624,10 +517,7 @@ export default function KnowledgeBasePage() {
     setSelectedNode(null);
   }, [selectedKb]);
 
-  const treeData = useMemo(
-    () => buildTreeNodes(treeEntries, selectedKb),
-    [treeEntries, selectedKb]
-  );
+  const treeData = useMemo(() => buildTreeNodes(treeEntries), [treeEntries]);
 
   const resetCreateModal = useCallback(() => {
     setCreateVisible(false);
@@ -640,15 +530,17 @@ export default function KnowledgeBasePage() {
       showError("请输入知识库名称");
       return;
     }
+    if (!createFile) {
+      showError("请选择zip文件");
+      return;
+    }
     if (!getValidToken()) return;
     setCreating(true);
     setErrorMessage("");
     try {
       const formData = new FormData();
       formData.append("kb_name", createName.trim());
-      if (createFile) {
-        formData.append("file", createFile);
-      }
+      formData.append("file", createFile);
       await requestBackend("/v1/kbs/import", {
         method: "POST",
         body: formData,
@@ -693,90 +585,6 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const handleDeleteEntry = (node: TreeNode) => {
-    setPendingEntry(node);
-    setDeleteEntryVisible(true);
-  };
-
-  const confirmDeleteEntry = async () => {
-    if (!selectedKb || !pendingEntry) return;
-    if (!getValidToken()) return;
-    setDeletingEntry(true);
-    setErrorMessage("");
-    try {
-      const params = new URLSearchParams();
-      params.set("uri", buildUri(selectedKb, pendingEntry.path));
-      if (pendingEntry.isDir) {
-        params.set("recursive", "true");
-      }
-      await requestBackend(`/v1/kbs/entry?${params.toString()}`, {
-        method: "DELETE",
-        fallbackMessage: "删除失败",
-        router,
-      });
-      showSuccess("删除成功");
-      setDeleteEntryVisible(false);
-      setPendingEntry(null);
-      await fetchTree(selectedKb);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "删除失败";
-      showError(message);
-    } finally {
-      setDeletingEntry(false);
-    }
-  };
-
-  const handleUploadFile = async (file: File) => {
-    if (!selectedKb) return;
-    if (!getValidToken()) return;
-    setUploading(true);
-    setErrorMessage("");
-    try {
-      const targetDir = selectedNode
-        ? selectedNode.isDir
-          ? selectedNode.path
-          : getParentDir(selectedNode.path)
-        : "";
-      const formData = new FormData();
-      formData.append("kb_name", selectedKb);
-      formData.append("file", file);
-      formData.append("target", targetDir);
-      await requestBackend("/v1/kbs/file", {
-        method: "POST",
-        body: formData,
-        fallbackMessage: "上传失败",
-        router,
-      });
-      showSuccess("上传请求已受理，后台处理中，请稍后刷新查看结果");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "上传失败";
-      showError(message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      if (!file) {
-        return;
-      }
-      if (file.name.toLowerCase().endsWith(".zip") || !file.name.includes(".")) {
-        // Accept zip files or files without extension
-      }
-      handleUploadFile(file);
-    }
-  };
-
   const toggleExpand = (key: string) => {
     setExpandedNodes((prev) => {
       const next = new Set(prev);
@@ -816,11 +624,11 @@ export default function KnowledgeBasePage() {
     setPreviewContent("");
 
     try {
-      const uri = buildUri(selectedKb, node.path);
       const params = new URLSearchParams();
-      params.set("uri", uri);
+      params.set("kb_name", selectedKb);
+      params.set("path", node.path);
 
-      const data = await requestBackend<{ content?: string; url?: string }>(
+      const data = await requestBackend<{ content?: string }>(
         `/v1/kbs/entry/content?${params.toString()}`,
         {
           router,
@@ -828,20 +636,10 @@ export default function KnowledgeBasePage() {
         }
       );
 
-      if (fileType === "image") {
-        // For images, we might get a URL or base64 content
-        if (data.data?.url) {
-          setPreviewContent(data.data.url);
-        } else if (data.data?.content) {
-          setPreviewContent(data.data.content);
-        }
-      } else {
-        // For text files
-        if (typeof data.data?.content === "string") {
-          setPreviewContent(data.data.content);
-        } else if (data.data) {
-          setPreviewContent(JSON.stringify(data.data, null, 2));
-        }
+      if (typeof data.data?.content === "string") {
+        setPreviewContent(data.data.content);
+      } else if (data.data) {
+        setPreviewContent(JSON.stringify(data.data, null, 2));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "获取文件内容失败";
@@ -876,7 +674,7 @@ export default function KnowledgeBasePage() {
                 className="ui-button-soft-accent"
               >
                 <IconPlus className="h-4 w-4" />
-                新建知识库
+                导入知识库
               </UiButton>
               <UiButton
                 variant="secondary"
@@ -952,7 +750,7 @@ export default function KnowledgeBasePage() {
                     </div>
                   ) : (
                     <div className="px-4 py-6 text-sm text-[var(--color-text-muted)]">
-                      暂无知识库，先创建一个新的空间。
+                      暂无知识库，点击上方按钮导入。
                     </div>
                   )}
                 </div>
@@ -965,26 +763,6 @@ export default function KnowledgeBasePage() {
                     {selectedKb ? `${selectedKb} 文件树` : "文件树"}
                   </h3>
                   <div className="flex items-center gap-2">
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (file) handleUploadFile(file);
-                        }}
-                      />
-                      <UiButton
-                        variant="secondary"
-                        size="sm"
-                        disabled={!selectedKb || uploading}
-                        onClick={() => {}}
-                      >
-                        <IconUpload className="h-4 w-4" />
-                        上传文件
-                      </UiButton>
-                    </label>
                     <UiButton
                       variant="secondary"
                       size="sm"
@@ -995,11 +773,7 @@ export default function KnowledgeBasePage() {
                     </UiButton>
                   </div>
                 </div>
-                <div
-                  className="max-h-[400px] overflow-auto p-2"
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                >
+                <div className="max-h-[400px] overflow-auto p-2">
                   {treeLoading && treeEntries.length === 0 ? (
                     <div className="space-y-3 p-2">
                       <div className="h-10 animate-pulse rounded-[var(--radius-md)] bg-[rgba(209,157,86,0.12)]" />
@@ -1016,7 +790,6 @@ export default function KnowledgeBasePage() {
                             level={0}
                             selectedNode={selectedNode}
                             onSelect={setSelectedNode}
-                            onDelete={handleDeleteEntry}
                             onPreview={handlePreviewFile}
                             expandedNodes={expandedNodes}
                             toggleExpand={toggleExpand}
@@ -1025,12 +798,12 @@ export default function KnowledgeBasePage() {
                       </div>
                     ) : (
                       <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                        当前知识库为空，可上传文件或拖入 zip 初始化内容。
+                        当前知识库为空。
                       </div>
                     )
                   ) : (
                     <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      暂无知识库，请先从左侧选择或创建。
+                      暂无知识库，请先从左侧选择或导入。
                     </div>
                   )}
                 </div>
@@ -1043,7 +816,7 @@ export default function KnowledgeBasePage() {
       {/* Create Modal */}
       <Modal
         open={createVisible}
-        title="新建知识库"
+        title="导入知识库"
         onClose={resetCreateModal}
         footer={
           <div className="flex justify-end gap-3">
@@ -1051,7 +824,7 @@ export default function KnowledgeBasePage() {
               取消
             </UiButton>
             <UiButton onClick={handleCreate} disabled={creating}>
-              {creating ? "创建中..." : "创建"}
+              {creating ? "导入中..." : "导入"}
             </UiButton>
           </div>
         }
@@ -1076,10 +849,10 @@ export default function KnowledgeBasePage() {
               <div className="rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--color-border-default)] bg-[rgba(255,252,247,0.5)] p-8 text-center transition-colors hover:border-[rgba(199,104,67,0.24)] hover:bg-[rgba(255,247,240,0.8)]">
                 <IconUpload className="mx-auto h-8 w-8 text-[var(--color-text-muted)]" />
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  点击选择或拖拽知识库 zip
+                  点击选择知识库 zip 文件
                 </p>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  支持空知识库，zip 可选
+                  必须上传 zip 文件
                 </p>
               </div>
             </label>
@@ -1094,27 +867,12 @@ export default function KnowledgeBasePage() {
       <ConfirmDialog
         open={deleteKbVisible}
         title="删除知识库"
-        description={`确认删除知识库 ${selectedKb} 吗？此操作会删除全部文件。`}
+        description={`确认删除知识库 ${selectedKb} 吗？此操作会删除全部文件且不可恢复。`}
         confirmText="删除"
         cancelText="取消"
         confirming={deletingKb}
         onConfirm={confirmDeleteKb}
         onCancel={() => setDeleteKbVisible(false)}
-      />
-
-      {/* Delete Entry Confirm */}
-      <ConfirmDialog
-        open={deleteEntryVisible}
-        title="删除文件"
-        description={`确认删除 ${pendingEntry?.label ?? "该文件"} 吗？`}
-        confirmText="删除"
-        cancelText="取消"
-        confirming={deletingEntry}
-        onConfirm={confirmDeleteEntry}
-        onCancel={() => {
-          setDeleteEntryVisible(false);
-          setPendingEntry(null);
-        }}
       />
 
       {/* File Preview Modal */}

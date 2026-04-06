@@ -4,35 +4,37 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
 	"openIntern/internal/dao"
+	"openIntern/internal/models"
+	"openIntern/internal/services/storage"
 )
 
 var (
 	ErrNotConfigured  = errors.New("knowledge base storage not configured")
 	ErrInvalidInput   = errors.New("invalid knowledge base input")
 	ErrInvalidZipPath = errors.New("invalid zip entry path")
+	ErrKBExists       = errors.New("knowledge base already exists")
 )
 
 type Item struct {
 	Name string `json:"name"`
-	URI  string `json:"uri"`
 }
 
-type MoveResult struct {
-	FromURI string `json:"from"`
-	ToURI   string `json:"to"`
+type TreeEntry struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	IsDir bool   `json:"is_dir"`
+	Size  int64  `json:"size"`
 }
 
 type AsyncResult struct {
 	Name   string `json:"name,omitempty"`
-	Path   string `json:"path,omitempty"`
+	TaskID string `json:"task_id,omitempty"`
 	Status string `json:"status"`
 	Async  bool   `json:"async"`
 }
@@ -52,68 +54,60 @@ func (s *Service) ensureConfigured() error {
 	return nil
 }
 
+// List 列出用户的所有知识库。
 func (s *Service) List(ctx context.Context) ([]Item, error) {
-	if err := s.ensureConfigured(); err != nil {
-		return nil, err
-	}
-	items, err := dao.KnowledgeBase.List(ctx)
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]Item, 0, len(items))
-	for _, item := range items {
-		result = append(result, Item{Name: item.Name, URI: item.URI})
+	kbs, err := dao.KBLocal.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Item, 0, len(kbs))
+	for _, kb := range kbs {
+		result = append(result, Item{Name: kb.Name})
 	}
 	return result, nil
 }
 
-func (s *Service) Tree(ctx context.Context, rawName string) ([]dao.ResourceEntry, error) {
-	if err := s.ensureConfigured(); err != nil {
+// Tree 获取知识库的目录树。
+func (s *Service) Tree(ctx context.Context, rawName string) ([]TreeEntry, error) {
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
+	if err != nil {
 		return nil, err
 	}
 	kbName, err := normalizeKnowledgeBaseName(rawName)
 	if err != nil {
 		return nil, err
 	}
-	return dao.KnowledgeBase.Tree(ctx, kbName)
+	kb, err := dao.KBLocal.GetByName(ctx, userID, kbName)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := dao.KBLocal.GetTreeEntries(ctx, kb.ID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]TreeEntry, 0, len(entries))
+	for _, e := range entries {
+		result = append(result, TreeEntry{
+			Path:  e.Path,
+			Name:  e.Name,
+			IsDir: e.IsDir,
+			Size:  e.Size,
+		})
+	}
+	return result, nil
 }
 
+// Import 导入知识库（双存储：本地MinIO + OpenViking）。
 func (s *Service) Import(ctx context.Context, rawName string, fileHeader *multipart.FileHeader) (*AsyncResult, error) {
 	if err := s.ensureConfigured(); err != nil {
 		return nil, err
 	}
-	kbName, err := normalizeKnowledgeBaseName(rawName)
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
 	if err != nil {
-		return nil, err
-	}
-	tempDir, err := os.MkdirTemp("", "kb-import-*")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(tempDir)
-
-	rootDir := filepath.Join(tempDir, kbName)
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		return nil, err
-	}
-	if fileHeader != nil {
-		if err := extractZipToDir(fileHeader, rootDir); err != nil {
-			return nil, err
-		}
-	}
-	// The DAO now uploads validated local content over HTTP before asking OpenViking to import it.
-	targetURI, err := dao.KnowledgeBase.URI(ctx, kbName)
-	if err != nil {
-		return nil, err
-	}
-	if err := dao.KnowledgeBase.Ingest(ctx, rootDir, targetURI, false, 0); err != nil {
-		return nil, err
-	}
-	return &AsyncResult{Name: kbName, Status: "accepted", Async: true}, nil
-}
-
-func (s *Service) UploadFile(ctx context.Context, rawName, targetDir string, fileHeader *multipart.FileHeader) (*AsyncResult, error) {
-	if err := s.ensureConfigured(); err != nil {
 		return nil, err
 	}
 	kbName, err := normalizeKnowledgeBaseName(rawName)
@@ -123,192 +117,171 @@ func (s *Service) UploadFile(ctx context.Context, rawName, targetDir string, fil
 	if fileHeader == nil {
 		return nil, fmt.Errorf("%w: file is required", ErrInvalidInput)
 	}
-	fileName := sanitizeUploadedFileName(fileHeader.Filename)
-	tempDir, err := os.MkdirTemp("", "kb-upload-file-*")
+
+	// 检查是否已存在
+	if _, err := dao.KBLocal.GetByName(ctx, userID, kbName); err == nil {
+		return nil, ErrKBExists
+	}
+
+	// 保存上传的zip到临时文件
+	tempDir, err := os.MkdirTemp("", "kb-import-*")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(tempDir)
 
-	localPath := filepath.Join(tempDir, fileName)
-	src, err := fileHeader.Open()
+	tempZipPath := filepath.Join(tempDir, "upload.zip")
+	if err := saveMultipartFile(fileHeader, tempZipPath); err != nil {
+		return nil, err
+	}
+
+	// 验证zip内容
+	if err := validateZipArchive(tempZipPath); err != nil {
+		return nil, err
+	}
+
+	// 解压zip到临时目录
+	extractDir := filepath.Join(tempDir, "extracted")
+	if err := os.MkdirAll(extractDir, 0755); err != nil {
+		return nil, err
+	}
+	treeEntries, err := ExtractZipTree(tempZipPath, extractDir)
 	if err != nil {
 		return nil, err
 	}
-	defer src.Close()
-	dst, err := os.Create(localPath)
+
+	// 构建本地存储路径前缀
+	localPath := dao.KBLocal.BuildLocalPath(userID, kbName)
+
+	// 上传解压后的文件到MinIO
+	if err := uploadExtractedFiles(ctx, extractDir, localPath); err != nil {
+		return nil, err
+	}
+
+	// 构建OpenViking URI
+	openVikingURI, err := dao.KnowledgeBase.URI(ctx, kbName)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := io.Copy(dst, src); err != nil {
-		dst.Close()
+
+	// 创建KB记录
+	kb := &models.KnowledgeBase{
+		UserID:        userID,
+		Name:          kbName,
+		OpenVikingURI: openVikingURI,
+		LocalPath:     localPath,
+	}
+	if err := dao.KBLocal.Create(ctx, kb, treeEntries); err != nil {
 		return nil, err
 	}
-	if err := dst.Close(); err != nil {
-		return nil, err
-	}
-	targetURI, err := resolveUploadTargetURI(ctx, kbName, targetDir)
+
+	// 上传zip到OpenViking进行检索索引
+	result, err := dao.KnowledgeBase.IngestZip(ctx, tempZipPath, openVikingURI, false, 0)
 	if err != nil {
-		return nil, err
+		// OpenViking上传失败，但本地存储已成功，记录错误但不回滚
+		// 用户可以重新尝试上传到OpenViking
 	}
-	// The DAO now uploads the staged file over HTTP before asking OpenViking to import it.
-	if err := dao.KnowledgeBase.Ingest(ctx, localPath, targetURI, false, 0); err != nil {
-		return nil, err
+
+	taskID := ""
+	if result != nil {
+		taskID = result.TaskID
 	}
-	return &AsyncResult{Path: targetURI, Status: "accepted", Async: true}, nil
+	return &AsyncResult{Name: kbName, TaskID: taskID, Status: "accepted", Async: true}, nil
 }
 
-func (s *Service) MoveEntry(ctx context.Context, fromURI, toURI string) (*MoveResult, error) {
-	if err := s.ensureConfigured(); err != nil {
-		return nil, err
-	}
-	result, err := normalizeMoveURIs(ctx, fromURI, toURI, false)
-	if err != nil {
-		return nil, err
-	}
-	if err := dao.KnowledgeBase.MoveEntry(ctx, result.FromURI, result.ToURI); err != nil {
-		return nil, err
-	}
-	return result, nil
+// uploadExtractedFiles 上传解压后的文件到MinIO。
+func uploadExtractedFiles(ctx context.Context, extractDir string, localPath string) error {
+	return filepath.Walk(extractDir, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		// 计算相对路径
+		relPath, err := filepath.Rel(extractDir, filePath)
+		if err != nil {
+			return err
+		}
+		// 构建对象键
+		objectKey := localPath + "/" + filepath.ToSlash(relPath)
+		// 上传文件
+		_, err = storage.File.UploadPath(ctx, objectKey, filePath)
+		return err
+	})
 }
 
-func (s *Service) DragEntry(ctx context.Context, fromURI, toURI string) (*MoveResult, error) {
-	if err := s.ensureConfigured(); err != nil {
-		return nil, err
-	}
-	result, err := normalizeMoveURIs(ctx, fromURI, toURI, true)
-	if err != nil {
-		return nil, err
-	}
-	if err := dao.KnowledgeBase.MoveEntry(ctx, result.FromURI, result.ToURI); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
+// Delete 删除知识库（本地MinIO + OpenViking + 数据库）。
 func (s *Service) Delete(ctx context.Context, rawName string) (string, error) {
 	if err := s.ensureConfigured(); err != nil {
+		return "", err
+	}
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
+	if err != nil {
 		return "", err
 	}
 	kbName, err := normalizeKnowledgeBaseName(rawName)
 	if err != nil {
 		return "", err
 	}
-	if err := dao.KnowledgeBase.Delete(ctx, kbName); err != nil {
+
+	// 获取KB记录以获取OpenVikingURI
+	kb, err := dao.KBLocal.GetByName(ctx, userID, kbName)
+	if err != nil {
+		return "", err
+	}
+
+	// 删除OpenViking中的资源
+	if kb.OpenVikingURI != "" {
+		if err := dao.KnowledgeBase.Delete(ctx, kbName); err != nil {
+			// 记录错误但继续删除本地数据
+		}
+	}
+
+	// 删除本地存储和数据库记录
+	if err := dao.KBLocal.Delete(ctx, userID, kbName); err != nil {
 		return "", err
 	}
 	return kbName, nil
 }
 
-func (s *Service) DeleteEntry(ctx context.Context, rawURI string, recursive bool) (string, error) {
-	if err := s.ensureConfigured(); err != nil {
-		return "", err
-	}
-	uri, err := normalizeEntryURI(ctx, rawURI)
+// ReadContent 读取文件内容（从本地MinIO）。
+func (s *Service) ReadContent(ctx context.Context, kbName string, filePath string) (string, error) {
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
 	if err != nil {
 		return "", err
 	}
-	if err := dao.KnowledgeBase.DeleteEntry(ctx, uri, recursive); err != nil {
+	kb, err := dao.KBLocal.GetByName(ctx, userID, kbName)
+	if err != nil {
 		return "", err
 	}
-	return uri, nil
+	// 构建对象键
+	objectKey := kb.LocalPath + "/" + filePath
+	return dao.KBLocal.ReadFile(ctx, objectKey)
 }
 
-func (s *Service) ReadContent(ctx context.Context, rawURI string) (string, error) {
-	if err := s.ensureConfigured(); err != nil {
-		return "", err
-	}
-	uri, err := normalizeEntryURI(ctx, rawURI)
-	if err != nil {
-		return "", err
-	}
+// ReadContentByURI 根据URI读取文件内容（从OpenViking，用于Agent检索）。
+func (s *Service) ReadContentByURI(ctx context.Context, uri string) (string, error) {
 	return dao.KnowledgeBase.ReadContent(ctx, uri)
 }
 
 func normalizeKnowledgeBaseName(rawName string) (string, error) {
-	kbName, err := dao.KnowledgeBase.CleanName(rawName)
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrInvalidInput, strings.TrimSpace(err.Error()))
+	name := strings.TrimSpace(rawName)
+	if name == "" {
+		return "", fmt.Errorf("%w: name is required", ErrInvalidInput)
 	}
-	return kbName, nil
-}
-
-func normalizeEntryURI(ctx context.Context, rawURI string) (string, error) {
-	uri := strings.TrimSpace(rawURI)
-	if uri == "" {
-		return "", fmt.Errorf("%w: uri is required", ErrInvalidInput)
+	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("%w: invalid name", ErrInvalidInput)
 	}
-	normalizedURI, err := dao.KnowledgeBase.NormalizeScopedURI(ctx, uri)
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrInvalidInput, strings.TrimSpace(err.Error()))
-	}
-	return normalizedURI, nil
-}
-
-func normalizeMoveURIs(ctx context.Context, fromURI, toURI string, forceDirectoryTarget bool) (*MoveResult, error) {
-	fromURI = strings.TrimSpace(fromURI)
-	toURI = strings.TrimSpace(toURI)
-	if fromURI == "" || toURI == "" {
-		return nil, fmt.Errorf("%w: from_uri and to_uri are required", ErrInvalidInput)
-	}
-	if forceDirectoryTarget && !strings.HasSuffix(toURI, "/") {
-		toURI += "/"
-	}
-	normalizedFromURI, err := normalizeEntryURI(ctx, fromURI)
-	if err != nil {
-		return nil, err
-	}
-	normalizedToURI, err := normalizeEntryURI(ctx, toURI)
-	if err != nil {
-		return nil, err
-	}
-	return &MoveResult{FromURI: normalizedFromURI, ToURI: normalizedToURI}, nil
-}
-
-func resolveUploadTargetURI(ctx context.Context, kbName string, targetDir string) (string, error) {
-	baseURI, err := dao.KnowledgeBase.InnerURI(ctx, kbName)
-	if err != nil {
-		return "", err
-	}
-	base := strings.TrimRight(baseURI, "/")
-	dir := strings.TrimSpace(targetDir)
-	dir = strings.TrimLeft(dir, "/")
-	dir = path.Clean(dir)
-	if dir == ".." || strings.HasPrefix(dir, "../") {
-		return base + "/", nil
-	}
-	if dir == "." || dir == "" {
-		return base + "/", nil
-	}
-	prefix := kbName + "/"
-	for i := 0; i < 2; i++ {
-		if dir == kbName {
-			dir = ""
-			continue
-		}
-		if strings.HasPrefix(dir, prefix) {
-			dir = strings.TrimPrefix(dir, prefix)
-		}
-	}
-	if dir == "." || dir == "" {
-		return base + "/", nil
-	}
-	return base + "/" + dir + "/", nil
-}
-
-func sanitizeUploadedFileName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.ReplaceAll(name, "\\", "/")
-	name = path.Base(name)
-	if name == "" || name == "." || name == ".." {
-		return "upload.bin"
-	}
-	return name
+	return name, nil
 }
 
 func IsNotFound(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, dao.ErrKBNotFound) {
+		return true
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "404")

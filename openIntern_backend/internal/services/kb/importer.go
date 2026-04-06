@@ -10,107 +10,66 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"openIntern/internal/dao"
+	"openIntern/internal/models"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 )
 
-func extractZipToDir(fileHeader *multipart.FileHeader, rootDir string) error {
-	if fileHeader == nil {
-		return nil
-	}
-	tempZip, err := os.CreateTemp("", "kb-upload-*.zip")
-	if err != nil {
-		return err
-	}
-	tempZipPath := tempZip.Name()
-	defer os.Remove(tempZipPath)
-
+// saveMultipartFile saves a multipart uploaded file to a local path.
+func saveMultipartFile(fileHeader *multipart.FileHeader, destPath string) error {
 	src, err := fileHeader.Open()
 	if err != nil {
-		tempZip.Close()
 		return err
 	}
-	if _, err := io.Copy(tempZip, src); err != nil {
-		tempZip.Close()
-		src.Close()
-		return err
-	}
-	if err := tempZip.Close(); err != nil {
-		src.Close()
-		return err
-	}
-	if err := src.Close(); err != nil {
-		return err
-	}
+	defer src.Close()
 
-	reader, err := zip.OpenReader(tempZipPath)
+	dst, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	_, err = io.Copy(dst, src)
+	return err
+}
+
+// validateZipArchive validates zip contents without extracting.
+// It checks for path traversal attacks and ensures the archive contains valid files.
+func validateZipArchive(zipPath string) error {
+	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
 	}
 	defer reader.Close()
 
-	files := make([]*zip.File, 0, len(reader.File))
-	for _, item := range reader.File {
-		if item.FileInfo().IsDir() {
+	hasValidFiles := false
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() {
 			continue
 		}
-		cleaned, err := cleanZipPath(item.Name)
+
+		// Check for path traversal attacks.
+		cleaned, err := cleanZipPath(file.Name)
 		if err != nil {
 			return err
 		}
-		if cleaned == "" || !shouldIncludePath(cleaned) {
+		if cleaned == "" {
 			continue
 		}
-		files = append(files, item)
-	}
-	if len(files) == 0 {
-		return nil
+
+		// Skip macOS garbage files.
+		if !shouldIncludePath(cleaned) {
+			continue
+		}
+
+		hasValidFiles = true
 	}
 
-	stripRoot := detectZipRoot(files)
-	for _, item := range files {
-		cleaned, err := cleanZipPath(item.Name)
-		if err != nil {
-			return err
-		}
-		if stripRoot != "" {
-			cleaned = strings.TrimPrefix(cleaned, stripRoot+"/")
-		}
-		if cleaned == "" || cleaned == "." || !shouldIncludePath(cleaned) {
-			continue
-		}
-		targetPath, err := dao.KnowledgeBase.ResolveLocalPath(rootDir, cleaned)
-		if err != nil {
-			return ErrInvalidZipPath
-		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
-		}
-		if err := copyZipFile(item, targetPath); err != nil {
-			return err
-		}
+	if !hasValidFiles {
+		return ErrInvalidZipPath
 	}
 	return nil
-}
-
-func copyZipFile(file *zip.File, targetPath string) error {
-	rc, err := file.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-
-	dst, err := os.Create(targetPath)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(dst, rc); err != nil {
-		dst.Close()
-		return err
-	}
-	return dst.Close()
 }
 
 func cleanZipPath(name string) (string, error) {
@@ -138,31 +97,6 @@ func cleanZipPath(name string) (string, error) {
 	return cleaned, nil
 }
 
-func detectZipRoot(files []*zip.File) string {
-	root := ""
-	for _, item := range files {
-		cleaned, err := cleanZipPath(item.Name)
-		if err != nil || cleaned == "" {
-			return ""
-		}
-		if !strings.Contains(cleaned, "/") {
-			return ""
-		}
-		parts := strings.Split(cleaned, "/")
-		if len(parts) == 0 {
-			return ""
-		}
-		if root == "" {
-			root = parts[0]
-			continue
-		}
-		if root != parts[0] {
-			return ""
-		}
-	}
-	return root
-}
-
 func shouldIncludePath(rel string) bool {
 	rel = strings.TrimPrefix(strings.TrimSpace(rel), "/")
 	if rel == "" {
@@ -187,4 +121,110 @@ func decodeZipName(name string) string {
 		return name
 	}
 	return decoded
+}
+
+// ZipEntry 表示zip中的条目信息。
+type ZipEntry struct {
+	Path  string
+	Name  string
+	IsDir bool
+	Size  int64
+}
+
+// ExtractZipTree 解析zip文件并返回原始目录结构。
+// 同时将文件解压到目标目录。
+func ExtractZipTree(zipPath string, destDir string) ([]models.KBTreeEntry, error) {
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	// 用于去重目录
+	seenDirs := make(map[string]struct{})
+	var entries []models.KBTreeEntry
+
+	for _, file := range reader.File {
+		if !shouldIncludePath(file.Name) {
+			continue
+		}
+
+		cleaned, err := cleanZipPath(file.Name)
+		if err != nil {
+			return nil, err
+		}
+		if cleaned == "" {
+			continue
+		}
+
+		isDir := file.FileInfo().IsDir()
+		name := path.Base(cleaned)
+		if name == "" || name == "." {
+			continue
+		}
+
+		// 添加目录（确保父目录存在）
+		if !isDir {
+			// 添加所有父目录
+			parts := strings.Split(cleaned, "/")
+			for i := 0; i < len(parts)-1; i++ {
+				dirPath := strings.Join(parts[:i+1], "/")
+				if _, seen := seenDirs[dirPath]; !seen {
+					seenDirs[dirPath] = struct{}{}
+					entries = append(entries, models.KBTreeEntry{
+						Path:  dirPath,
+						Name:  parts[i],
+						IsDir: true,
+						Size:  0,
+					})
+				}
+			}
+		}
+
+		// 添加条目
+		entries = append(entries, models.KBTreeEntry{
+			Path:  cleaned,
+			Name:  name,
+			IsDir: isDir,
+			Size:  file.FileInfo().Size(),
+		})
+
+		// 解压文件到目标目录
+		if !isDir && destDir != "" {
+			if err := extractFile(file, destDir, cleaned); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+// extractFile 解压单个文件到目标目录。
+func extractFile(file *zip.File, destDir string, relPath string) error {
+	// 构建目标路径
+	targetPath := filepath.Join(destDir, filepath.FromSlash(relPath))
+
+	// 确保父目录存在
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return err
+	}
+
+	// 打开zip中的文件
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	// 创建目标文件
+	dst, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	// 复制内容
+	_, err = io.Copy(dst, src)
+	return err
 }

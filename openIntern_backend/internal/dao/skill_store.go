@@ -222,7 +222,7 @@ func (d *SkillStoreDAO) ReadSummary(ctx context.Context, skillName string) (stri
 	return readContent(ctx, targetURI, "/api/v1/content/abstract")
 }
 
-func (d *SkillStoreDAO) Import(ctx context.Context, rootDir string, skillName string) error {
+func (d *SkillStoreDAO) Import(ctx context.Context, rootDir string, skillName string) (*ImportResult, error) {
 	_ = skillName
 	// Skill archives must use the dedicated /api/v1/skills flow; resource imports only accept viking://resources/* targets.
 	return importSkill(ctx, rootDir)

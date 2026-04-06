@@ -13,11 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type kbMovePayload struct {
-	FromURI string `json:"from_uri"`
-	ToURI   string `json:"to_uri"`
-}
-
 func ListKnowledgeBases(c *gin.Context) {
 	ctx, ok := knowledgeBaseRequestContext(c)
 	if !ok {
@@ -79,92 +74,14 @@ func ImportKnowledgeBase(c *gin.Context) {
 			response.BadRequest(c)
 		case errors.Is(err, kbsvc.ErrInvalidZipPath):
 			response.JSONError(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
+		case errors.Is(err, kbsvc.ErrKBExists):
+			response.JSONError(c, http.StatusConflict, response.CodeBadRequest, "知识库已存在，请先删除后再导入")
 		default:
 			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		}
 		return
 	}
 	response.JSONSuccess(c, http.StatusAccepted, result)
-}
-
-func UploadKnowledgeBaseFile(c *gin.Context) {
-	ctx, ok := knowledgeBaseRequestContext(c)
-	if !ok {
-		return
-	}
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		response.BadRequest(c)
-		return
-	}
-	result, err := kbsvc.KnowledgeBase.UploadFile(
-		ctx,
-		c.PostForm("kb_name"),
-		c.PostForm("target"),
-		fileHeader,
-	)
-	if err != nil {
-		switch {
-		case errors.Is(err, kbsvc.ErrNotConfigured):
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		case errors.Is(err, kbsvc.ErrInvalidInput):
-			response.BadRequest(c)
-		default:
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		}
-		return
-	}
-	response.JSONSuccess(c, http.StatusAccepted, result)
-}
-
-func MoveKnowledgeBaseEntry(c *gin.Context) {
-	ctx, ok := knowledgeBaseRequestContext(c)
-	if !ok {
-		return
-	}
-	var payload kbMovePayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		response.BadRequest(c)
-		return
-	}
-	result, err := kbsvc.KnowledgeBase.MoveEntry(ctx, payload.FromURI, payload.ToURI)
-	if err != nil {
-		switch {
-		case errors.Is(err, kbsvc.ErrNotConfigured):
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		case errors.Is(err, kbsvc.ErrInvalidInput):
-			response.BadRequest(c)
-		default:
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		}
-		return
-	}
-	response.JSONSuccess(c, http.StatusOK, result)
-}
-
-func DragKnowledgeBaseEntry(c *gin.Context) {
-	ctx, ok := knowledgeBaseRequestContext(c)
-	if !ok {
-		return
-	}
-	var payload kbMovePayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		response.BadRequest(c)
-		return
-	}
-	result, err := kbsvc.KnowledgeBase.DragEntry(ctx, payload.FromURI, payload.ToURI)
-	if err != nil {
-		switch {
-		case errors.Is(err, kbsvc.ErrNotConfigured):
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		case errors.Is(err, kbsvc.ErrInvalidInput):
-			response.BadRequest(c)
-		default:
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		}
-		return
-	}
-	response.JSONSuccess(c, http.StatusOK, result)
 }
 
 func DeleteKnowledgeBase(c *gin.Context) {
@@ -189,38 +106,18 @@ func DeleteKnowledgeBase(c *gin.Context) {
 	response.JSONSuccess(c, http.StatusOK, gin.H{"name": kbName})
 }
 
-func DeleteKnowledgeBaseEntry(c *gin.Context) {
-	ctx, ok := knowledgeBaseRequestContext(c)
-	if !ok {
-		return
-	}
-	uri, err := kbsvc.KnowledgeBase.DeleteEntry(
-		ctx,
-		c.Query("uri"),
-		strings.EqualFold(c.DefaultQuery("recursive", "false"), "true"),
-	)
-	if err != nil {
-		switch {
-		case errors.Is(err, kbsvc.ErrNotConfigured):
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		case errors.Is(err, kbsvc.ErrInvalidInput):
-			response.BadRequest(c)
-		case kbsvc.IsNotFound(err):
-			response.NotFound(c, "entry not found")
-		default:
-			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
-		}
-		return
-	}
-	response.JSONSuccess(c, http.StatusOK, gin.H{"uri": uri})
-}
-
 func GetKnowledgeBaseContent(c *gin.Context) {
 	ctx, ok := knowledgeBaseRequestContext(c)
 	if !ok {
 		return
 	}
-	content, err := kbsvc.KnowledgeBase.ReadContent(ctx, c.Query("uri"))
+	kbName := strings.TrimSpace(c.Query("kb_name"))
+	path := strings.TrimSpace(c.Query("path"))
+	if kbName == "" || path == "" {
+		response.BadRequest(c)
+		return
+	}
+	content, err := kbsvc.KnowledgeBase.ReadContent(ctx, kbName, path)
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -235,6 +132,34 @@ func GetKnowledgeBaseContent(c *gin.Context) {
 		return
 	}
 	response.JSONSuccess(c, http.StatusOK, gin.H{"content": content})
+}
+
+// GetImportTaskStatus returns the status of an async import task.
+func GetImportTaskStatus(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	taskID := strings.TrimSpace(c.Param("task_id"))
+	if taskID == "" {
+		response.BadRequest(c)
+		return
+	}
+	result, err := dao.OpenVikingSession.GetTask(ctx, taskID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			response.NotFound(c, "task not found")
+			return
+		}
+		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, gin.H{
+		"task_id":     result.TaskID,
+		"status":      result.Status,
+		"resource_id": result.ResourceID,
+		"error":       result.Error,
+	})
 }
 
 func isMissingKnowledgeBaseImportFile(err error) bool {

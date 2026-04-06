@@ -150,6 +150,18 @@ func (d *KnowledgeBaseDAO) Ingest(ctx context.Context, sourcePath string, target
 	return addResource(ctx, sourcePath, targetURI, wait, timeoutSeconds)
 }
 
+// IngestZip uploads a zip file directly to OpenViking without local extraction.
+// Returns task_id for async status polling when wait=false.
+func (d *KnowledgeBaseDAO) IngestZip(ctx context.Context, zipPath string, targetURI string, wait bool, timeoutSeconds float64) (*ImportResult, error) {
+	// Ensure the target directory exists before importing content.
+	if err := mkdirPath(ctx, targetURI); err != nil {
+		if !isContextStoreAlreadyExists(err) {
+			return nil, err
+		}
+	}
+	return addResourceFromZip(ctx, zipPath, targetURI, wait, timeoutSeconds)
+}
+
 func (d *KnowledgeBaseDAO) MoveEntry(ctx context.Context, fromURI string, toURI string) error {
 	return movePath(ctx, fromURI, toURI)
 }

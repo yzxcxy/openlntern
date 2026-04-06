@@ -344,3 +344,52 @@ func (s *FileService) UploadReader(ctx context.Context, key string, reader io.Re
 	}
 	return stored.URL, nil
 }
+
+// ListObjectsByPrefix 列出指定前缀下的所有对象键。
+func (s *MinIOStore) ListObjectsByPrefix(ctx context.Context, prefix string) ([]string, error) {
+	if s == nil || s.client == nil {
+		return nil, errors.New("file service not configured")
+	}
+	prefix = normalizeObjectKey(prefix)
+	if prefix == "" {
+		return nil, errors.New("empty prefix")
+	}
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	var keys []string
+	objectsCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+	for obj := range objectsCh {
+		if obj.Err != nil {
+			return nil, obj.Err
+		}
+		keys = append(keys, obj.Key)
+	}
+	return keys, nil
+}
+
+// RemoveObjectsByPrefix 删除指定前缀下的所有对象。
+func (s *MinIOStore) RemoveObjectsByPrefix(ctx context.Context, prefix string) error {
+	keys, err := s.ListObjectsByPrefix(ctx, prefix)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := s.RemoveObject(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteByPrefix 删除指定前缀下的所有对象（FileService方法）。
+func (s *FileService) DeleteByPrefix(ctx context.Context, prefix string) error {
+	store, err := getObjectStore()
+	if err != nil {
+		return err
+	}
+	return store.RemoveObjectsByPrefix(ctx, prefix)
+}

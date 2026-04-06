@@ -222,12 +222,20 @@ func ImportSkill(c *gin.Context) {
 		return
 	}
 	// SkillStore.Import now performs a remote upload/import flow instead of exposing backend-local paths.
-	if err := dao.SkillStore.Import(ctx, rootDir, frontmatter.Name); err != nil {
+	result, err := dao.SkillStore.Import(ctx, rootDir, frontmatter.Name)
+	if err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	response.JSONSuccess(c, http.StatusOK, gin.H{
-		"name": frontmatter.Name,
+	taskID := ""
+	if result != nil {
+		taskID = result.TaskID
+	}
+	response.JSONSuccess(c, http.StatusAccepted, gin.H{
+		"name":     frontmatter.Name,
+		"task_id":  taskID,
+		"status":   "accepted",
+		"async":    true,
 	})
 }
 

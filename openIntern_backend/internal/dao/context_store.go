@@ -23,7 +23,14 @@ type storeResponse struct {
 type storeAddResult struct {
 	Status  string `json:"status"`
 	RootURI string `json:"root_uri"`
+	TaskID  string `json:"task_id"`
 	Errors  []any  `json:"errors"`
+}
+
+// ImportResult captures the async import response from OpenViking.
+type ImportResult struct {
+	TaskID  string
+	RootURI string
 }
 
 type ResourceEntry struct {
@@ -138,10 +145,10 @@ func addResource(ctx context.Context, resourcePath string, targetURI string, wai
 	return err
 }
 
-func addResourceWithRootURI(ctx context.Context, resourcePath string, targetURI string, wait bool, timeoutSeconds float64) (string, error) {
+func addResourceWithRootURI(ctx context.Context, resourcePath string, targetURI string, wait bool, timeoutSeconds float64) (*ImportResult, error) {
 	info, err := os.Stat(resourcePath)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var upload *database.TempUploadResult
@@ -152,12 +159,26 @@ func addResourceWithRootURI(ctx context.Context, resourcePath string, targetURI 
 		upload, err = database.Context.UploadTempFile(ctx, resourcePath)
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	body, err := database.Context.Post(ctx, "/api/v1/resources", buildAddResourcePayload(upload.TempFileID, targetURI, wait, timeoutSeconds))
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	return decodeStoreAddResult(body)
+}
+
+// addResourceFromZip uploads a pre-built zip file directly without extracting and re-compressing.
+func addResourceFromZip(ctx context.Context, zipPath string, targetURI string, wait bool, timeoutSeconds float64) (*ImportResult, error) {
+	upload, err := database.Context.UploadTempFile(ctx, zipPath)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := database.Context.Post(ctx, "/api/v1/resources", buildAddResourcePayload(upload.TempFileID, targetURI, wait, timeoutSeconds))
+	if err != nil {
+		return nil, err
 	}
 	return decodeStoreAddResult(body)
 }
@@ -196,16 +217,16 @@ func deletePath(ctx context.Context, uri string, recursive bool) error {
 	return decodeStoreResult(body, nil)
 }
 
-func importSkill(ctx context.Context, rootDir string) error {
+func importSkill(ctx context.Context, rootDir string) (*ImportResult, error) {
 	upload, err := database.Context.UploadTempArchive(ctx, rootDir, "skill")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	body, err := database.Context.Post(ctx, "/api/v1/skills", buildAddSkillPayload(upload.TempFileID, false, 0))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return decodeStoreResult(body, nil)
+	return decodeStoreAddResult(body)
 }
 
 func buildAddResourcePayload(tempFileID string, targetURI string, wait bool, timeoutSeconds float64) map[string]any {
@@ -232,25 +253,28 @@ func buildAddSkillPayload(tempFileID string, wait bool, timeoutSeconds float64) 
 	return payload
 }
 
-func decodeStoreAddResult(body []byte) (string, error) {
+func decodeStoreAddResult(body []byte) (*ImportResult, error) {
 	var resp storeResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := resp.err(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(resp.Result) == 0 {
-		return "", nil
+		return nil, nil
 	}
 	var result storeAddResult
 	if err := json.Unmarshal(resp.Result, &result); err == nil {
 		if len(result.Errors) > 0 {
-			return "", errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
+			return nil, errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
 		}
-		return strings.TrimSpace(result.RootURI), nil
+		return &ImportResult{
+			TaskID:  strings.TrimSpace(result.TaskID),
+			RootURI: strings.TrimSpace(result.RootURI),
+		}, nil
 	}
-	return "", nil
+	return nil, nil
 }
 
 func decodeStoreResult(body []byte, target any) error {

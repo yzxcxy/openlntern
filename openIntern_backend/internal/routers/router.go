@@ -83,6 +83,7 @@ func SetupRouter() *gin.Engine {
 		skillGroup.POST("/import", controllers.ImportSkill)
 		skillGroup.DELETE("/:name", controllers.DeleteSkill)
 		skillGroup.GET("/content/:name", controllers.ReadSkillContent)
+		skillGroup.GET("/tasks/:task_id", controllers.GetImportTaskStatus)
 	}
 
 	skillMetaGroup := r.Group("/v1/skills/meta", middleware.AuthRequired())
@@ -113,11 +114,8 @@ func SetupRouter() *gin.Engine {
 		kbGroup.GET("", controllers.ListKnowledgeBases)
 		kbGroup.GET("/entry/content", controllers.GetKnowledgeBaseContent)
 		kbGroup.GET("/:name/tree", controllers.GetKnowledgeBaseTree)
+		kbGroup.GET("/tasks/:task_id", controllers.GetImportTaskStatus)
 		kbGroup.POST("/import", controllers.ImportKnowledgeBase)
-		kbGroup.POST("/file", controllers.UploadKnowledgeBaseFile)
-		kbGroup.POST("/move", controllers.MoveKnowledgeBaseEntry)
-		kbGroup.POST("/drag", controllers.DragKnowledgeBaseEntry)
-		kbGroup.DELETE("/entry", controllers.DeleteKnowledgeBaseEntry)
 		kbGroup.DELETE("/:name", controllers.DeleteKnowledgeBase)
 	}
 
