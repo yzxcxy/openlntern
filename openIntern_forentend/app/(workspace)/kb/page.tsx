@@ -16,6 +16,7 @@ import { UiModal as Modal } from "../../components/ui/UiModal";
 
 type KnowledgeBase = {
   name?: string;
+  index_status?: string;
 };
 
 type TreeEntry = {
@@ -300,6 +301,68 @@ const IconChevron = ({ className, expanded }: { className?: string; expanded?: b
   </svg>
 );
 
+// Status Icons
+const IconPending = ({ className }: { className?: string }) => (
+  <svg
+    className={joinClasses(className, "animate-spin")}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+    <path d="M12 2a10 10 0 0 1 10 10" strokeOpacity="0.75" />
+  </svg>
+);
+
+const IconCompleted = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="9 12 12 15 16 10" />
+  </svg>
+);
+
+const IconFailed = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <line x1="15" y1="9" x2="9" y2="15" />
+    <line x1="9" y1="9" x2="15" y2="15" />
+  </svg>
+);
+
+const getStatusDisplay = (status?: string) => {
+  switch (status) {
+    case "pending":
+      return { label: "索引中", icon: IconPending, color: "text-[var(--color-state-warning)]" };
+    case "processing":
+      return { label: "索引中", icon: IconPending, color: "text-[var(--color-state-warning)]" };
+    case "completed":
+      return { label: "可搜索", icon: IconCompleted, color: "text-[var(--color-state-success)]" };
+    case "failed":
+      return { label: "索引失败", icon: IconFailed, color: "text-[var(--color-state-error)]" };
+    default:
+      return { label: "未知", icon: IconPending, color: "text-[var(--color-text-muted)]" };
+  }
+};
+
 // Tree Item Component
 const TreeItem = ({
   node,
@@ -517,6 +580,40 @@ export default function KnowledgeBasePage() {
     setSelectedNode(null);
   }, [selectedKb]);
 
+  // 轮询刷新索引状态
+  const refreshIndexStatus = useCallback(async (kbName: string) => {
+    if (!getValidToken()) return;
+    try {
+      await requestBackend(`/v1/kbs/${encodeURIComponent(kbName)}/status/refresh`, {
+        method: "POST",
+        fallbackMessage: "刷新索引状态失败",
+        router,
+      });
+      // 刷新成功后更新列表
+      await fetchList();
+    } catch {
+      // 忽略错误
+    }
+  }, [getValidToken, router, fetchList]);
+
+  // 当有正在索引的知识库时，启动轮询
+  useEffect(() => {
+    const pendingKbs = kbs.filter(
+      (kb) => kb.index_status === "pending" || kb.index_status === "processing"
+    );
+    if (pendingKbs.length === 0) return;
+
+    const interval = setInterval(() => {
+      pendingKbs.forEach((kb) => {
+        if (kb.name) {
+          refreshIndexStatus(kb.name);
+        }
+      });
+    }, 5000); // 每5秒刷新一次
+
+    return () => clearInterval(interval);
+  }, [kbs, refreshIndexStatus]);
+
   const treeData = useMemo(() => buildTreeNodes(treeEntries), [treeEntries]);
 
   const resetCreateModal = useCallback(() => {
@@ -730,6 +827,8 @@ export default function KnowledgeBasePage() {
                       {kbs.map((item) => {
                         const name = item.name ?? "";
                         const active = name === selectedKb;
+                        const statusDisplay = getStatusDisplay(item.index_status);
+                        const StatusIcon = statusDisplay.icon;
                         return (
                           <div
                             key={name}
@@ -741,9 +840,15 @@ export default function KnowledgeBasePage() {
                                 : "text-[var(--color-text-secondary)] hover:bg-[rgba(255,252,247,0.9)]"
                             )}
                           >
-                            <span className="text-sm font-medium">
-                              {name || "未命名知识库"}
-                            </span>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium truncate">
+                                {name || "未命名知识库"}
+                              </span>
+                              <div className={joinClasses("flex items-center gap-1 shrink-0", statusDisplay.color)}>
+                                <StatusIcon className="h-3.5 w-3.5" />
+                                <span className="text-xs">{statusDisplay.label}</span>
+                              </div>
+                            </div>
                           </div>
                         );
                       })}

@@ -114,6 +114,8 @@ func SetupRouter() *gin.Engine {
 		kbGroup.GET("", controllers.ListKnowledgeBases)
 		kbGroup.GET("/entry/content", controllers.GetKnowledgeBaseContent)
 		kbGroup.GET("/:name/tree", controllers.GetKnowledgeBaseTree)
+		kbGroup.GET("/:name/status", controllers.GetKBIndexStatus)
+		kbGroup.POST("/:name/status/refresh", controllers.RefreshKBIndexStatus)
 		kbGroup.GET("/tasks/:task_id", controllers.GetImportTaskStatus)
 		kbGroup.POST("/import", controllers.ImportKnowledgeBase)
 		kbGroup.DELETE("/:name", controllers.DeleteKnowledgeBase)

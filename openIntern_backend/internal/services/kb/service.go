@@ -22,7 +22,8 @@ var (
 )
 
 type Item struct {
-	Name string `json:"name"`
+	Name        string `json:"name"`
+	IndexStatus string `json:"index_status,omitempty"`
 }
 
 type TreeEntry struct {
@@ -37,6 +38,13 @@ type AsyncResult struct {
 	TaskID string `json:"task_id,omitempty"`
 	Status string `json:"status"`
 	Async  bool   `json:"async"`
+}
+
+type IndexStatusResult struct {
+	TaskID   string `json:"task_id"`
+	Status   string `json:"status"`
+	Error    string `json:"error,omitempty"`
+	Resource string `json:"resource_id,omitempty"`
 }
 
 type Service struct{}
@@ -66,7 +74,10 @@ func (s *Service) List(ctx context.Context) ([]Item, error) {
 	}
 	result := make([]Item, 0, len(kbs))
 	for _, kb := range kbs {
-		result = append(result, Item{Name: kb.Name})
+		result = append(result, Item{
+			Name:        kb.Name,
+			IndexStatus: kb.IndexStatus,
+		})
 	}
 	return result, nil
 }
@@ -164,28 +175,33 @@ func (s *Service) Import(ctx context.Context, rawName string, fileHeader *multip
 		return nil, err
 	}
 
-	// 创建KB记录
+	// 上传zip到OpenViking进行检索索引
+	result, err := dao.KnowledgeBase.IngestZip(ctx, tempZipPath, openVikingURI, false, 0)
+	taskID := ""
+	if result != nil {
+		taskID = result.TaskID
+	}
+
+	// 创建KB记录（包含索引状态）
 	kb := &models.KnowledgeBase{
 		UserID:        userID,
 		Name:          kbName,
 		OpenVikingURI: openVikingURI,
 		LocalPath:     localPath,
+		IndexTaskID:   taskID,
+		IndexStatus:   "pending",
+	}
+	if taskID == "" {
+		// OpenViking上传失败，标记状态为failed
+		if err != nil {
+			kb.IndexStatus = "failed"
+			kb.IndexError = err.Error()
+		}
 	}
 	if err := dao.KBLocal.Create(ctx, kb, treeEntries); err != nil {
 		return nil, err
 	}
 
-	// 上传zip到OpenViking进行检索索引
-	result, err := dao.KnowledgeBase.IngestZip(ctx, tempZipPath, openVikingURI, false, 0)
-	if err != nil {
-		// OpenViking上传失败，但本地存储已成功，记录错误但不回滚
-		// 用户可以重新尝试上传到OpenViking
-	}
-
-	taskID := ""
-	if result != nil {
-		taskID = result.TaskID
-	}
 	return &AsyncResult{Name: kbName, TaskID: taskID, Status: "accepted", Async: true}, nil
 }
 
@@ -285,4 +301,87 @@ func IsNotFound(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "404")
+}
+
+// GetIndexStatus 获取知识库索引状态（不查询OpenViking）。
+func (s *Service) GetIndexStatus(ctx context.Context, rawName string) (*IndexStatusResult, error) {
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kbName, err := normalizeKnowledgeBaseName(rawName)
+	if err != nil {
+		return nil, err
+	}
+	kb, err := dao.KBLocal.GetByName(ctx, userID, kbName)
+	if err != nil {
+		return nil, err
+	}
+	return &IndexStatusResult{
+		TaskID:   kb.IndexTaskID,
+		Status:   kb.IndexStatus,
+		Error:    kb.IndexError,
+		Resource: kb.OpenVikingURI,
+	}, nil
+}
+
+// RefreshIndexStatus 刷新知识库索引状态（查询OpenViking并更新数据库）。
+func (s *Service) RefreshIndexStatus(ctx context.Context, rawName string) (*IndexStatusResult, error) {
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kbName, err := normalizeKnowledgeBaseName(rawName)
+	if err != nil {
+		return nil, err
+	}
+	kb, err := dao.KBLocal.GetByName(ctx, userID, kbName)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果没有task_id或状态已完成/失败，直接返回当前状态
+	if kb.IndexTaskID == "" || kb.IndexStatus == "completed" || kb.IndexStatus == "failed" {
+		return &IndexStatusResult{
+			TaskID:   kb.IndexTaskID,
+			Status:   kb.IndexStatus,
+			Error:    kb.IndexError,
+			Resource: kb.OpenVikingURI,
+		}, nil
+	}
+
+	// 查询OpenViking任务状态
+	taskResult, err := dao.OpenVikingSession.GetTask(ctx, kb.IndexTaskID)
+	if err != nil {
+		// 查询失败，返回当前状态但不更新
+		return &IndexStatusResult{
+			TaskID:   kb.IndexTaskID,
+			Status:   kb.IndexStatus,
+			Error:    kb.IndexError,
+			Resource: kb.OpenVikingURI,
+		}, nil
+	}
+
+	// 更新数据库记录
+	newStatus := taskResult.Status
+	newError := ""
+	if taskResult.Error != "" {
+		newError = taskResult.Error
+	}
+	if err := dao.KBLocal.UpdateIndexStatus(ctx, kb.ID, kb.IndexTaskID, newStatus, newError); err != nil {
+		// 更新失败，返回查询到的状态但不持久化
+		return &IndexStatusResult{
+			TaskID:   kb.IndexTaskID,
+			Status:   newStatus,
+			Error:    newError,
+			Resource: taskResult.ResourceID,
+		}, nil
+	}
+
+	return &IndexStatusResult{
+		TaskID:   kb.IndexTaskID,
+		Status:   newStatus,
+		Error:    newError,
+		Resource: taskResult.ResourceID,
+	}, nil
 }

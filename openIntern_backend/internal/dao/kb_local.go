@@ -134,3 +134,14 @@ func (d *KBLocalDAO) ReadFile(ctx context.Context, objectKey string) (string, er
 func (d *KBLocalDAO) BuildLocalPath(userID, kbName string) string {
 	return path.Join("users", userID, "kbs", kbName)
 }
+
+// UpdateIndexStatus 更新知识库索引状态。
+func (d *KBLocalDAO) UpdateIndexStatus(ctx context.Context, kbID uint, taskID, status, errMsg string) error {
+	return database.DB.Model(&models.KnowledgeBase{}).
+		Where("id = ?", kbID).
+		Updates(map[string]any{
+			"index_task_id": taskID,
+			"index_status":  status,
+			"index_error":   errMsg,
+		}).Error
+}

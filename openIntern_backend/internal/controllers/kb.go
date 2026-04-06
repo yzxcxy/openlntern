@@ -181,3 +181,49 @@ func knowledgeBaseRequestContext(c *gin.Context) (context.Context, bool) {
 	}
 	return dao.WithOpenVikingUserID(c.Request.Context(), userID), true
 }
+
+// GetKBIndexStatus 获取知识库索引状态。
+func GetKBIndexStatus(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	result, err := kbsvc.KnowledgeBase.GetIndexStatus(ctx, c.Param("name"))
+	if err != nil {
+		switch {
+		case errors.Is(err, kbsvc.ErrNotConfigured):
+			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		case errors.Is(err, kbsvc.ErrInvalidInput):
+			response.BadRequest(c)
+		case kbsvc.IsNotFound(err):
+			response.NotFound(c, "kb not found")
+		default:
+			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		}
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, result)
+}
+
+// RefreshKBIndexStatus 刷新知识库索引状态（查询OpenViking并更新）。
+func RefreshKBIndexStatus(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	result, err := kbsvc.KnowledgeBase.RefreshIndexStatus(ctx, c.Param("name"))
+	if err != nil {
+		switch {
+		case errors.Is(err, kbsvc.ErrNotConfigured):
+			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		case errors.Is(err, kbsvc.ErrInvalidInput):
+			response.BadRequest(c)
+		case kbsvc.IsNotFound(err):
+			response.NotFound(c, "kb not found")
+		default:
+			response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
+		}
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, result)
+}
