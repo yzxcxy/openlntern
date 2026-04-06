@@ -34,6 +34,7 @@ This script will:
 - start `docker compose` dependencies
 - create the MinIO bucket `open-intern`
 - upload the default plugin icon object to MinIO
+- upload the default openIntern avatar object to MinIO
 - initialize the default login account
 
 ## Service endpoints
@@ -51,6 +52,7 @@ This script will:
 - This round only deploys MinIO and its management console.
 - Existing COS upload behavior is unchanged in this round.
 - The default icon for newly created plugins now points to the fixed MinIO object key `public/plugin/icon/default-plugin.jpg`, and `scripts/init-dev-data.sh` will initialize that object for a new local environment.
+- The default openIntern avatar now points to the fixed MinIO object key `public/system/avatar/openintern-default.jpg`, and `scripts/init-dev-data.sh` will initialize that object for a new local environment.
 - The OpenViking container mounts the existing `openIntern_backend/ov.conf` for its own runtime configuration.
 - openIntern now uploads knowledge-base and skill imports to OpenViking over HTTP before import, so OpenViking never reads backend-local temp paths directly.
 - A shared Docker volume between `openIntern_backend` and OpenViking is not required for these import flows.

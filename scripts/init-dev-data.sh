@@ -15,6 +15,9 @@ MINIO_SECRET_KEY="${OPENINTERN_MINIO_SECRET_KEY:-minioadmin}"
 MINIO_BUCKET="${OPENINTERN_MINIO_BUCKET:-open-intern}"
 DEFAULT_PLUGIN_ICON_PATH="${ROOT_DIR}/openIntern_backend/assets/plugin/default-icon.jpg"
 DEFAULT_PLUGIN_ICON_OBJECT_KEY="${OPENINTERN_DEFAULT_PLUGIN_ICON_OBJECT_KEY:-public/plugin/icon/default-plugin.jpg}"
+# 默认头像对象 key 需要与前后端内置 fallback 保持一致，避免新实例引用到不存在的 public 对象。
+DEFAULT_AVATAR_PATH="${ROOT_DIR}/openIntern_forentend/public/openintern-default.jpg"
+DEFAULT_AVATAR_OBJECT_KEY="${OPENINTERN_DEFAULT_AVATAR_OBJECT_KEY:-public/system/avatar/openintern-default.jpg}"
 
 ensure_container_running() {
   local service="$1"
@@ -123,6 +126,9 @@ ensure_minio_bucket
 
 echo "初始化默认插件图标..."
 ensure_minio_object_from_file "${DEFAULT_PLUGIN_ICON_OBJECT_KEY}" "${DEFAULT_PLUGIN_ICON_PATH}"
+
+echo "初始化默认头像..."
+ensure_minio_object_from_file "${DEFAULT_AVATAR_OBJECT_KEY}" "${DEFAULT_AVATAR_PATH}"
 
 echo "初始化默认账号..."
 cd "${BACKEND_DIR}"

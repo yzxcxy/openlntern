@@ -157,7 +157,7 @@ docker compose up -d openviking
 
 4. sandbox 不需要提前手工启动固定容器；后端会在第一次使用 sandbox 相关能力时自动执行 `docker run`
 
-如果是新环境，建议先执行一次初始化脚本，它会启动外部依赖、创建 MinIO bucket，并初始化默认账号：
+如果是新环境，建议先执行一次初始化脚本，它会启动外部依赖、创建 MinIO bucket、上传默认公共资源，并初始化默认账号：
 
 ```bash
 chmod +x scripts/init-dev-data.sh
