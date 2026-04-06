@@ -20,6 +20,21 @@ This Compose stack manages external dependencies and OpenViking:
 2. Start `openIntern_forentend` locally.
 3. Export `OPENINTERN_OPENVIKING_MANAGED_EXTERNALLY=1` before starting `openIntern_backend`, so the backend does not try to launch a local OpenViking process.
 
+## One-time initialization for a new environment
+
+Before the first local start, run:
+
+```bash
+chmod +x scripts/init-dev-data.sh
+./scripts/init-dev-data.sh
+```
+
+This script will:
+
+- start `docker compose` dependencies
+- create the MinIO bucket `open-intern`
+- initialize the default login account
+
 ## Service endpoints
 
 - MySQL: `127.0.0.1:3306`

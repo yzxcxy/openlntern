@@ -157,6 +157,28 @@ docker compose up -d openviking
 
 4. sandbox 不需要提前手工启动固定容器；后端会在第一次使用 sandbox 相关能力时自动执行 `docker run`
 
+如果是新环境，建议先执行一次初始化脚本，它会启动外部依赖、创建 MinIO bucket，并初始化默认账号：
+
+```bash
+chmod +x scripts/init-dev-data.sh
+./scripts/init-dev-data.sh
+```
+
+脚本默认创建：
+
+- 用户名：`admin`
+- 邮箱：`admin@example.com`
+- 密码：`admin123456`
+
+可通过环境变量覆盖默认值：
+
+```bash
+OPENINTERN_INIT_USERNAME=yourname \
+OPENINTERN_INIT_EMAIL=you@example.com \
+OPENINTERN_INIT_PASSWORD='strong-password' \
+./scripts/init-dev-data.sh
+```
+
 补充说明：
 
 - OpenViking 与 `openIntern_backend` 不需要共享 Docker volume 才能完成知识库或 skill 导入。
