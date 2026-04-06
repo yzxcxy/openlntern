@@ -8,8 +8,8 @@ func TestBuildAddResourcePayloadFromTempFile(t *testing.T) {
 	if payload["temp_file_id"] != "tmp_123" {
 		t.Fatalf("unexpected temp file id: %#v", payload["temp_file_id"])
 	}
-	if payload["target"] != "viking://resources/demo/" {
-		t.Fatalf("unexpected target: %#v", payload["target"])
+	if payload["parent"] != "viking://resources/demo/" {
+		t.Fatalf("unexpected parent: %#v", payload["parent"])
 	}
 	if payload["wait"] != false {
 		t.Fatalf("unexpected wait flag: %#v", payload["wait"])

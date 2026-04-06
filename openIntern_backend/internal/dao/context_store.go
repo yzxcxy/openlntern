@@ -43,6 +43,19 @@ func skillStoreReady() bool {
 	return contextStoreReady()
 }
 
+// isContextStoreNotFound normalizes OpenViking "resource missing" responses so user-private roots can behave like empty collections.
+func isContextStoreNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(lower, "not_found") ||
+		strings.Contains(lower, "not found") ||
+		strings.Contains(lower, "directory not found") ||
+		strings.Contains(lower, "resource not found") ||
+		strings.Contains(lower, "404")
+}
+
 func listEntries(ctx context.Context, uri string, recursive bool) ([]ResourceEntry, error) {
 	params := url.Values{}
 	params.Set("uri", uri)
@@ -185,9 +198,10 @@ func importSkill(ctx context.Context, rootDir string) error {
 }
 
 func buildAddResourcePayload(tempFileID string, targetURI string, wait bool, timeoutSeconds float64) map[string]any {
+	// OpenViking's HTTP API now treats directory-style imports as a parent placement, not a legacy target field.
 	payload := map[string]any{
 		"temp_file_id": strings.TrimSpace(tempFileID),
-		"target":       strings.TrimSpace(targetURI),
+		"parent":       strings.TrimSpace(targetURI),
 		"wait":         wait,
 	}
 	if timeoutSeconds > 0 {

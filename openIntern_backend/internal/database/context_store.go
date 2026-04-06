@@ -146,6 +146,10 @@ func (s *ContextStore) do(ctx context.Context, method string, endpoint string, p
 	if s.apiKey != "" {
 		req.Header.Set("x-api-key", s.apiKey)
 	}
+	if accountID, userID, ok := openVikingTenantFromContext(ctx); ok {
+		req.Header.Set("X-OpenViking-Account", accountID)
+		req.Header.Set("X-OpenViking-User", userID)
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -190,6 +194,10 @@ func (s *ContextStore) uploadMultipart(ctx context.Context, endpoint string, bod
 	req.Header.Set("Content-Type", contentType)
 	if s.apiKey != "" {
 		req.Header.Set("x-api-key", s.apiKey)
+	}
+	if accountID, userID, ok := openVikingTenantFromContext(ctx); ok {
+		req.Header.Set("X-OpenViking-Account", accountID)
+		req.Header.Set("X-OpenViking-User", userID)
 	}
 
 	resp, err := s.client.Do(req)
@@ -261,6 +269,16 @@ func extractPayloadSummary(payload any) (string, string) {
 	}
 	if target == "" {
 		if value, ok := data["target"]; ok {
+			target = strings.TrimSpace(fmt.Sprint(value))
+		}
+	}
+	if target == "" {
+		if value, ok := data["parent"]; ok {
+			target = strings.TrimSpace(fmt.Sprint(value))
+		}
+	}
+	if target == "" {
+		if value, ok := data["to"]; ok {
 			target = strings.TrimSpace(fmt.Sprint(value))
 		}
 	}

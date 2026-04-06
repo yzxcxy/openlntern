@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"openIntern/internal/database"
 	"openIntern/internal/models"
 )
 
@@ -32,6 +33,11 @@ func (d *SkillStoreDAO) RootURI(ctx context.Context) (string, error) {
 	userID, err := OpenVikingUserIDFromContext(ctx)
 	if err != nil {
 		return "", err
+	}
+	configuredRoot := strings.TrimSpace(database.Context.SkillsRoot())
+	if configuredRoot != "" {
+		// OpenViking scopes viking://agent/skills by tenant headers, so one configured root can remain user-isolated.
+		return strings.TrimRight(configuredRoot, "/"), nil
 	}
 	return strings.TrimRight(UserSkillRootURI(userID), "/"), nil
 }
@@ -66,6 +72,9 @@ func (d *SkillStoreDAO) ListSkillNames(ctx context.Context) ([]string, error) {
 	}
 	entries, err := listEntries(ctx, root, false)
 	if err != nil {
+		if isContextStoreNotFound(err) {
+			return []string{}, nil
+		}
 		return nil, err
 	}
 	names := make([]string, 0, len(entries))
@@ -139,7 +148,14 @@ func (d *SkillStoreDAO) ListFiles(ctx context.Context, skillPath string, recursi
 	if err != nil {
 		return nil, err
 	}
-	return listEntries(ctx, targetURI, recursive)
+	entries, err := listEntries(ctx, targetURI, recursive)
+	if err != nil {
+		if isContextStoreNotFound(err) {
+			return []ResourceEntry{}, nil
+		}
+		return nil, err
+	}
+	return entries, nil
 }
 
 func (d *SkillStoreDAO) ListFilesInDirectory(ctx context.Context, skillName string, relPath string) ([]SkillFileEntry, error) {
@@ -161,6 +177,9 @@ func (d *SkillStoreDAO) ListFilesInDirectory(ctx context.Context, skillName stri
 	}
 	entries, err := listEntries(ctx, listURI, false)
 	if err != nil {
+		if isContextStoreNotFound(err) {
+			return []SkillFileEntry{}, nil
+		}
 		return nil, err
 	}
 	result := make([]SkillFileEntry, 0, len(entries))
@@ -204,14 +223,9 @@ func (d *SkillStoreDAO) ReadSummary(ctx context.Context, skillName string) (stri
 }
 
 func (d *SkillStoreDAO) Import(ctx context.Context, rootDir string, skillName string) error {
-	targetURI, err := d.BuildURI(ctx, skillName)
-	if err != nil {
-		return err
-	}
-	if !strings.HasSuffix(targetURI, "/") {
-		targetURI += "/"
-	}
-	return addResource(ctx, rootDir, targetURI, false, 0)
+	_ = skillName
+	// Skill archives must use the dedicated /api/v1/skills flow; resource imports only accept viking://resources/* targets.
+	return importSkill(ctx, rootDir)
 }
 
 func (d *SkillStoreDAO) Delete(ctx context.Context, name string) error {

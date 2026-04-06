@@ -79,6 +79,9 @@ func (d *KnowledgeBaseDAO) List(ctx context.Context) ([]KnowledgeBaseItem, error
 	}
 	entries, err := listEntries(ctx, root, false)
 	if err != nil {
+		if isContextStoreNotFound(err) {
+			return []KnowledgeBaseItem{}, nil
+		}
 		return nil, err
 	}
 	items := make([]KnowledgeBaseItem, 0, len(entries))

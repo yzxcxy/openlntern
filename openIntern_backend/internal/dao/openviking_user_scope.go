@@ -4,18 +4,23 @@ import (
 	"context"
 	"errors"
 	"strings"
+
+	"openIntern/internal/database"
 )
 
 type openVikingUserContextKey string
 
 const openVikingUserIDContextKey openVikingUserContextKey = "openviking_user_id"
+const openVikingDefaultAccountID = "default"
 
 // WithOpenVikingUserID stores the authenticated openIntern user id for downstream OpenViking path builders.
 func WithOpenVikingUserID(ctx context.Context, userID string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return context.WithValue(ctx, openVikingUserIDContextKey, strings.TrimSpace(userID))
+	userID = strings.TrimSpace(userID)
+	ctx = context.WithValue(ctx, openVikingUserIDContextKey, userID)
+	return database.WithOpenVikingTenant(ctx, openVikingDefaultAccountID, userID)
 }
 
 // OpenVikingUserIDFromContext returns the authenticated openIntern user id required for user-scoped OpenViking paths.
