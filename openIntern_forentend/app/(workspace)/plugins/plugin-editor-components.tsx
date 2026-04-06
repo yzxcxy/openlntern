@@ -6,6 +6,7 @@ import { UiInput } from "../../components/ui/UiInput";
 import { UiMonacoEditor } from "../../components/ui/UiMonacoEditor";
 import { UiSelect } from "../../components/ui/UiSelect";
 import { UiTextarea } from "../../components/ui/UiTextarea";
+import { resolveBackendAssetUrl } from "../../shared/backend-url";
 import {
   createField,
   flattenFields,
@@ -32,7 +33,8 @@ export function PluginAvatar({
   fallbackSrc?: string;
   className?: string;
 }) {
-  const imageURL = src?.trim() || fallbackSrc?.trim() || "";
+  const imageURL =
+    resolveBackendAssetUrl(src) || resolveBackendAssetUrl(fallbackSrc) || "";
   const fallbackLabel = (name?.trim().slice(0, 1) || "P").toUpperCase();
 
   if (imageURL) {

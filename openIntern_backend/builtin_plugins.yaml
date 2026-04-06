@@ -5,7 +5,6 @@ plugins:
     source: "builtin"
     runtime_type: "builtin"
     status: "enabled"
-    icon: "public/plugin/icon/a2ui.png"
     tools:
       - tool_id: "6c3a0f46-7d52-4c9b-8b62-2ab0de110011"
         tool_name: "list_a2uis"
@@ -99,7 +98,6 @@ plugins:
     source: "builtin"
     runtime_type: "builtin"
     status: "enabled"
-    icon: "public/plugin/icon/object-storage.png"
     tools:
       - tool_id: "6c3a0f46-7d52-4c9b-8b62-2ab0de110021"
         tool_name: "upload_to_object_storage"

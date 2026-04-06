@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"openIntern/internal/config"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	storagesvc "openIntern/internal/services/storage"
 	"openIntern/internal/util"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -156,8 +158,11 @@ var Plugin = new(PluginService)
 var pluginDefaultIconURL string
 var builtinPluginDefinitions []builtinPluginDefinition
 
+const bundledDefaultPluginIconPath = "assets/plugin/default-icon.jpg"
+
 func InitPlugin(cfg config.PluginConfig) {
 	pluginDefaultIconURL = strings.TrimSpace(cfg.DefaultIconURL)
+	ensureDefaultPluginIconObject()
 	definitions, err := loadBuiltinPluginDefinitions(cfg.BuiltinManifestPath)
 	if err != nil {
 		panic(fmt.Errorf("load builtin plugins failed: %w", err))
@@ -168,6 +173,30 @@ func InitPlugin(cfg config.PluginConfig) {
 
 func GetDefaultPluginIconURL() string {
 	return resolvePluginIconForView("")
+}
+
+// ensureDefaultPluginIconObject seeds the configured public default plugin icon
+// so builtin plugins can safely fall back to it in fresh environments.
+func ensureDefaultPluginIconObject() {
+	objectKey := strings.TrimSpace(pluginDefaultIconURL)
+	if !strings.HasPrefix(objectKey, "public/") {
+		return
+	}
+	if _, err := os.Stat(bundledDefaultPluginIconPath); err != nil {
+		log.Printf("skip seeding default plugin icon, bundled asset missing: %v", err)
+		return
+	}
+	if existing, err := storagesvc.ObjectStorage.ReadObject(context.Background(), objectKey); err == nil {
+		_ = existing.Reader.Close()
+		return
+	}
+	if _, err := storagesvc.File.UploadPath(
+		context.Background(),
+		objectKey,
+		bundledDefaultPluginIconPath,
+	); err != nil {
+		log.Printf("seed default plugin icon failed: %v", err)
+	}
 }
 
 func (s *PluginService) EnsureBuiltinPluginsForUser(userID string) error {
