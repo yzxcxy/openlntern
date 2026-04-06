@@ -155,7 +155,7 @@ const inferThreadConversationState = (
 function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const inputRef = useRef<{ setContent: (content: string) => void } | null>(null);
+  const inputRef = useRef<AIChatInput | null>(null);
   const dialogueWrapperRef = useRef<HTMLDivElement | null>(null);
   const fallbackThreadIdRef = useRef<string>("");
   const latestThreadIdRef = useRef("");
@@ -1982,7 +1982,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
                   onRemovePendingUpload={removePendingUpload}
                 />
                 <AIChatInput
-                  ref={inputRef as any}
+                  ref={inputRef}
                   className="chat-composer-input"
                   keepSkillAfterSend={false}
                   placeholder="输入任务；@ 选择知识库，# 选择 Skill"

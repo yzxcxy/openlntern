@@ -34,14 +34,9 @@ type TreeNode = {
   key: string;
   label: string;
   children?: TreeNode[];
-  isLeaf?: boolean;
-  isDir?: boolean;
-  path: string;
-};
-
-type SelectedNode = {
-  path: string;
+  isLeaf: boolean;
   isDir: boolean;
+  path: string;
 };
 
 const buildNodeKey = (segments: string[], isDir: boolean) => {
@@ -412,7 +407,7 @@ const TreeItem = ({
 }: {
   node: TreeNode;
   level: number;
-  selectedNode: SelectedNode | null;
+  selectedNode: TreeNode | null;
   onSelect: (node: TreeNode) => void;
   onDelete: (node: TreeNode) => void;
   onPreview: (node: TreeNode) => void;
@@ -517,7 +512,7 @@ export default function KnowledgeBasePage() {
   const [treeLoading, setTreeLoading] = useState(false);
   const [selectedKb, setSelectedKb] = useState("");
   const [treeEntries, setTreeEntries] = useState<TreeEntry[]>([]);
-  const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
+  const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [createVisible, setCreateVisible] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -772,6 +767,9 @@ export default function KnowledgeBasePage() {
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
+      if (!file) {
+        return;
+      }
       if (file.name.toLowerCase().endsWith(".zip") || !file.name.includes(".")) {
         // Accept zip files or files without extension
       }

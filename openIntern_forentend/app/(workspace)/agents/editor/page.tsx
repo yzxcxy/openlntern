@@ -21,7 +21,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type Ref,
   type ReactNode,
 } from "react";
 import { UiButton } from "../../../components/ui/UiButton";
@@ -308,7 +307,7 @@ function AgentEditorContent({
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
 
-  const inputRef = useRef<{ setContent: (content: string) => void } | null>(null);
+  const inputRef = useRef<AIChatInput | null>(null);
   const dialogueWrapperRef = useRef<HTMLDivElement | null>(null);
   const currentRunIdRef = useRef("");
   const textMessageMapRef = useRef(new Map<string, { runId: string; index: number }>());
@@ -1517,7 +1516,7 @@ function AgentEditorContent({
                   onRemovePendingUpload={removePendingUpload}
                 />
                 <AIChatInput
-                  ref={inputRef as unknown as Ref<unknown>}
+                  ref={inputRef}
                   className="chat-composer-input"
                   keepSkillAfterSend={false}
                   placeholder="输入消息进行调试测试"
