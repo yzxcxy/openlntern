@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"openIntern/internal/database"
 	"openIntern/internal/models"
 )
 
@@ -26,17 +25,21 @@ func (d *SkillStoreDAO) Configured() bool {
 	return skillStoreReady()
 }
 
-func (d *SkillStoreDAO) RootURI() string {
+func (d *SkillStoreDAO) RootURI(ctx context.Context) (string, error) {
 	if !skillStoreReady() {
-		return ""
+		return "", errors.New("skill storage root not configured")
 	}
-	return strings.TrimRight(strings.TrimSpace(database.Context.SkillsRoot()), "/")
+	userID, err := OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(UserSkillRootURI(userID), "/"), nil
 }
 
-func (d *SkillStoreDAO) BuildURI(skillPath string) (string, error) {
-	root := d.RootURI()
-	if root == "" {
-		return "", errors.New("skill storage root not configured")
+func (d *SkillStoreDAO) BuildURI(ctx context.Context, skillPath string) (string, error) {
+	root, err := d.RootURI(ctx)
+	if err != nil {
+		return "", err
 	}
 	skillPath = strings.Trim(skillPath, "/")
 	if skillPath == "" {
@@ -57,9 +60,9 @@ func (d *SkillStoreDAO) BuildURI(skillPath string) (string, error) {
 }
 
 func (d *SkillStoreDAO) ListSkillNames(ctx context.Context) ([]string, error) {
-	root := d.RootURI()
-	if root == "" {
-		return nil, errors.New("skill storage root not configured")
+	root, err := d.RootURI(ctx)
+	if err != nil {
+		return nil, err
 	}
 	entries, err := listEntries(ctx, root, false)
 	if err != nil {
@@ -132,7 +135,7 @@ func (d *SkillStoreDAO) ListSkillCatalog(ctx context.Context, keyword string, pa
 }
 
 func (d *SkillStoreDAO) ListFiles(ctx context.Context, skillPath string, recursive bool) ([]ResourceEntry, error) {
-	targetURI, err := d.BuildURI(skillPath)
+	targetURI, err := d.BuildURI(ctx, skillPath)
 	if err != nil {
 		return nil, err
 	}
@@ -144,14 +147,14 @@ func (d *SkillStoreDAO) ListFilesInDirectory(ctx context.Context, skillName stri
 	if skillName == "" {
 		return nil, errors.New("skill name is required")
 	}
-	rootURI, err := d.BuildURI(skillName)
+	rootURI, err := d.BuildURI(ctx, skillName)
 	if err != nil {
 		return nil, err
 	}
 	listURI := rootURI
 	relPath = strings.Trim(strings.TrimSpace(relPath), "/")
 	if relPath != "" {
-		listURI, err = d.BuildURI(path.Join(skillName, relPath))
+		listURI, err = d.BuildURI(ctx, path.Join(skillName, relPath))
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +188,7 @@ func (d *SkillStoreDAO) ListFilesInDirectory(ctx context.Context, skillName stri
 }
 
 func (d *SkillStoreDAO) ReadFile(ctx context.Context, skillPath string) (string, error) {
-	targetURI, err := d.BuildURI(skillPath)
+	targetURI, err := d.BuildURI(ctx, skillPath)
 	if err != nil {
 		return "", err
 	}
@@ -193,19 +196,26 @@ func (d *SkillStoreDAO) ReadFile(ctx context.Context, skillPath string) (string,
 }
 
 func (d *SkillStoreDAO) ReadSummary(ctx context.Context, skillName string) (string, error) {
-	targetURI, err := d.BuildURI(skillName)
+	targetURI, err := d.BuildURI(ctx, skillName)
 	if err != nil {
 		return "", err
 	}
 	return readContent(ctx, targetURI, "/api/v1/content/abstract")
 }
 
-func (d *SkillStoreDAO) Import(ctx context.Context, rootDir string) error {
-	return importSkill(ctx, rootDir)
+func (d *SkillStoreDAO) Import(ctx context.Context, rootDir string, skillName string) error {
+	targetURI, err := d.BuildURI(ctx, skillName)
+	if err != nil {
+		return err
+	}
+	if !strings.HasSuffix(targetURI, "/") {
+		targetURI += "/"
+	}
+	return addResource(ctx, rootDir, targetURI, false, 0)
 }
 
 func (d *SkillStoreDAO) Delete(ctx context.Context, name string) error {
-	targetURI, err := d.BuildURI(name)
+	targetURI, err := d.BuildURI(ctx, name)
 	if err != nil {
 		return err
 	}

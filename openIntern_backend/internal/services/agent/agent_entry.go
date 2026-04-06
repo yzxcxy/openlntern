@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	"openIntern/internal/services/agent/agui"
 	builtinTool "openIntern/internal/services/builtin_tool"
@@ -21,6 +22,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	}
 	state := s.snapshotState()
 	ownerID := ownerIDFromContext(ctx)
+	ctx = dao.WithOpenVikingUserID(ctx, ownerID)
 	threadID := input.ThreadID
 	if threadID == "" {
 		threadID = events.GenerateThreadID()
@@ -59,7 +61,7 @@ func (s *Service) RunAgent(ctx context.Context, w io.Writer, input *types.RunAge
 	}
 	preparedInput := mergedInput
 	if !isAgentConversationMode(runtimeConfig) {
-		preparedInput, err = injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, mergedInput)
+		preparedInput, err = injectRetrievedMemoryContext(ctx, s.deps.MemoryRetriever, ownerID, mergedInput)
 		if err != nil {
 			log.Printf("RunAgent memory retrieval failed thread_id=%s run_id=%s err=%v", threadID, runID, err)
 			preparedInput = mergedInput

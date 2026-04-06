@@ -22,7 +22,7 @@ type SkillRepository interface {
 	ListFilesInDirectory(ctx context.Context, skillName string, relPath string) ([]dao.SkillFileEntry, error)
 	ReadSummary(ctx context.Context, skillName string) (string, error)
 	ReadFile(ctx context.Context, skillPath string) (string, error)
-	BuildURI(skillPath string) (string, error)
+	BuildURI(ctx context.Context, skillPath string) (string, error)
 }
 
 type SkillFrontmatterRecord struct {
@@ -31,8 +31,8 @@ type SkillFrontmatterRecord struct {
 }
 
 type SkillFrontmatterStore interface {
-	ListByNames(names []string) ([]SkillFrontmatterRecord, error)
-	GetByName(name string) (*SkillFrontmatterRecord, error)
+	ListByUserIDAndNames(userID string, names []string) ([]SkillFrontmatterRecord, error)
+	GetByUserIDAndName(userID, name string) (*SkillFrontmatterRecord, error)
 }
 
 type RemoteBackend struct {
@@ -46,9 +46,6 @@ func NewRemoteBackend(repo SkillRepository, store SkillFrontmatterStore) (*Remot
 	}
 	if store == nil {
 		return nil, errors.New("skill frontmatter store is required")
-	}
-	if _, err := repo.BuildURI(""); err != nil {
-		return nil, err
 	}
 	return &RemoteBackend{
 		repo:  repo,
@@ -89,7 +86,11 @@ func (b *RemoteBackend) Get(ctx context.Context, name string) (einoSkill.Skill, 
 	if strings.TrimSpace(name) == "" {
 		return einoSkill.Skill{}, errors.New("skill name is required")
 	}
-	record, err := b.store.GetByName(name)
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return einoSkill.Skill{}, err
+	}
+	record, err := b.store.GetByUserIDAndName(userID, name)
 	if err != nil {
 		return einoSkill.Skill{}, err
 	}
@@ -107,7 +108,7 @@ func (b *RemoteBackend) Get(ctx context.Context, name string) (einoSkill.Skill, 
 	if err != nil {
 		return einoSkill.Skill{}, err
 	}
-	baseDir, err := b.repo.BuildURI(record.SkillName)
+	baseDir, err := b.repo.BuildURI(ctx, record.SkillName)
 	if err != nil {
 		return einoSkill.Skill{}, err
 	}

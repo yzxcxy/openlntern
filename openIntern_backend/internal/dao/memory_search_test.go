@@ -9,11 +9,11 @@ func TestDeriveMemoryTypeFromURI(t *testing.T) {
 		uri  string
 		want string
 	}{
-		{name: "profile overview", uri: "viking://user/default/memories/.overview.md", want: "profile"},
-		{name: "profile file", uri: "viking://user/default/memories/profile.md", want: "profile"},
-		{name: "preferences", uri: "viking://user/default/memories/preferences/coding/style.md", want: "preferences"},
-		{name: "entities", uri: "viking://user/default/memories/entities/project/openintern.md", want: "entities"},
-		{name: "events", uri: "viking://user/default/memories/events/decision-1.md", want: "events"},
+		{name: "profile overview", uri: "viking://user/user-123/memories/.overview.md", want: "profile"},
+		{name: "profile file", uri: "viking://user/user-123/memories/profile.md", want: "profile"},
+		{name: "preferences", uri: "viking://user/user-123/memories/preferences/coding/style.md", want: "preferences"},
+		{name: "entities", uri: "viking://user/user-123/memories/entities/project/openintern.md", want: "entities"},
+		{name: "events", uri: "viking://user/user-123/memories/events/decision-1.md", want: "events"},
 		{name: "cases", uri: "viking://agent/default/memories/cases/oauth-login.md", want: "cases"},
 		{name: "patterns", uri: "viking://agent/default/memories/patterns/debug-flow.md", want: "patterns"},
 		{name: "unknown", uri: "viking://resources/docs/auth.md", want: ""},
@@ -29,22 +29,22 @@ func TestDeriveMemoryTypeFromURI(t *testing.T) {
 // TestPickMemoryContextsFallsBackToResources verifies older payloads still produce retrievable matches.
 func TestPickMemoryContextsFallsBackToResources(t *testing.T) {
 	result := openVikingMemoryFindResult{
-		Resources: []openVikingMatchedContext{{URI: "viking://user/default/memories/preferences/coding.md"}},
+		Resources: []openVikingMatchedContext{{URI: "viking://user/user-123/memories/preferences/coding.md"}},
 	}
 
 	got := pickMemoryContexts(result)
 	if len(got) != 1 {
 		t.Fatalf("expected one fallback item, got %d", len(got))
 	}
-	if got[0].URI != "viking://user/default/memories/preferences/coding.md" {
+	if got[0].URI != "viking://user/user-123/memories/preferences/coding.md" {
 		t.Fatalf("unexpected fallback uri: %s", got[0].URI)
 	}
 }
 
-// TestIsMemoryURIUnderTargetAcceptsDefaultUserMemory verifies default user memory URIs match the default root.
-func TestIsMemoryURIUnderTargetAcceptsDefaultUserMemory(t *testing.T) {
-	candidate := "viking://user/default/memories/preferences/style.md"
-	target := "viking://user/default/memories/"
+// TestIsMemoryURIUnderTargetAcceptsUserMemory verifies user memory URIs match the same user root.
+func TestIsMemoryURIUnderTargetAcceptsUserMemory(t *testing.T) {
+	candidate := "viking://user/user-123/memories/preferences/style.md"
+	target := "viking://user/user-123/memories/"
 	if !isMemoryURIUnderTarget(candidate, target) {
 		t.Fatalf("expected candidate %s to match target %s", candidate, target)
 	}
@@ -52,17 +52,17 @@ func TestIsMemoryURIUnderTargetAcceptsDefaultUserMemory(t *testing.T) {
 
 // TestIsMemoryURIUnderTargetRejectsLegacyUserMemoryRoot verifies legacy roots are no longer accepted.
 func TestIsMemoryURIUnderTargetRejectsLegacyUserMemoryRoot(t *testing.T) {
-	candidate := "viking://user/default/memories/preferences/style.md"
+	candidate := "viking://user/user-123/memories/preferences/style.md"
 	target := "viking://user/memories/"
 	if isMemoryURIUnderTarget(candidate, target) {
 		t.Fatalf("expected candidate %s not to match target %s", candidate, target)
 	}
 }
 
-// TestIsMemoryURIUnderTargetRejectsDifferentUserSpace verifies default root does not match other user spaces.
+// TestIsMemoryURIUnderTargetRejectsDifferentUserSpace verifies one user root does not match another user space.
 func TestIsMemoryURIUnderTargetRejectsDifferentUserSpace(t *testing.T) {
 	candidate := "viking://user/another-space/memories/preferences/style.md"
-	target := "viking://user/default/memories/"
+	target := "viking://user/user-123/memories/"
 	if isMemoryURIUnderTarget(candidate, target) {
 		t.Fatalf("expected candidate %s not to match target %s", candidate, target)
 	}

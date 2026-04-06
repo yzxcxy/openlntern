@@ -102,7 +102,11 @@ func (s *Service) Import(ctx context.Context, rawName string, fileHeader *multip
 		}
 	}
 	// The DAO now uploads validated local content over HTTP before asking OpenViking to import it.
-	if err := dao.KnowledgeBase.Ingest(ctx, rootDir, dao.KnowledgeBase.URI(kbName), false, 0); err != nil {
+	targetURI, err := dao.KnowledgeBase.URI(ctx, kbName)
+	if err != nil {
+		return nil, err
+	}
+	if err := dao.KnowledgeBase.Ingest(ctx, rootDir, targetURI, false, 0); err != nil {
 		return nil, err
 	}
 	return &AsyncResult{Name: kbName, Status: "accepted", Async: true}, nil
@@ -143,7 +147,10 @@ func (s *Service) UploadFile(ctx context.Context, rawName, targetDir string, fil
 	if err := dst.Close(); err != nil {
 		return nil, err
 	}
-	targetURI := resolveUploadTargetURI(kbName, targetDir)
+	targetURI, err := resolveUploadTargetURI(ctx, kbName, targetDir)
+	if err != nil {
+		return nil, err
+	}
 	// The DAO now uploads the staged file over HTTP before asking OpenViking to import it.
 	if err := dao.KnowledgeBase.Ingest(ctx, localPath, targetURI, false, 0); err != nil {
 		return nil, err
@@ -155,7 +162,7 @@ func (s *Service) MoveEntry(ctx context.Context, fromURI, toURI string) (*MoveRe
 	if err := s.ensureConfigured(); err != nil {
 		return nil, err
 	}
-	result, err := normalizeMoveURIs(fromURI, toURI, false)
+	result, err := normalizeMoveURIs(ctx, fromURI, toURI, false)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +176,7 @@ func (s *Service) DragEntry(ctx context.Context, fromURI, toURI string) (*MoveRe
 	if err := s.ensureConfigured(); err != nil {
 		return nil, err
 	}
-	result, err := normalizeMoveURIs(fromURI, toURI, true)
+	result, err := normalizeMoveURIs(ctx, fromURI, toURI, true)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +204,7 @@ func (s *Service) DeleteEntry(ctx context.Context, rawURI string, recursive bool
 	if err := s.ensureConfigured(); err != nil {
 		return "", err
 	}
-	uri, err := normalizeEntryURI(rawURI)
+	uri, err := normalizeEntryURI(ctx, rawURI)
 	if err != nil {
 		return "", err
 	}
@@ -211,7 +218,7 @@ func (s *Service) ReadContent(ctx context.Context, rawURI string) (string, error
 	if err := s.ensureConfigured(); err != nil {
 		return "", err
 	}
-	uri, err := normalizeEntryURI(rawURI)
+	uri, err := normalizeEntryURI(ctx, rawURI)
 	if err != nil {
 		return "", err
 	}
@@ -226,15 +233,19 @@ func normalizeKnowledgeBaseName(rawName string) (string, error) {
 	return kbName, nil
 }
 
-func normalizeEntryURI(rawURI string) (string, error) {
+func normalizeEntryURI(ctx context.Context, rawURI string) (string, error) {
 	uri := strings.TrimSpace(rawURI)
 	if uri == "" {
 		return "", fmt.Errorf("%w: uri is required", ErrInvalidInput)
 	}
-	return uri, nil
+	normalizedURI, err := dao.KnowledgeBase.NormalizeScopedURI(ctx, uri)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", ErrInvalidInput, strings.TrimSpace(err.Error()))
+	}
+	return normalizedURI, nil
 }
 
-func normalizeMoveURIs(fromURI, toURI string, forceDirectoryTarget bool) (*MoveResult, error) {
+func normalizeMoveURIs(ctx context.Context, fromURI, toURI string, forceDirectoryTarget bool) (*MoveResult, error) {
 	fromURI = strings.TrimSpace(fromURI)
 	toURI = strings.TrimSpace(toURI)
 	if fromURI == "" || toURI == "" {
@@ -243,19 +254,31 @@ func normalizeMoveURIs(fromURI, toURI string, forceDirectoryTarget bool) (*MoveR
 	if forceDirectoryTarget && !strings.HasSuffix(toURI, "/") {
 		toURI += "/"
 	}
-	return &MoveResult{FromURI: fromURI, ToURI: toURI}, nil
+	normalizedFromURI, err := normalizeEntryURI(ctx, fromURI)
+	if err != nil {
+		return nil, err
+	}
+	normalizedToURI, err := normalizeEntryURI(ctx, toURI)
+	if err != nil {
+		return nil, err
+	}
+	return &MoveResult{FromURI: normalizedFromURI, ToURI: normalizedToURI}, nil
 }
 
-func resolveUploadTargetURI(kbName string, targetDir string) string {
-	base := strings.TrimRight(dao.KnowledgeBase.InnerURI(kbName), "/")
+func resolveUploadTargetURI(ctx context.Context, kbName string, targetDir string) (string, error) {
+	baseURI, err := dao.KnowledgeBase.InnerURI(ctx, kbName)
+	if err != nil {
+		return "", err
+	}
+	base := strings.TrimRight(baseURI, "/")
 	dir := strings.TrimSpace(targetDir)
 	dir = strings.TrimLeft(dir, "/")
 	dir = path.Clean(dir)
 	if dir == ".." || strings.HasPrefix(dir, "../") {
-		return base + "/"
+		return base + "/", nil
 	}
 	if dir == "." || dir == "" {
-		return base + "/"
+		return base + "/", nil
 	}
 	prefix := kbName + "/"
 	for i := 0; i < 2; i++ {
@@ -268,9 +291,9 @@ func resolveUploadTargetURI(kbName string, targetDir string) string {
 		}
 	}
 	if dir == "." || dir == "" {
-		return base + "/"
+		return base + "/", nil
 	}
-	return base + "/" + dir + "/"
+	return base + "/" + dir + "/", nil
 }
 
 func sanitizeUploadedFileName(name string) string {

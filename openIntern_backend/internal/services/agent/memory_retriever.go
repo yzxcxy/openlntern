@@ -10,7 +10,7 @@ import (
 )
 
 // injectRetrievedMemoryContext retrieves memory snippets and injects them as one temporary system message.
-func injectRetrievedMemoryContext(ctx context.Context, retriever MemoryRetriever, input *types.RunAgentInput) (*types.RunAgentInput, error) {
+func injectRetrievedMemoryContext(ctx context.Context, retriever MemoryRetriever, userID string, input *types.RunAgentInput) (*types.RunAgentInput, error) {
 	if input == nil || retriever == nil {
 		return input, nil
 	}
@@ -19,7 +19,7 @@ func injectRetrievedMemoryContext(ctx context.Context, retriever MemoryRetriever
 	if query == "" {
 		return input, nil
 	}
-	memories, err := retriever.Retrieve(ctx, query)
+	memories, err := retriever.Retrieve(ctx, userID, query)
 	if err != nil {
 		return input, err
 	}

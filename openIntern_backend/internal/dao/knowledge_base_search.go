@@ -60,7 +60,11 @@ func (d *KnowledgeBaseDAO) SearchInKnowledgeBases(ctx context.Context, query str
 	matches := make([]KnowledgeBaseSearchMatch, 0, len(cleanNames)*limitPerKB)
 	seenURI := make(map[string]struct{}, len(cleanNames)*limitPerKB)
 	for _, kbName := range cleanNames {
-		items, err := d.searchByTargetURI(ctx, query, d.URI(kbName), limitPerKB)
+		targetURI, err := d.URI(ctx, kbName)
+		if err != nil {
+			return nil, err
+		}
+		items, err := d.searchByTargetURI(ctx, query, targetURI, limitPerKB)
 		if err != nil {
 			return nil, err
 		}

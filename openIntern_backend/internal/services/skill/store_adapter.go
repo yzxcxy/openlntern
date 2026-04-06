@@ -6,8 +6,8 @@ import (
 
 // FrontmatterReader describes the subset of frontmatter operations required by the skill middleware.
 type FrontmatterReader interface {
-	ListByNames(names []string) ([]skillmiddleware.SkillFrontmatterRecord, error)
-	GetByName(name string) (*skillmiddleware.SkillFrontmatterRecord, error)
+	ListByUserIDAndNames(userID string, names []string) ([]skillmiddleware.SkillFrontmatterRecord, error)
+	GetByUserIDAndName(userID, name string) (*skillmiddleware.SkillFrontmatterRecord, error)
 }
 
 // FrontmatterStoreAdapter adapts the skill service to the skill middleware storage interface.
@@ -15,8 +15,8 @@ type FrontmatterStoreAdapter struct {
 	Store *SkillFrontmatterService
 }
 
-func (a FrontmatterStoreAdapter) ListByNames(names []string) ([]skillmiddleware.SkillFrontmatterRecord, error) {
-	items, err := a.Store.ListByNames(names)
+func (a FrontmatterStoreAdapter) ListByUserIDAndNames(userID string, names []string) ([]skillmiddleware.SkillFrontmatterRecord, error) {
+	items, err := a.Store.ListByUserIDAndNames(userID, names)
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +30,8 @@ func (a FrontmatterStoreAdapter) ListByNames(names []string) ([]skillmiddleware.
 	return records, nil
 }
 
-func (a FrontmatterStoreAdapter) GetByName(name string) (*skillmiddleware.SkillFrontmatterRecord, error) {
-	item, err := a.Store.GetByName(name)
+func (a FrontmatterStoreAdapter) GetByUserIDAndName(userID, name string) (*skillmiddleware.SkillFrontmatterRecord, error) {
+	item, err := a.Store.GetByUserIDAndName(userID, name)
 	if err != nil {
 		return nil, err
 	}

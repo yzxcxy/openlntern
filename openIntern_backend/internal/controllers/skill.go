@@ -33,10 +33,12 @@ type skillFileItem struct {
 
 func ListSkillFiles(c *gin.Context) {
 	rawPath := c.DefaultQuery("path", "/")
-	if _, ok := getAuthUser(c); !ok {
+	userID, ok := getAuthUser(c)
+	if !ok {
 		response.Unauthorized(c)
 		return
 	}
+	ctx := dao.WithOpenVikingUserID(c.Request.Context(), userID)
 
 	cleaned, err := cleanSkillPath(rawPath)
 	if err != nil {
@@ -52,12 +54,12 @@ func ListSkillFiles(c *gin.Context) {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
-	skillURI, err := dao.SkillStore.BuildURI(relPath)
+	skillURI, err := dao.SkillStore.BuildURI(ctx, relPath)
 	if err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	entries, err := dao.SkillStore.ListFiles(c.Request.Context(), relPath, true)
+	entries, err := dao.SkillStore.ListFiles(ctx, relPath, true)
 	if err != nil {
 		if isStoreNotFound(err) {
 			response.JSONSuccess(c, http.StatusOK, []skillFileItem{})
@@ -95,13 +97,15 @@ func ReadSkillFile(c *gin.Context) {
 		return
 	}
 
+	userID, ok := getAuthUser(c)
+	if !ok {
+		response.Unauthorized(c)
+		return
+	}
+	ctx := dao.WithOpenVikingUserID(c.Request.Context(), userID)
 	cleaned, err := cleanSkillPath(rawPath)
 	if err != nil {
 		response.BadRequest(c)
-		return
-	}
-	if _, ok := getAuthUser(c); !ok {
-		response.Unauthorized(c)
 		return
 	}
 	if !dao.SkillStore.Configured() {
@@ -113,7 +117,7 @@ func ReadSkillFile(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	content, err := dao.SkillStore.ReadFile(c.Request.Context(), relPath)
+	content, err := dao.SkillStore.ReadFile(ctx, relPath)
 	if err != nil {
 		if isStoreNotFound(err) {
 			response.NotFound(c, "file not found")
@@ -129,10 +133,12 @@ func ReadSkillFile(c *gin.Context) {
 }
 
 func ImportSkill(c *gin.Context) {
-	if _, ok := getAuthUser(c); !ok {
+	userID, ok := getAuthUser(c)
+	if !ok {
 		response.Unauthorized(c)
 		return
 	}
+	ctx := dao.WithOpenVikingUserID(c.Request.Context(), userID)
 	if !dao.SkillStore.Configured() {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
@@ -207,15 +213,16 @@ func ImportSkill(c *gin.Context) {
 		return
 	}
 	entry := models.SkillFrontmatter{
+		UserID:    userID,
 		SkillName: frontmatter.Name,
 		Raw:       frontmatter.Raw,
 	}
-	if err := skillsvc.SkillFrontmatter.CreateOrReplaceByName(&entry); err != nil {
+	if err := skillsvc.SkillFrontmatter.CreateOrReplaceByUserIDAndName(&entry); err != nil {
 		response.InternalError(c)
 		return
 	}
 	// SkillStore.Import now performs a remote upload/import flow instead of exposing backend-local paths.
-	if err := dao.SkillStore.Import(c.Request.Context(), rootDir); err != nil {
+	if err := dao.SkillStore.Import(ctx, rootDir, frontmatter.Name); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
@@ -230,15 +237,17 @@ func DeleteSkill(c *gin.Context) {
 		response.BadRequest(c)
 		return
 	}
-	if _, ok := getAuthUser(c); !ok {
+	userID, ok := getAuthUser(c)
+	if !ok {
 		response.Unauthorized(c)
 		return
 	}
+	ctx := dao.WithOpenVikingUserID(c.Request.Context(), userID)
 	if !dao.SkillStore.Configured() {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
-	if err := dao.SkillStore.Delete(c.Request.Context(), name); err != nil {
+	if err := dao.SkillStore.Delete(ctx, name); err != nil {
 		if isStoreNotFound(err) {
 			response.NotFound(c, "skill not found")
 			return
@@ -246,7 +255,7 @@ func DeleteSkill(c *gin.Context) {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	if err := skillsvc.SkillFrontmatter.DeleteByName(name); err != nil {
+	if err := skillsvc.SkillFrontmatter.DeleteByUserIDAndName(userID, name); err != nil {
 		response.InternalError(c)
 		return
 	}
@@ -266,12 +275,13 @@ func GetSkillMetaByName(c *gin.Context) {
 		return
 	}
 
-	if _, ok := getAuthUser(c); !ok {
+	userID, ok := getAuthUser(c)
+	if !ok {
 		response.Unauthorized(c)
 		return
 	}
+	entry, err := skillsvc.SkillFrontmatter.GetByUserIDAndName(userID, name)
 
-	entry, err := skillsvc.SkillFrontmatter.GetByName(name)
 	if err != nil {
 		response.NotFound(c, "skill not found")
 		return
@@ -304,10 +314,12 @@ func ReadSkillContent(c *gin.Context) {
 		return
 	}
 
-	if _, ok := getAuthUser(c); !ok {
+	userID, ok := getAuthUser(c)
+	if !ok {
 		response.Unauthorized(c)
 		return
 	}
+	ctx := dao.WithOpenVikingUserID(c.Request.Context(), userID)
 
 	if !dao.SkillStore.Configured() {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
@@ -328,7 +340,7 @@ func ReadSkillContent(c *gin.Context) {
 	if rel == "" {
 		rel = "SKILL.md"
 	}
-	content, err := dao.SkillStore.ReadFile(c.Request.Context(), path.Join(name, rel))
+	content, err := dao.SkillStore.ReadFile(ctx, path.Join(name, rel))
 	if err != nil {
 		if isStoreNotFound(err) {
 			response.NotFound(c, "file not found")
@@ -348,21 +360,23 @@ func ListSkills(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	keyword := c.Query("keyword")
 
-	if _, ok := getAuthUser(c); !ok {
+	userID, ok := getAuthUser(c)
+	if !ok {
 		response.Unauthorized(c)
 		return
 	}
+	ctx := dao.WithOpenVikingUserID(c.Request.Context(), userID)
 
 	if !dao.SkillStore.Configured() {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, "skill storage not configured")
 		return
 	}
-	skills, total, err := dao.SkillStore.ListSkillCatalog(c.Request.Context(), keyword, page, pageSize)
+	skills, total, err := dao.SkillStore.ListSkillCatalog(ctx, keyword, page, pageSize)
 	if err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return
 	}
-	applySkillFrontmatter(skills)
+	applySkillFrontmatter(userID, skills)
 	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"data":  skills,
 		"total": total,
@@ -371,7 +385,7 @@ func ListSkills(c *gin.Context) {
 	})
 }
 
-func applySkillFrontmatter(skills []models.Skill) {
+func applySkillFrontmatter(userID string, skills []models.Skill) {
 	if len(skills) == 0 {
 		return
 	}
@@ -384,7 +398,7 @@ func applySkillFrontmatter(skills []models.Skill) {
 	if len(names) == 0 {
 		return
 	}
-	frontmatters, err := skillsvc.SkillFrontmatter.ListByNames(names)
+	frontmatters, err := skillsvc.SkillFrontmatter.ListByUserIDAndNames(userID, names)
 	if err != nil || len(frontmatters) == 0 {
 		return
 	}

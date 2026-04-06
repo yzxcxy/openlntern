@@ -21,8 +21,12 @@ func (d *KnowledgeBaseDAO) Configured() bool {
 	return contextStoreReady()
 }
 
-func (d *KnowledgeBaseDAO) RootURI() string {
-	return "viking://resources/"
+func (d *KnowledgeBaseDAO) RootURI(ctx context.Context) (string, error) {
+	userID, err := OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	return UserKnowledgeBaseRootURI(userID), nil
 }
 
 func (d *KnowledgeBaseDAO) CleanName(name string) (string, error) {
@@ -36,14 +40,20 @@ func (d *KnowledgeBaseDAO) CleanName(name string) (string, error) {
 	return name, nil
 }
 
-func (d *KnowledgeBaseDAO) URI(name string) string {
-	name = strings.Trim(name, "/")
-	return strings.TrimRight(d.RootURI(), "/") + "/" + name + "/"
+func (d *KnowledgeBaseDAO) URI(ctx context.Context, name string) (string, error) {
+	userID, err := OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	return UserKnowledgeBaseURI(userID, name), nil
 }
 
-func (d *KnowledgeBaseDAO) InnerURI(name string) string {
-	outer := strings.TrimRight(d.URI(name), "/")
-	return outer + "/" + strings.Trim(name, "/") + "/"
+func (d *KnowledgeBaseDAO) InnerURI(ctx context.Context, name string) (string, error) {
+	userID, err := OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	return UserKnowledgeBaseInnerURI(userID, name), nil
 }
 
 func (d *KnowledgeBaseDAO) ResolveLocalPath(root string, rel string) (string, error) {
@@ -63,7 +73,10 @@ func (d *KnowledgeBaseDAO) ResolveLocalPath(root string, rel string) (string, er
 }
 
 func (d *KnowledgeBaseDAO) List(ctx context.Context) ([]KnowledgeBaseItem, error) {
-	root := d.RootURI()
+	root, err := d.RootURI(ctx)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := listEntries(ctx, root, false)
 	if err != nil {
 		return nil, err
@@ -116,7 +129,11 @@ func (d *KnowledgeBaseDAO) Tree(ctx context.Context, name string) ([]ResourceEnt
 	if err != nil {
 		return nil, err
 	}
-	return treeEntries(ctx, d.InnerURI(kbName))
+	targetURI, err := d.InnerURI(ctx, kbName)
+	if err != nil {
+		return nil, err
+	}
+	return treeEntries(ctx, targetURI)
 }
 
 func (d *KnowledgeBaseDAO) Ingest(ctx context.Context, sourcePath string, targetURI string, wait bool, timeoutSeconds float64) error {
@@ -132,7 +149,11 @@ func (d *KnowledgeBaseDAO) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	return deletePath(ctx, d.URI(kbName), true)
+	targetURI, err := d.URI(ctx, kbName)
+	if err != nil {
+		return err
+	}
+	return deletePath(ctx, targetURI, true)
 }
 
 func (d *KnowledgeBaseDAO) DeleteEntry(ctx context.Context, uri string, recursive bool) error {
@@ -142,4 +163,20 @@ func (d *KnowledgeBaseDAO) DeleteEntry(ctx context.Context, uri string, recursiv
 func (d *KnowledgeBaseDAO) ReadContent(ctx context.Context, uri string) (string, error) {
 	// Knowledge base entries are OpenViking resources, so content must be read via the content API.
 	return readContent(ctx, uri, "/api/v1/content/read")
+}
+
+// NormalizeScopedURI ensures externally provided knowledge-base URIs stay within the current user's root.
+func (d *KnowledgeBaseDAO) NormalizeScopedURI(ctx context.Context, rawURI string) (string, error) {
+	uri := strings.TrimSpace(rawURI)
+	if uri == "" {
+		return "", errors.New("uri is required")
+	}
+	root, err := d.RootURI(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(uri, root) {
+		return "", errors.New("uri is outside current user scope")
+	}
+	return uri, nil
 }

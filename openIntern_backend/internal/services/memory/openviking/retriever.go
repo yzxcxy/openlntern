@@ -38,8 +38,13 @@ func (r *Retriever) Configured() bool {
 }
 
 // Retrieve returns provider-agnostic memory snippets for the provided latest user input text.
-func (r *Retriever) Retrieve(ctx context.Context, inputText string) ([]contracts.RetrievedMemory, error) {
+func (r *Retriever) Retrieve(ctx context.Context, userID string, inputText string) ([]contracts.RetrievedMemory, error) {
 	if !r.Configured() {
+		return nil, nil
+	}
+
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
 		return nil, nil
 	}
 
@@ -58,7 +63,7 @@ func (r *Retriever) Retrieve(ctx context.Context, inputText string) ([]contracts
 		defer cancel()
 	}
 
-	matches, err := r.findRelevantMemoryMatches(searchCtx, query)
+	matches, err := r.findRelevantMemoryMatches(searchCtx, userID, query)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +71,10 @@ func (r *Retriever) Retrieve(ctx context.Context, inputText string) ([]contracts
 }
 
 // findRelevantMemoryMatches queries user memories first and agent memories second, then trims the merged result set.
-func (r *Retriever) findRelevantMemoryMatches(ctx context.Context, query string) ([]dao.MemorySearchMatch, error) {
+func (r *Retriever) findRelevantMemoryMatches(ctx context.Context, userID string, query string) ([]dao.MemorySearchMatch, error) {
 	userMatches, err := dao.MemorySearch.FindMemoryMatches(ctx, dao.MemorySearchFilter{
 		Query:          query,
-		TargetURI:      dao.MemorySearch.UserRootURI(),
+		TargetURI:      dao.MemorySearch.UserRootURI(userID),
 		Limit:          defaultUserMemoryFindLimit,
 		ScoreThreshold: defaultMemoryScoreThreshold,
 	})

@@ -16,7 +16,7 @@ import (
 // RetrieverBackend defines the provider-specific retrieval contract for long-term memory injection.
 type RetrieverBackend interface {
 	Configured() bool
-	Retrieve(ctx context.Context, inputText string) ([]contracts.RetrievedMemory, error)
+	Retrieve(ctx context.Context, userID string, inputText string) ([]contracts.RetrievedMemory, error)
 }
 
 // SyncBackend defines the provider-specific synchronization contract for long-term memory persistence.
@@ -36,7 +36,7 @@ func (noopRetrieverBackend) Configured() bool {
 	return false
 }
 
-func (noopRetrieverBackend) Retrieve(context.Context, string) ([]contracts.RetrievedMemory, error) {
+func (noopRetrieverBackend) Retrieve(context.Context, string, string) ([]contracts.RetrievedMemory, error) {
 	return nil, nil
 }
 

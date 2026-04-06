@@ -28,7 +28,7 @@ type MemorySyncStateStore interface {
 }
 
 type MemoryRetriever interface {
-	Retrieve(ctx context.Context, inputText string) ([]memorycontracts.RetrievedMemory, error)
+	Retrieve(ctx context.Context, userID string, inputText string) ([]memorycontracts.RetrievedMemory, error)
 }
 
 type ThreadContextSnapshotStore interface {

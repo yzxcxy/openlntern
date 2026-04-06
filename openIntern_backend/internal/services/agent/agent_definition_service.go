@@ -340,6 +340,7 @@ type normalizedBindings struct {
 }
 
 func (s *AgentDefinitionService) validateAndNormalizeInput(ctx context.Context, ownerID, currentAgentID string, input UpsertAgentInput) (*normalizedBindings, error) {
+	ctx = dao.WithOpenVikingUserID(ctx, ownerID)
 	agentType := normalizeAgentType(input.AgentType)
 	if agentType == "" {
 		return nil, errors.New("agent_type must be single or supervisor")

@@ -18,8 +18,8 @@ type MemoryRetrieverService struct{}
 var MemoryRetriever = new(MemoryRetrieverService)
 
 // Retrieve returns provider-agnostic memory snippets for the latest user input.
-func (s *MemoryRetrieverService) Retrieve(ctx context.Context, inputText string) ([]contracts.RetrievedMemory, error) {
-	return currentRetrieverBackend().Retrieve(ctx, inputText)
+func (s *MemoryRetrieverService) Retrieve(ctx context.Context, userID string, inputText string) ([]contracts.RetrievedMemory, error) {
+	return currentRetrieverBackend().Retrieve(ctx, userID, inputText)
 }
 
 // BuildContextMessage converts retrieved memories into one temporary system message for prompt injection.

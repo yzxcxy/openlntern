@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
 
+	"openIntern/internal/dao"
 	"openIntern/internal/response"
 	kbsvc "openIntern/internal/services/kb"
 
@@ -17,7 +19,11 @@ type kbMovePayload struct {
 }
 
 func ListKnowledgeBases(c *gin.Context) {
-	items, err := kbsvc.KnowledgeBase.List(c.Request.Context())
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	items, err := kbsvc.KnowledgeBase.List(ctx)
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -33,7 +39,11 @@ func ListKnowledgeBases(c *gin.Context) {
 }
 
 func GetKnowledgeBaseTree(c *gin.Context) {
-	entries, err := kbsvc.KnowledgeBase.Tree(c.Request.Context(), c.Param("name"))
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	entries, err := kbsvc.KnowledgeBase.Tree(ctx, c.Param("name"))
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -51,12 +61,16 @@ func GetKnowledgeBaseTree(c *gin.Context) {
 }
 
 func ImportKnowledgeBase(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
 	fileHeader, err := c.FormFile("file")
 	if err != nil && !isMissingKnowledgeBaseImportFile(err) {
 		response.BadRequest(c)
 		return
 	}
-	result, err := kbsvc.KnowledgeBase.Import(c.Request.Context(), c.PostForm("kb_name"), fileHeader)
+	result, err := kbsvc.KnowledgeBase.Import(ctx, c.PostForm("kb_name"), fileHeader)
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -74,13 +88,17 @@ func ImportKnowledgeBase(c *gin.Context) {
 }
 
 func UploadKnowledgeBaseFile(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		response.BadRequest(c)
 		return
 	}
 	result, err := kbsvc.KnowledgeBase.UploadFile(
-		c.Request.Context(),
+		ctx,
 		c.PostForm("kb_name"),
 		c.PostForm("target"),
 		fileHeader,
@@ -100,12 +118,16 @@ func UploadKnowledgeBaseFile(c *gin.Context) {
 }
 
 func MoveKnowledgeBaseEntry(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
 	var payload kbMovePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	result, err := kbsvc.KnowledgeBase.MoveEntry(c.Request.Context(), payload.FromURI, payload.ToURI)
+	result, err := kbsvc.KnowledgeBase.MoveEntry(ctx, payload.FromURI, payload.ToURI)
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -121,12 +143,16 @@ func MoveKnowledgeBaseEntry(c *gin.Context) {
 }
 
 func DragKnowledgeBaseEntry(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
 	var payload kbMovePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		response.BadRequest(c)
 		return
 	}
-	result, err := kbsvc.KnowledgeBase.DragEntry(c.Request.Context(), payload.FromURI, payload.ToURI)
+	result, err := kbsvc.KnowledgeBase.DragEntry(ctx, payload.FromURI, payload.ToURI)
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -142,7 +168,11 @@ func DragKnowledgeBaseEntry(c *gin.Context) {
 }
 
 func DeleteKnowledgeBase(c *gin.Context) {
-	kbName, err := kbsvc.KnowledgeBase.Delete(c.Request.Context(), c.Param("name"))
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	kbName, err := kbsvc.KnowledgeBase.Delete(ctx, c.Param("name"))
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -160,8 +190,12 @@ func DeleteKnowledgeBase(c *gin.Context) {
 }
 
 func DeleteKnowledgeBaseEntry(c *gin.Context) {
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
 	uri, err := kbsvc.KnowledgeBase.DeleteEntry(
-		c.Request.Context(),
+		ctx,
 		c.Query("uri"),
 		strings.EqualFold(c.DefaultQuery("recursive", "false"), "true"),
 	)
@@ -182,7 +216,11 @@ func DeleteKnowledgeBaseEntry(c *gin.Context) {
 }
 
 func GetKnowledgeBaseContent(c *gin.Context) {
-	content, err := kbsvc.KnowledgeBase.ReadContent(c.Request.Context(), c.Query("uri"))
+	ctx, ok := knowledgeBaseRequestContext(c)
+	if !ok {
+		return
+	}
+	content, err := kbsvc.KnowledgeBase.ReadContent(ctx, c.Query("uri"))
 	if err != nil {
 		switch {
 		case errors.Is(err, kbsvc.ErrNotConfigured):
@@ -208,4 +246,13 @@ func isMissingKnowledgeBaseImportFile(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "no such file") || strings.Contains(msg, "missing file")
+}
+
+func knowledgeBaseRequestContext(c *gin.Context) (context.Context, bool) {
+	userID := strings.TrimSpace(c.GetString("user_id"))
+	if userID == "" {
+		response.Unauthorized(c)
+		return nil, false
+	}
+	return dao.WithOpenVikingUserID(c.Request.Context(), userID), true
 }

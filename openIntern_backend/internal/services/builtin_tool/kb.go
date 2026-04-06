@@ -27,8 +27,7 @@ type ReadKnowledgeBaseEntryInput struct {
 
 // GetKnowledgeBaseTools 返回受当前知识库绑定范围约束的运行时工具。
 func GetKnowledgeBaseTools(ctx context.Context, knowledgeBaseNames []string) ([]einoTool.BaseTool, error) {
-	_ = ctx
-	allowedPrefixes := scopedKnowledgeBasePrefixes(knowledgeBaseNames)
+	allowedPrefixes := scopedKnowledgeBasePrefixes(ctx, knowledgeBaseNames)
 	if len(allowedPrefixes) == 0 {
 		return nil, nil
 	}
@@ -71,7 +70,7 @@ func readKnowledgeBaseEntryImpl(ctx context.Context, input ReadKnowledgeBaseEntr
 	return string(payload), nil
 }
 
-func scopedKnowledgeBasePrefixes(knowledgeBaseNames []string) []string {
+func scopedKnowledgeBasePrefixes(ctx context.Context, knowledgeBaseNames []string) []string {
 	names := util.NormalizeUniqueStringList(knowledgeBaseNames)
 	prefixes := make([]string, 0, len(names))
 	for _, name := range names {
@@ -79,7 +78,11 @@ func scopedKnowledgeBasePrefixes(knowledgeBaseNames []string) []string {
 		if err != nil {
 			continue
 		}
-		prefixes = append(prefixes, dao.KnowledgeBase.URI(cleanName))
+		prefix, err := dao.KnowledgeBase.URI(ctx, cleanName)
+		if err != nil {
+			continue
+		}
+		prefixes = append(prefixes, prefix)
 	}
 	return util.NormalizeUniqueStringList(prefixes)
 }

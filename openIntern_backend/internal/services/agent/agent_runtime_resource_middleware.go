@@ -68,7 +68,7 @@ func (m *agentResourceInjectionMiddleware) BeforeModelRewriteState(ctx context.C
 	}
 	if m.memoryEnabled && m.retriever != nil {
 		memoryCtx, cancel := context.WithTimeout(ctx, agentMemoryRetrieveTimeout)
-		memories, err := m.retriever.Retrieve(memoryCtx, query)
+		memories, err := m.retriever.Retrieve(memoryCtx, ownerIDFromContext(ctx), query)
 		cancel()
 		if err != nil {
 			log.Printf("RunAgent skip memory context because retrieval failed err=%v", err)

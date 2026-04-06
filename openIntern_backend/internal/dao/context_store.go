@@ -40,7 +40,7 @@ func contextStoreReady() bool {
 }
 
 func skillStoreReady() bool {
-	return contextStoreReady() && strings.TrimSpace(database.Context.SkillsRoot()) != ""
+	return contextStoreReady()
 }
 
 func listEntries(ctx context.Context, uri string, recursive bool) ([]ResourceEntry, error) {

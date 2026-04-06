@@ -73,29 +73,29 @@ func (r *ScopedRepository) ReadFile(ctx context.Context, skillPath string) (stri
 	return r.repo.ReadFile(ctx, skillPath)
 }
 
-func (r *ScopedRepository) BuildURI(skillPath string) (string, error) {
+func (r *ScopedRepository) BuildURI(ctx context.Context, skillPath string) (string, error) {
 	skillName := firstSkillSegment(skillPath)
 	if skillName != "" {
 		if err := r.ensureAllowed(skillName); err != nil {
 			return "", err
 		}
 	}
-	return r.repo.BuildURI(skillPath)
+	return r.repo.BuildURI(ctx, skillPath)
 }
 
-func (s *ScopedFrontmatterStore) ListByNames(names []string) ([]SkillFrontmatterRecord, error) {
+func (s *ScopedFrontmatterStore) ListByUserIDAndNames(userID string, names []string) ([]SkillFrontmatterRecord, error) {
 	allowedNames := s.filterNames(names)
 	if len(allowedNames) == 0 {
 		return []SkillFrontmatterRecord{}, nil
 	}
-	return s.store.ListByNames(allowedNames)
+	return s.store.ListByUserIDAndNames(userID, allowedNames)
 }
 
-func (s *ScopedFrontmatterStore) GetByName(name string) (*SkillFrontmatterRecord, error) {
+func (s *ScopedFrontmatterStore) GetByUserIDAndName(userID, name string) (*SkillFrontmatterRecord, error) {
 	if err := s.ensureAllowed(name); err != nil {
 		return nil, err
 	}
-	return s.store.GetByName(name)
+	return s.store.GetByUserIDAndName(userID, name)
 }
 
 func (r *ScopedRepository) ensureAllowed(skillName string) error {

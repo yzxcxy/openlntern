@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	defaultUserMemoryRootURI  = "viking://user/default/memories/"
 	defaultAgentMemoryRootURI = "viking://agent/default/memories/"
 )
 
@@ -55,8 +54,8 @@ func (d *MemorySearchDAO) Configured() bool {
 }
 
 // UserRootURI returns the fixed OpenViking root used for user memories.
-func (d *MemorySearchDAO) UserRootURI() string {
-	return defaultUserMemoryRootURI
+func (d *MemorySearchDAO) UserRootURI(userID string) string {
+	return UserMemoryRootURI(userID)
 }
 
 // AgentRootURI returns the fixed OpenViking root used for agent memories.
