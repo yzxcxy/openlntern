@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"openIntern/internal/dao"
 	"openIntern/internal/database"
 	"openIntern/internal/models"
 	chatsvc "openIntern/internal/services/chat"
@@ -124,6 +125,11 @@ func syncThreadMemoryState(ctx context.Context, state models.MemorySyncState) er
 	runCtx := ctx
 	if runCtx == nil {
 		runCtx = context.Background()
+	}
+	// Ensure OpenViking tenant headers are set for user-scoped API requests.
+	userID := strings.TrimSpace(state.UserID)
+	if userID != "" {
+		runCtx = dao.WithOpenVikingUserID(runCtx, userID)
 	}
 	if _, hasDeadline := runCtx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc

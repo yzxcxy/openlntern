@@ -140,6 +140,13 @@ func (d *KnowledgeBaseDAO) Tree(ctx context.Context, name string) ([]ResourceEnt
 }
 
 func (d *KnowledgeBaseDAO) Ingest(ctx context.Context, sourcePath string, targetURI string, wait bool, timeoutSeconds float64) error {
+	// Ensure the target directory exists before importing content.
+	if err := mkdirPath(ctx, targetURI); err != nil {
+		// Ignore "already exists" errors but fail on other errors.
+		if !isContextStoreAlreadyExists(err) {
+			return err
+		}
+	}
 	return addResource(ctx, sourcePath, targetURI, wait, timeoutSeconds)
 }
 

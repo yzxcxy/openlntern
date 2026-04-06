@@ -56,6 +56,17 @@ func isContextStoreNotFound(err error) bool {
 		strings.Contains(lower, "404")
 }
 
+// isContextStoreAlreadyExists normalizes OpenViking "already exists" responses so mkdir can proceed silently.
+func isContextStoreAlreadyExists(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(lower, "already exists") ||
+		strings.Contains(lower, "already_exist") ||
+		strings.Contains(lower, "duplicate")
+}
+
 func listEntries(ctx context.Context, uri string, recursive bool) ([]ResourceEntry, error) {
 	params := url.Values{}
 	params.Set("uri", uri)

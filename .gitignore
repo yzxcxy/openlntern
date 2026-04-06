@@ -13,3 +13,5 @@ _eino/
 evals/promptfoo/.env.promptfoo.local
 evals/promptfoo/.promptfoo/
 dependent_docs/
+docs/
+openIntern_backend/ov.conf

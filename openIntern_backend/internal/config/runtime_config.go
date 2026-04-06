@@ -109,6 +109,16 @@ func GetRuntimeConfig() *RuntimeConfig {
 	return globalRuntime
 }
 
+// GetRuntimeConfigSnapshot returns a copy of the current runtime config.
+func GetRuntimeConfigSnapshot() RuntimeConfig {
+	configMu.RLock()
+	defer configMu.RUnlock()
+	if globalRuntime == nil {
+		return RuntimeConfig{}
+	}
+	return *globalRuntime
+}
+
 // GetConfig 获取完整配置
 func GetConfig() *Config {
 	configMu.RLock()
@@ -161,6 +171,9 @@ func UpdateRuntimeConfig(updates map[string]interface{}) error {
 	if apmPlusUpdates, ok := updates["apmplus"].(map[string]interface{}); ok {
 		updateAPMPlusConfig(&stagedRuntime.APMPlus, apmPlusUpdates)
 		stagedConfig.APMPlus = stagedRuntime.APMPlus
+	}
+	if err := ValidateContextCompressionConfig(stagedRuntime.ContextCompression); err != nil {
+		return err
 	}
 
 	// MinIO 变更先做运行时刷新校验，避免把不可用配置写入磁盘。
@@ -351,6 +364,34 @@ func updateContextCompressionConfig(cfg *ContextCompressionConfig, updates map[s
 	if v, ok := updates["estimated_chars_per_token"].(float64); ok {
 		cfg.EstimatedCharsPerToken = int(v)
 	}
+}
+
+// EffectiveContextCompressionEnabled returns the runtime behavior for enabled when config omits it.
+func EffectiveContextCompressionEnabled(cfg ContextCompressionConfig) bool {
+	if cfg.Enabled != nil {
+		return *cfg.Enabled
+	}
+	return true
+}
+
+// ValidateContextCompressionConfig validates context compression invariants before committing config changes.
+func ValidateContextCompressionConfig(cfg ContextCompressionConfig) error {
+	if cfg.HardLimitTokens <= 0 {
+		return fmt.Errorf("context_compression.hard_limit_tokens must be greater than 0")
+	}
+	if cfg.SoftLimitTokens <= 0 || cfg.SoftLimitTokens >= cfg.HardLimitTokens {
+		return fmt.Errorf("context_compression.soft_limit_tokens must be greater than 0 and less than hard_limit_tokens")
+	}
+	if cfg.OutputReserveTokens <= 0 {
+		return fmt.Errorf("context_compression.output_reserve_tokens must be greater than 0")
+	}
+	if cfg.MaxRecentMessages <= 0 {
+		return fmt.Errorf("context_compression.max_recent_messages must be greater than 0")
+	}
+	if cfg.EstimatedCharsPerToken <= 0 {
+		return fmt.Errorf("context_compression.estimated_chars_per_token must be greater than 0")
+	}
+	return nil
 }
 
 func updatePluginConfig(cfg *PluginConfig, updates map[string]interface{}) {

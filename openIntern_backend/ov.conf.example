@@ -1,6 +1,6 @@
 {
   "server": {
-    "root_api_key": "openintern-local-dev-openviking"
+    "root_api_key": "your-root-api-key-here"
   },
   "storage": {
     "workspace": "/workspace/openviking",
@@ -14,7 +14,7 @@
   "embedding": {
     "dense": {
       "api_base": "https://ark.cn-beijing.volces.com/api/v3",
-      "api_key": "9f1c2796-55d4-416e-ab08-46c711294934",
+      "api_key": "your-embedding-api-key-here",
       "provider": "volcengine",
       "dimension": 1024,
       "model": "doubao-embedding-vision-251215",
@@ -24,7 +24,7 @@
   },
   "vlm": {
     "api_base": "https://api.siliconflow.cn/v1",
-    "api_key": "sk-eieovtaxjcasbvihamhglymsnqehyexjbxgykbowtuakbudq",
+    "api_key": "your-vlm-api-key-here",
     "provider": "openai",
     "model": "zai-org/GLM-4.6V",
     "max_concurrent": 100

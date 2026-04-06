@@ -220,18 +220,11 @@ export default function UserPage() {
   };
 
   const displayName = userInfo?.username || userInfo?.email || "用户";
-  const profileCompletion = Math.round(
-    (
-      [userInfo?.username, userInfo?.email, userInfo?.phone, userInfo?.avatar].filter(Boolean)
-        .length /
-      4
-    ) * 100
-  );
 
   return (
     <div className="h-full w-full overflow-y-auto px-4 py-8">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]">
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)]">
           <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
               <img
@@ -302,71 +295,7 @@ export default function UserPage() {
                   onChange={handleAvatarChange}
                 />
               </div>
-              <div className="grid gap-3 sm:w-44">
-                <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-4 py-3">
-                  <div className="text-xs text-[var(--color-text-muted)]">资料完整度</div>
-                  <div className="mt-1 text-2xl font-semibold text-[var(--color-text-primary)]">
-                    {profileCompletion}%
-                  </div>
-                </div>
-                <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-4 py-3">
-                  <div className="text-xs text-[var(--color-text-muted)]">最近更新</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
-                    {formatDateLabel(userInfo?.updated_at)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            id="settings"
-            className="scroll-mt-6 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]"
-          >
-            <div className="text-base font-semibold text-[var(--color-text-primary)]">
-              用户设置（预留）
-            </div>
-            <div className="mt-2 text-sm text-[var(--color-text-muted)]">
-              先把账户偏好的结构留出来，后续可以直接扩展成独立设置页，而不需要再调整导航层级。
-            </div>
-            <div className="mt-5 space-y-3">
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                    通知偏好
-                  </span>
-                  <span className="text-xs text-[var(--color-text-muted)]">规划中</span>
-                </div>
-                <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  邮件提醒、站内消息、更新频率
-                </div>
-              </div>
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                    界面偏好
-                  </span>
-                  <span className="text-xs text-[var(--color-text-muted)]">规划中</span>
-                </div>
-                <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  默认首页、展示密度、操作习惯
-                </div>
-              </div>
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                    隐私与安全
-                  </span>
-                  <span className="text-xs text-[var(--color-text-muted)]">规划中</span>
-                </div>
-                <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  登录保护、设备记录、会话管理
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 rounded-[var(--radius-lg)] bg-[rgba(37,99,255,0.06)] px-4 py-3 text-xs text-[var(--color-text-secondary)]">
-              当前版本先完成信息管理的结构升级，设置项的持久化会在下一阶段接入。
-            </div>
+                          </div>
           </div>
         </section>
 
@@ -557,26 +486,7 @@ export default function UserPage() {
                         {userInfo?.phone || "-"}
                       </div>
                     </div>
-                    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] px-4 py-3">
-                      <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
-                        <svg
-                          className="h-3.5 w-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M12 2l3 6 6 .8-4.5 4.2 1 6-5.5-3-5.5 3 1-6L3 8.8 9 8l3-6z" />
-                        </svg>
-                        账号类型
-                      </div>
-                      <div className="mt-1 text-[var(--color-text-primary)]">
-                        当前账号
-                      </div>
-                    </div>
-                  </div>
+                                      </div>
                 )}
               </div>
             )}
@@ -653,8 +563,7 @@ export default function UserPage() {
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
+          <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
               <div className="text-base font-semibold text-[var(--color-text-primary)]">
                 账户概览
               </div>
@@ -665,13 +574,7 @@ export default function UserPage() {
                     {userInfo?.user_id || "-"}
                   </span>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-[var(--color-text-muted)]">账号类型</span>
-                  <span className="text-right text-[var(--color-text-primary)]">
-                    当前账号
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start justify-between gap-3">
                   <span className="text-[var(--color-text-muted)]">创建时间</span>
                   <span className="text-right text-[var(--color-text-primary)]">
                     {formatDateLabel(userInfo?.created_at)}
@@ -685,19 +588,6 @@ export default function UserPage() {
                 </div>
               </div>
             </div>
-
-            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
-              <div className="text-base font-semibold text-[var(--color-text-primary)]">
-                安全与支持
-              </div>
-              <div className="mt-2 text-sm text-[var(--color-text-muted)]">
-                密码修改已并入“编辑信息”流程，后续会在设置区补充登录设备、二次验证和会话回收等能力。
-              </div>
-              <div className="mt-4 rounded-[var(--radius-lg)] bg-[var(--color-bg-page)] px-4 py-3 text-sm text-[var(--color-text-secondary)]">
-                如果只是补充基础资料，直接使用左侧编辑入口；如果要做偏好配置，请使用右上角账户菜单进入“用户设置”预留区。
-              </div>
-            </div>
-          </div>
         </section>
       </div>
     </div>
