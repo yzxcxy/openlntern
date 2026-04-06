@@ -7,9 +7,40 @@ import (
 	accountsvc "openIntern/internal/services/account"
 	storagesvc "openIntern/internal/services/storage"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+type userResponse struct {
+	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
+	Avatar    string    `json:"avatar"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// buildUserResponse keeps the external user payload stable while the stored avatar value becomes an object key.
+func buildUserResponse(user *models.User) (*userResponse, error) {
+	if user == nil {
+		return nil, nil
+	}
+	avatarURL, err := storagesvc.ObjectStorage.ResolveObjectAccessURL(user.Avatar)
+	if err != nil {
+		return nil, err
+	}
+	return &userResponse{
+		UserID:    user.UserID,
+		Username:  user.Username,
+		Email:     user.Email,
+		Phone:     user.Phone,
+		Avatar:    avatarURL,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
+}
 
 // CreateUser 创建用户
 func CreateUser(c *gin.Context) {
@@ -70,10 +101,15 @@ func Login(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
+	userPayload, err := buildUserResponse(user)
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
 	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"token":      token,
 		"expires_at": expiresAt,
-		"user":       user,
+		"user":       userPayload,
 	})
 }
 
@@ -85,7 +121,12 @@ func GetCurrentUser(c *gin.Context) {
 		response.NotFound(c, "user not found")
 		return
 	}
-	response.JSONSuccess(c, http.StatusOK, user)
+	userPayload, err := buildUserResponse(user)
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
+	response.JSONSuccess(c, http.StatusOK, userPayload)
 }
 
 // UpdateCurrentUser 更新当前登录用户
@@ -133,12 +174,17 @@ func UploadCurrentUserAvatar(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
-	if err := accountsvc.User.UpdateUser(userID, map[string]interface{}{"avatar": uploaded.URL}); err != nil {
+	if err := accountsvc.User.UpdateUser(userID, map[string]interface{}{"avatar": uploaded.Key}); err != nil {
+		response.InternalError(c)
+		return
+	}
+	avatarURL, err := storagesvc.ObjectStorage.ResolveObjectAccessURL(uploaded.Key)
+	if err != nil {
 		response.InternalError(c)
 		return
 	}
 	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"key": uploaded.Key,
-		"url": uploaded.URL,
+		"url": avatarURL,
 	})
 }

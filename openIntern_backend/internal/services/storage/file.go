@@ -38,6 +38,12 @@ type StoredObject struct {
 	ETag        string
 }
 
+type ReadObjectResult struct {
+	Reader      io.ReadCloser
+	ContentType string
+	Size        int64
+}
+
 var objectStore *MinIOStore
 var liveStoreMu sync.RWMutex
 
@@ -125,6 +131,40 @@ func (s *MinIOStore) RemoveObject(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 }
 
+// GetObject opens an existing object and loads its metadata for streaming responses.
+func (s *MinIOStore) GetObject(ctx context.Context, key string) (*ReadObjectResult, error) {
+	if s == nil || s.client == nil {
+		return nil, errors.New("file service not configured")
+	}
+	key = normalizeObjectKey(key)
+	if key == "" {
+		return nil, errors.New("empty key")
+	}
+	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	info, err := object.Stat()
+	if err != nil {
+		_ = object.Close()
+		return nil, err
+	}
+	contentType := strings.TrimSpace(info.ContentType)
+	if contentType == "" {
+		if extType := mime.TypeByExtension(filepath.Ext(key)); extType != "" {
+			contentType = extType
+		}
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	return &ReadObjectResult{
+		Reader:      object,
+		ContentType: contentType,
+		Size:        info.Size,
+	}, nil
+}
+
 func (s *MinIOStore) BuildObjectURL(key string) (string, error) {
 	if s == nil {
 		return "", errors.New("file service not configured")
@@ -146,6 +186,42 @@ func (s *MinIOStore) BuildObjectURL(key string) (string, error) {
 	}
 	base := scheme + "://" + endpoint.Host
 	return base + "/" + s.bucket + "/" + key, nil
+}
+
+// ExtractObjectKeyFromURL converts a known legacy object URL into a stable object key.
+func (s *MinIOStore) ExtractObjectKeyFromURL(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	for _, prefix := range s.objectURLPrefixes() {
+		if strings.HasPrefix(raw, prefix+"/") {
+			key := normalizeObjectKey(strings.TrimPrefix(raw, prefix+"/"))
+			if key != "" {
+				return key, true
+			}
+		}
+	}
+	return "", false
+}
+
+func (s *MinIOStore) objectURLPrefixes() []string {
+	if s == nil {
+		return nil
+	}
+	prefixes := make([]string, 0, 2)
+	if s.publicBaseURL != "" {
+		prefixes = append(prefixes, s.publicBaseURL)
+	}
+	if s.client != nil && s.client.EndpointURL() != nil && strings.TrimSpace(s.bucket) != "" {
+		endpoint := s.client.EndpointURL()
+		scheme := strings.TrimSpace(endpoint.Scheme)
+		if scheme == "" {
+			scheme = "http"
+		}
+		prefixes = append(prefixes, scheme+"://"+endpoint.Host+"/"+s.bucket)
+	}
+	return prefixes
 }
 
 func getObjectStore() (*MinIOStore, error) {

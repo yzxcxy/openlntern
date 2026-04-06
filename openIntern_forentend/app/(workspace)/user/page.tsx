@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
 import { OPENINTERN_DEFAULT_AVATAR_URL } from "../../shared/avatar";
+import { resolveBackendAssetUrl } from "../../shared/backend-url";
 import { readStoredUser, readValidToken, requestBackend } from "../auth";
 
 type UserInfo = {
@@ -234,7 +235,10 @@ export default function UserPage() {
           <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-sm)]">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
               <img
-                src={userInfo?.avatar || OPENINTERN_DEFAULT_AVATAR_URL}
+                src={
+                  resolveBackendAssetUrl(userInfo?.avatar) ||
+                  OPENINTERN_DEFAULT_AVATAR_URL
+                }
                 alt={displayName}
                 className="h-16 w-16 rounded-full object-cover"
               />

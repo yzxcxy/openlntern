@@ -2,9 +2,12 @@ package account
 
 import (
 	"errors"
+	"log"
 	"openIntern/internal/dao"
 	"openIntern/internal/models"
 	pluginsvc "openIntern/internal/services/plugin"
+	storagesvc "openIntern/internal/services/storage"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -55,6 +58,32 @@ func (s *UserService) Authenticate(identifier, password string) (*models.User, e
 		return nil, errors.New("invalid credentials")
 	}
 	return user, nil
+}
+
+// MigrateAvatarObjectKeys rewrites known legacy avatar URLs into stable object keys at startup.
+func (s *UserService) MigrateAvatarObjectKeys() error {
+	users, err := dao.User.ListUsersWithAvatar()
+	if err != nil {
+		return err
+	}
+	for _, user := range users {
+		rawAvatar := strings.TrimSpace(user.Avatar)
+		if rawAvatar == "" {
+			continue
+		}
+		objectKey, err := storagesvc.ObjectStorage.ExtractStoredObjectKey(rawAvatar)
+		if err != nil {
+			log.Printf("skip avatar object key migration for user %s: %v", user.UserID, err)
+			continue
+		}
+		if objectKey == "" || objectKey == rawAvatar {
+			continue
+		}
+		if err := dao.User.UpdateAvatarByUserID(user.UserID, objectKey); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UpdateUser 更新用户信息

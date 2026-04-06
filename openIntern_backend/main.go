@@ -33,6 +33,9 @@ func main() {
 	if err := storagesvc.InitObjectStorage(cfg.MinIO); err != nil {
 		log.Fatalf("failed to init file service: %v", err)
 	}
+	if err := accountsvc.User.MigrateAvatarObjectKeys(); err != nil {
+		log.Fatalf("failed to migrate avatar object keys: %v", err)
+	}
 	pluginsvc.InitPlugin(cfg.Plugin)
 	database.InitContextStore(cfg.Tools.OpenViking)
 	memorysvc.InitMemory(cfg.Tools)

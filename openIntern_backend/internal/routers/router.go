@@ -28,6 +28,7 @@ func SetupRouter() *gin.Engine {
 
 	r.POST("/v1/chat/sse", middleware.AuthRequired(), controllers.ChatSSE)
 	r.POST("/v1/chat/uploads", middleware.AuthRequired(), controllers.UploadChatAsset)
+	r.GET("/v1/assets/*objectKey", controllers.GetObjectAsset)
 
 	agentGroup := r.Group("/v1/agents", middleware.AuthRequired())
 	{

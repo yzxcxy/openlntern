@@ -51,6 +51,7 @@ import {
 } from "./chat-plugin-config";
 import { theme } from "../../theme";
 import { OPENINTERN_DEFAULT_AVATAR_URL } from "../../shared/avatar";
+import { resolveBackendAssetUrl } from "../../shared/backend-url";
 import {
   type BackendEnvelope,
   buildAuthHeaders,
@@ -2111,7 +2112,7 @@ export default function ChatPage() {
   const userAvatar = useMemo(() => {
     const avatar =
       typeof userInfo?.avatar === "string" ? userInfo.avatar.trim() : "";
-    return avatar;
+    return resolveBackendAssetUrl(avatar);
   }, [userInfo]);
 
   const userId = useMemo(() => {

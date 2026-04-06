@@ -84,7 +84,7 @@
 示例：
 
 - 存库值：`users/05b895b0-bb6a-4cfe-ae9a-1f67db169e37/avatar/20260406/63c32df9-a106-487c-b95c-62881861e7db.png`
-- 接口返回值：`https://assets.example.com/open-intern/users/...png` 或 `/v1/assets/users/...`
+- 接口返回值：`https://assets.example.com/open-intern/users/...png` 或 `/v1/assets/users/...?expires=...&signature=...`
 
 这样可以避免本轮额外做数据库结构变更，同时把外部接口与内部存储解耦。
 
@@ -116,14 +116,14 @@ ResolveObjectAccessURL(objectKey string) (string, error)
 
 规则如下：
 
-- `public/...`：返回稳定公开地址。
-- `users/...`：本轮优先返回应用侧代理地址，例如 `/v1/assets/<escaped-key>`。
+- `public/...`：返回应用侧稳定资源地址，例如 `/v1/assets/public/...`。
+- `users/...`：返回应用侧签名资源地址，例如 `/v1/assets/users/...?...`。
 
-推荐本轮优先使用应用代理地址，而不是直接下发签名 URL，原因如下：
+本轮采用“应用侧签名资源 URL”而不是“依赖 Authorization 头的资源代理”，原因如下：
 
-- 前端地址稳定，不会因为签名过期出现缓存与状态同步问题。
-- 对浏览器来说不会暴露 MinIO 内部地址。
-- 权限检查、日志、缓存头控制都能放在应用层集中处理。
+- 当前前端令牌保存在 `localStorage`，浏览器对 `<img src>` 请求不会自动补 `Authorization` 头。
+- 应用侧签名 URL 仍然不会暴露 MinIO 内部地址。
+- MinIO 读取、签名校验、日志与缓存头控制仍可放在应用层集中处理。
 
 如果后续确认头像天然公开，也可以只改 `ResolveObjectAccessURL` 的实现，把 `users/...` 头像切到公开域名，而不动数据库与前端。
 
@@ -143,7 +143,7 @@ ResolveObjectAccessURL(objectKey string) (string, error)
 ```json
 {
   "key": "users/<user_id>/avatar/20260406/<uuid>.png",
-  "url": "/v1/assets/users/<user_id>/avatar/20260406/<uuid>.png"
+  "url": "/v1/assets/users/<user_id>/avatar/20260406/<uuid>.png?expires=<ts>&signature=<sig>"
 }
 ```
 
@@ -166,21 +166,21 @@ ResolveObjectAccessURL(objectKey string) (string, error)
 
 ## 9. 应用代理读取设计
 
-新增受控读取接口，例如：
+新增资源读取接口，例如：
 
 - `GET /v1/assets/*objectKey`
 
 行为：
 
 1. 校验对象 key 非空且只允许 `users/` 或 `public/` 根前缀。
-2. 对 `users/<user_id>/...` 校验当前登录用户与对象所属用户一致。
-3. 从 MinIO 拉取对象流并透传给浏览器。
-4. 透传正确的 `Content-Type`。
-5. 返回合理的缓存头。
+2. 对 `users/...` 校验 `expires` 与 `signature`。
+3. 对 `public/...` 允许直接读取。
+4. 从 MinIO 拉取对象流并透传给浏览器。
+5. 透传正确的 `Content-Type`。
 
 约束：
 
-- 不允许通过该接口跨用户读取 `users/...` 对象。
+- 错误签名或过期签名的 `users/...` 请求必须返回拒绝。
 - 不允许访问根前缀之外的任意 key。
 
 ## 10. 迁移方案
@@ -233,13 +233,13 @@ ResolveObjectAccessURL(objectKey string) (string, error)
 
 1. 上传头像后，数据库 `user.avatar` 存的是对象 key，不是完整 URL。
 2. `GET /v1/users/me` 返回的 `avatar` 是浏览器可访问地址，不包含 `127.0.0.1`。
-3. 浏览器直接访问返回的头像地址，HTTP 状态为 `200`。
-4. 其他用户访问当前用户私有 `users/...` 对象时被拒绝。
-5. 默认头像仍然可显示。
+3. 浏览器直接访问返回的签名头像地址，HTTP 状态为 `200`。
+4. 同一路径使用错误签名时，HTTP 状态为 `403`。
+5. 默认头像逻辑不因本轮变更退化。
 
 ## 13. 风险与取舍
 
-- 应用代理方式会增加应用层带宽消耗，但换来统一的权限控制和稳定的外部地址。
+- 应用侧签名资源 URL 会增加应用层带宽消耗，但换来统一的资源出口和不暴露内部地址的访问模型。
 - 复用 `user.avatar` 字段可以减少本轮改动，但要求代码层明确其“对象 key”语义，不能再把它当 URL 使用。
 - 若后续头像确定允许公开读，可以只替换 URL 解析策略，不需要再次改表或改前端。
 

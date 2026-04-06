@@ -14,9 +14,9 @@ type User struct {
 
 	Username string `gorm:"uniqueIndex;not null;size:50" json:"username"`
 	Email    string `gorm:"uniqueIndex;not null;size:100" json:"email"`
-	Password string `gorm:"not null" json:"-"`                  // 存储哈希后的密码
-	Avatar   string `gorm:"size:255" json:"avatar"`             // 头像 URL
-	Phone    string `gorm:"size:50" json:"phone"`               // 联系方式
+	Password string `gorm:"not null" json:"-"`      // 存储哈希后的密码
+	Avatar   string `gorm:"size:255" json:"avatar"` // 头像对象 key
+	Phone    string `gorm:"size:50" json:"phone"`   // 联系方式
 
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 

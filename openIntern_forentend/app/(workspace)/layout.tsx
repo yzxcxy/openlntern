@@ -10,6 +10,7 @@ import { UiInput } from "../components/ui/UiInput";
 import { UiConfirmDialog as ConfirmDialog } from "../components/ui/UiConfirmDialog";
 import { UiModal as Modal } from "../components/ui/UiModal";
 import { OPENINTERN_DEFAULT_AVATAR_URL } from "../shared/avatar";
+import { resolveBackendAssetUrl } from "../shared/backend-url";
 import {
   THREAD_HISTORY_UPSERT_EVENT,
   type ThreadHistoryItem,
@@ -1095,7 +1096,10 @@ export default function WorkspaceLayout({
                     className="motion-safe-highlight flex min-w-0 flex-1 items-center gap-3 rounded-[20px] px-2 py-2 text-left hover:bg-[rgba(255,252,247,0.8)]"
                   >
                     <img
-                      src={userInfo?.avatar || OPENINTERN_DEFAULT_AVATAR_URL}
+                      src={
+                        resolveBackendAssetUrl(userInfo?.avatar) ||
+                        OPENINTERN_DEFAULT_AVATAR_URL
+                      }
                       alt={displayName}
                       className="h-9 w-9 rounded-full object-cover"
                     />

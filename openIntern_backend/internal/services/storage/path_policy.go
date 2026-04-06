@@ -133,3 +133,17 @@ func inferObjectExt(fileName string, contentType string) string {
 	}
 	return ".bin"
 }
+
+// ParseUserObjectOwner extracts the owner user id from a users/... object key.
+func ParseUserObjectOwner(objectKey string) (string, bool) {
+	key := normalizeObjectKey(objectKey)
+	parts := strings.Split(key, "/")
+	if len(parts) < 3 || parts[0] != "users" {
+		return "", false
+	}
+	userID := strings.TrimSpace(parts[1])
+	if userID == "" {
+		return "", false
+	}
+	return userID, true
+}

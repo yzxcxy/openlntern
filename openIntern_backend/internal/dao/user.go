@@ -39,9 +39,21 @@ func (d *UserDAO) GetByIdentifier(identifier string) (*models.User, error) {
 	return &user, nil
 }
 
+func (d *UserDAO) ListUsersWithAvatar() ([]models.User, error) {
+	var users []models.User
+	if err := database.DB.Where("avatar <> ''").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (d *UserDAO) UpdateByUserID(userID string, updates map[string]any) (int64, error) {
 	result := database.DB.Model(&models.User{}).Where("user_id = ?", userID).Updates(updates)
 	return result.RowsAffected, result.Error
+}
+
+func (d *UserDAO) UpdateAvatarByUserID(userID string, avatar string) error {
+	return database.DB.Model(&models.User{}).Where("user_id = ?", userID).Update("avatar", avatar).Error
 }
 
 func (d *UserDAO) DeleteByUserID(userID string) (int64, error) {
