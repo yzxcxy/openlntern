@@ -13,6 +13,8 @@ MINIO_ENDPOINT="${OPENINTERN_MINIO_ENDPOINT:-http://127.0.0.1:9000}"
 MINIO_ACCESS_KEY="${OPENINTERN_MINIO_ACCESS_KEY:-minioadmin}"
 MINIO_SECRET_KEY="${OPENINTERN_MINIO_SECRET_KEY:-minioadmin}"
 MINIO_BUCKET="${OPENINTERN_MINIO_BUCKET:-open-intern}"
+DEFAULT_PLUGIN_ICON_PATH="${ROOT_DIR}/openIntern_backend/assets/plugin/default-icon.jpg"
+DEFAULT_PLUGIN_ICON_OBJECT_KEY="${OPENINTERN_DEFAULT_PLUGIN_ICON_OBJECT_KEY:-public/plugin/icon/default-plugin.jpg}"
 
 ensure_container_running() {
   local service="$1"
@@ -84,6 +86,26 @@ ensure_minio_bucket() {
     "mc alias set local ${MINIO_ENDPOINT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} >/dev/null && mc mb local/${MINIO_BUCKET} --ignore-existing >/dev/null"
 }
 
+ensure_minio_object_from_file() {
+  local object_key="$1"
+  local file_path="$2"
+
+  if [[ ! -f "${file_path}" ]]; then
+    echo "初始化 MinIO 对象失败，文件不存在: ${file_path}" >&2
+    return 1
+  fi
+
+  local mounted_file_path="${file_path#"${ROOT_DIR}/"}"
+  if [[ "${mounted_file_path}" == "${file_path}" ]]; then
+    echo "初始化 MinIO 对象失败，文件路径不在项目目录内: ${file_path}" >&2
+    return 1
+  fi
+
+  # 公共默认资源使用固定 object key，重复执行初始化脚本时只在对象不存在时上传。
+  docker run --rm --network host -v "${ROOT_DIR}:/work:ro" --entrypoint /bin/sh minio/mc -c \
+    "mc alias set local ${MINIO_ENDPOINT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} >/dev/null && if mc stat local/${MINIO_BUCKET}/${object_key} >/dev/null 2>&1; then exit 0; fi && mc cp /work/${mounted_file_path} local/${MINIO_BUCKET}/${object_key} >/dev/null"
+}
+
 echo "启动外部依赖..."
 cd "${ROOT_DIR}"
 ensure_container_running "mysql" "openintern-mysql"
@@ -98,6 +120,9 @@ wait_for_container_healthy "openintern-openviking" "OpenViking"
 
 echo "初始化 MinIO bucket..."
 ensure_minio_bucket
+
+echo "初始化默认插件图标..."
+ensure_minio_object_from_file "${DEFAULT_PLUGIN_ICON_OBJECT_KEY}" "${DEFAULT_PLUGIN_ICON_PATH}"
 
 echo "初始化默认账号..."
 cd "${BACKEND_DIR}"

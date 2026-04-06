@@ -4,7 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
+	neturl "net/url"
 	"strings"
+	"syscall"
 
 	"openIntern/internal/dao"
 
@@ -54,12 +59,22 @@ func NewRemoteBackend(repo SkillRepository, store SkillFrontmatterStore) (*Remot
 func (b *RemoteBackend) List(ctx context.Context) ([]einoSkill.FrontMatter, error) {
 	names, err := b.repo.ListSkillNames(ctx)
 	if err != nil {
+		if isTransientSkillStoreError(err) {
+			// OpenViking 短暂不可用时退化为空技能集，避免整次对话直接失败。
+			log.Printf("Skill backend list degraded because repository is unavailable err=%v", err)
+			return []einoSkill.FrontMatter{}, nil
+		}
 		return nil, err
 	}
 	result := make([]einoSkill.FrontMatter, 0, len(names))
 	for _, name := range names {
 		abstract, err := b.repo.ReadSummary(ctx, name)
 		if err != nil {
+			if isTransientSkillStoreError(err) {
+				// 单个技能摘要加载失败时跳过该技能，保留其余技能能力。
+				log.Printf("Skill backend skip summary because repository is unavailable skill=%s err=%v", name, err)
+				continue
+			}
 			return nil, err
 		}
 		result = append(result, einoSkill.FrontMatter{
@@ -137,6 +152,34 @@ func stringFromAny(value any) string {
 	default:
 		return strings.TrimSpace(fmt.Sprint(v))
 	}
+}
+
+// isTransientSkillStoreError identifies short-lived OpenViking/network failures that should not abort the whole run.
+func isTransientSkillStoreError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	var urlErr *neturl.Error
+	if errors.As(err, &urlErr) {
+		if urlErr.Timeout() {
+			return true
+		}
+		err = urlErr.Err
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "connection refused") ||
+		strings.Contains(lower, "connection reset by peer") ||
+		strings.Contains(lower, "broken pipe") ||
+		strings.Contains(lower, "unexpected eof") ||
+		strings.Contains(lower, "context deadline exceeded") ||
+		strings.Contains(lower, "timeout")
 }
 
 var _ SkillRepository = (*dao.SkillStoreDAO)(nil)

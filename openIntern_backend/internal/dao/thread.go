@@ -59,8 +59,12 @@ func (d *ThreadDAO) GetByThreadID(threadID string) (*models.Thread, error) {
 
 func (d *ThreadDAO) GetByUserIDAndThreadID(userID, threadID string) (*models.Thread, error) {
 	var item models.Thread
-	if err := database.DB.Where("user_id = ? AND thread_id = ?", userID, threadID).First(&item).Error; err != nil {
-		return nil, err
+	result := database.DB.Where("user_id = ? AND thread_id = ?", userID, threadID).Limit(1).Find(&item)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &item, nil
 }
