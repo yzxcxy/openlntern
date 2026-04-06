@@ -34,4 +34,6 @@ This Compose stack manages external dependencies and OpenViking:
 - The MySQL database name remains `open_intern`.
 - This round only deploys MinIO and its management console.
 - Existing COS upload behavior is unchanged in this round.
-- The OpenViking container mounts the existing `openIntern_backend/ov.conf` and persists its workspace with a named Docker volume.
+- The OpenViking container mounts the existing `openIntern_backend/ov.conf` for its own runtime configuration.
+- openIntern now uploads knowledge-base and skill imports to OpenViking over HTTP before import, so OpenViking never reads backend-local temp paths directly.
+- A shared Docker volume between `openIntern_backend` and OpenViking is not required for these import flows.

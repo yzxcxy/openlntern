@@ -214,6 +214,7 @@ func ImportSkill(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
+	// SkillStore.Import now performs a remote upload/import flow instead of exposing backend-local paths.
 	if err := dao.SkillStore.Import(c.Request.Context(), rootDir); err != nil {
 		response.JSONError(c, http.StatusInternalServerError, response.CodeInternal, err.Error())
 		return

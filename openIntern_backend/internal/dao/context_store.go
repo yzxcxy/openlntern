@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -114,36 +115,27 @@ func addResource(ctx context.Context, resourcePath string, targetURI string, wai
 }
 
 func addResourceWithRootURI(ctx context.Context, resourcePath string, targetURI string, wait bool, timeoutSeconds float64) (string, error) {
-	payload := map[string]any{
-		"path":   resourcePath,
-		"target": targetURI,
-		"wait":   wait,
-	}
-	if timeoutSeconds > 0 {
-		payload["timeout"] = timeoutSeconds
-	}
-	body, err := database.Context.Post(ctx, "/api/v1/resources", payload)
+	info, err := os.Stat(resourcePath)
 	if err != nil {
 		return "", err
 	}
-	var resp storeResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+
+	var upload *database.TempUploadResult
+	if info.IsDir() {
+		// OpenViking raw HTTP mode requires local directories to be zipped before upload.
+		upload, err = database.Context.UploadTempArchive(ctx, resourcePath, info.Name())
+	} else {
+		upload, err = database.Context.UploadTempFile(ctx, resourcePath)
+	}
+	if err != nil {
 		return "", err
 	}
-	if err := resp.err(); err != nil {
+
+	body, err := database.Context.Post(ctx, "/api/v1/resources", buildAddResourcePayload(upload.TempFileID, targetURI, wait, timeoutSeconds))
+	if err != nil {
 		return "", err
 	}
-	if len(resp.Result) == 0 {
-		return "", nil
-	}
-	var result storeAddResult
-	if err := json.Unmarshal(resp.Result, &result); err == nil {
-		if len(result.Errors) > 0 {
-			return "", errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
-		}
-		return strings.TrimSpace(result.RootURI), nil
-	}
-	return "", nil
+	return decodeStoreAddResult(body)
 }
 
 func movePath(ctx context.Context, fromURI string, toURI string) error {
@@ -181,13 +173,59 @@ func deletePath(ctx context.Context, uri string, recursive bool) error {
 }
 
 func importSkill(ctx context.Context, rootDir string) error {
-	body, err := database.Context.Post(ctx, "/api/v1/skills", map[string]any{
-		"data": rootDir,
-	})
+	upload, err := database.Context.UploadTempArchive(ctx, rootDir, "skill")
+	if err != nil {
+		return err
+	}
+	body, err := database.Context.Post(ctx, "/api/v1/skills", buildAddSkillPayload(upload.TempFileID, false, 0))
 	if err != nil {
 		return err
 	}
 	return decodeStoreResult(body, nil)
+}
+
+func buildAddResourcePayload(tempFileID string, targetURI string, wait bool, timeoutSeconds float64) map[string]any {
+	payload := map[string]any{
+		"temp_file_id": strings.TrimSpace(tempFileID),
+		"target":       strings.TrimSpace(targetURI),
+		"wait":         wait,
+	}
+	if timeoutSeconds > 0 {
+		payload["timeout"] = timeoutSeconds
+	}
+	return payload
+}
+
+func buildAddSkillPayload(tempFileID string, wait bool, timeoutSeconds float64) map[string]any {
+	payload := map[string]any{
+		"temp_file_id": strings.TrimSpace(tempFileID),
+		"wait":         wait,
+	}
+	if timeoutSeconds > 0 {
+		payload["timeout"] = timeoutSeconds
+	}
+	return payload
+}
+
+func decodeStoreAddResult(body []byte) (string, error) {
+	var resp storeResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", err
+	}
+	if err := resp.err(); err != nil {
+		return "", err
+	}
+	if len(resp.Result) == 0 {
+		return "", nil
+	}
+	var result storeAddResult
+	if err := json.Unmarshal(resp.Result, &result); err == nil {
+		if len(result.Errors) > 0 {
+			return "", errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
+		}
+		return strings.TrimSpace(result.RootURI), nil
+	}
+	return "", nil
 }
 
 func decodeStoreResult(body []byte, target any) error {

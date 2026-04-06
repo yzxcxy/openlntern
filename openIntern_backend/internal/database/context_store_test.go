@@ -30,3 +30,16 @@ func TestExtractPayloadSummaryFallsBackToTarget(t *testing.T) {
 	}
 }
 
+// TestExtractPayloadSummarySupportsTempFileID ensures temp_file_id imports surface a useful log summary.
+func TestExtractPayloadSummarySupportsTempFileID(t *testing.T) {
+	target, pathValue := extractPayloadSummary(map[string]any{
+		"target":       "viking://resources/demo/",
+		"temp_file_id": "upload_123.zip",
+	})
+	if target != "viking://resources/demo/" {
+		t.Fatalf("unexpected target: %q", target)
+	}
+	if pathValue != "temp_file_id:upload_123.zip" {
+		t.Fatalf("unexpected path: %q", pathValue)
+	}
+}

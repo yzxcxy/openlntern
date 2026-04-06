@@ -101,6 +101,7 @@ func (s *Service) Import(ctx context.Context, rawName string, fileHeader *multip
 			return nil, err
 		}
 	}
+	// The DAO now uploads validated local content over HTTP before asking OpenViking to import it.
 	if err := dao.KnowledgeBase.Ingest(ctx, rootDir, dao.KnowledgeBase.URI(kbName), false, 0); err != nil {
 		return nil, err
 	}
@@ -143,6 +144,7 @@ func (s *Service) UploadFile(ctx context.Context, rawName, targetDir string, fil
 		return nil, err
 	}
 	targetURI := resolveUploadTargetURI(kbName, targetDir)
+	// The DAO now uploads the staged file over HTTP before asking OpenViking to import it.
 	if err := dao.KnowledgeBase.Ingest(ctx, localPath, targetURI, false, 0); err != nil {
 		return nil, err
 	}

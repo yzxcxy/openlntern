@@ -107,6 +107,7 @@ tools:
 - sandbox 不再读取固定 `url`；后端会在用户首次调用 sandbox 相关能力时，使用 Docker CLI 动态创建该用户自己的 AIO sandbox 容器。
 - 同一用户后续请求会复用同一个容器；空闲超时后，后端后台会自动回收该容器。
 - OpenViking 的连接参数仍然由 [openIntern_backend/config.yaml](/Users/fqc/project/agent/openIntern/openIntern_backend/config.yaml) 中的 `tools.openviking` 提供，供 memory 与 skills 等后端能力调用。
+- 知识库导入、知识库单文件上传、skill 导入现在都会先通过 HTTP 上传到 OpenViking，再使用 `temp_file_id` 触发导入；后端不再把本地路径直接传给 OpenViking。
 - `tool_search` 已改为本地关键词匹配，不再依赖 OpenViking 工具索引。
 - OpenViking 的服务启动、停止和内部参数管理不再由 openIntern 前后端负责。
 
@@ -155,6 +156,11 @@ docker compose up -d openviking
 ```
 
 4. sandbox 不需要提前手工启动固定容器；后端会在第一次使用 sandbox 相关能力时自动执行 `docker run`
+
+补充说明：
+
+- OpenViking 与 `openIntern_backend` 不需要共享 Docker volume 才能完成知识库或 skill 导入。
+- 导入链路默认走 HTTP 上传，不依赖 backend 容器内的本地临时路径对 OpenViking 可见。
 
 默认访问地址：
 
