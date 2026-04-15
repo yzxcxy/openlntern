@@ -3,6 +3,7 @@ import { UiButton } from "../../components/ui/UiButton";
 import { UiInput } from "../../components/ui/UiInput";
 import { UiSelect } from "../../components/ui/UiSelect";
 import { UiModal as Modal } from "../../components/ui/UiModal";
+import { resolveBackendAssetUrl } from "../../shared/backend-url";
 import {
   getChatPluginKey,
   uniqueStringList,
@@ -173,6 +174,8 @@ export function PluginSelectionModal({
                     typeof tool.tool_id === "string" ? tool.tool_id : ""
                   )
                 );
+                // 聊天弹窗里的插件头像也可能是后端返回的相对路径，需要先转成可访问地址。
+                const pluginIconUrl = resolveBackendAssetUrl(plugin.icon);
                 const selectedCount = pluginToolIds.filter((toolId) =>
                   selectedToolIdSet.has(toolId)
                 ).length;
@@ -194,9 +197,9 @@ export function PluginSelectionModal({
                         <div
                           className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[rgba(148,163,184,0.14)] text-lg font-semibold text-[var(--color-text-secondary)]"
                           style={
-                            plugin.icon
+                            pluginIconUrl
                               ? {
-                                  backgroundImage: `url(${plugin.icon})`,
+                                  backgroundImage: `url(${pluginIconUrl})`,
                                   backgroundPosition: "center",
                                   backgroundSize: "cover",
                                 }
@@ -205,7 +208,7 @@ export function PluginSelectionModal({
                           aria-label={plugin.name || "plugin"}
                           title={plugin.name || "plugin"}
                         >
-                          {plugin.icon ? "" : (plugin.name || "P").slice(0, 1)}
+                          {pluginIconUrl ? "" : (plugin.name || "P").slice(0, 1)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -367,48 +370,52 @@ export function PluginSelectionModal({
             </div>
           ) : (
             <div className="mt-3 max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-              {selectedToolItems.map((item) => (
-                <div
-                  key={item.toolId}
-                  className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[rgba(148,163,184,0.16)] bg-[rgba(248,250,252,0.92)] px-3 py-2"
-                >
+              {selectedToolItems.map((item) => {
+                const pluginIconUrl = resolveBackendAssetUrl(item.pluginIcon);
+
+                return (
                   <div
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgba(148,163,184,0.18)] text-[11px] font-semibold text-[var(--color-text-secondary)]"
-                    style={
-                      item.pluginIcon
-                        ? {
-                            backgroundImage: `url(${item.pluginIcon})`,
-                            backgroundPosition: "center",
-                            backgroundSize: "cover",
-                          }
-                        : undefined
-                    }
-                    aria-label={item.pluginName}
-                    title={item.pluginName}
+                    key={item.toolId}
+                    className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[rgba(148,163,184,0.16)] bg-[rgba(248,250,252,0.92)] px-3 py-2"
                   >
-                    {item.pluginIcon ? "" : item.pluginName.slice(0, 1)}
-                  </div>
-                  <div className="min-w-0 flex-1 text-xs text-[var(--color-text-primary)]">
-                    <div className="truncate font-medium">
-                      {item.pluginName}/{item.toolName}
-                    </div>
                     <div
-                      className="mt-1 line-clamp-2 text-[11px] text-[var(--color-text-muted)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
-                      dangerouslySetInnerHTML={{
-                        __html: item.toolDescription || "暂无工具描述",
-                      }}
-                    />
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgba(148,163,184,0.18)] text-[11px] font-semibold text-[var(--color-text-secondary)]"
+                      style={
+                        pluginIconUrl
+                          ? {
+                              backgroundImage: `url(${pluginIconUrl})`,
+                              backgroundPosition: "center",
+                              backgroundSize: "cover",
+                            }
+                          : undefined
+                      }
+                      aria-label={item.pluginName}
+                      title={item.pluginName}
+                    >
+                      {pluginIconUrl ? "" : item.pluginName.slice(0, 1)}
+                    </div>
+                    <div className="min-w-0 flex-1 text-xs text-[var(--color-text-primary)]">
+                      <div className="truncate font-medium">
+                        {item.pluginName}/{item.toolName}
+                      </div>
+                      <div
+                        className="mt-1 line-clamp-2 text-[11px] text-[var(--color-text-muted)] [&_a]:break-all [&_a]:font-medium [&_a]:text-[var(--color-action-primary)] [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-[var(--color-action-primary-hover)]"
+                        dangerouslySetInnerHTML={{
+                          __html: item.toolDescription || "暂无工具描述",
+                        }}
+                      />
+                    </div>
+                    <UiButton
+                      onClick={() => onToggleToolSelection(item.toolId, false)}
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full border-[var(--color-border-default)] px-2 text-[var(--color-text-muted)]"
+                    >
+                      移除
+                    </UiButton>
                   </div>
-                  <UiButton
-                    onClick={() => onToggleToolSelection(item.toolId, false)}
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full border-[var(--color-border-default)] px-2 text-[var(--color-text-muted)]"
-                  >
-                    移除
-                  </UiButton>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
