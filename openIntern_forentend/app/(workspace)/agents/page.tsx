@@ -6,6 +6,7 @@ import { UiButton } from "../../components/ui/UiButton";
 import { UiConfirmDialog } from "../../components/ui/UiConfirmDialog";
 import { UiInput } from "../../components/ui/UiInput";
 import { UiSelect } from "../../components/ui/UiSelect";
+import { resolveBackendAssetUrl } from "../../shared/backend-url";
 import { getUserIdFromToken, readValidToken } from "../auth";
 import {
   type AgentListItem,
@@ -218,7 +219,7 @@ export default function AgentsPage() {
                     </div>
                     {item.avatar_url ? (
                       <img
-                        src={item.avatar_url}
+                        src={resolveBackendAssetUrl(item.avatar_url)}
                         alt={item.name}
                         className="h-12 w-12 rounded-[16px] border border-[var(--color-border-default)] object-cover"
                       />

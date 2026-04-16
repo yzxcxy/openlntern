@@ -89,9 +89,14 @@ func UploadPluginIcon(c *gin.Context) {
 		response.InternalError(c)
 		return
 	}
+	accessURL, err := storagesvc.ObjectStorage.ResolveObjectAccessURL(uploaded.Key)
+	if err != nil {
+		response.InternalError(c)
+		return
+	}
 	response.JSONSuccess(c, http.StatusOK, gin.H{
 		"key": uploaded.Key,
-		"url": uploaded.URL,
+		"url": accessURL,
 	})
 }
 

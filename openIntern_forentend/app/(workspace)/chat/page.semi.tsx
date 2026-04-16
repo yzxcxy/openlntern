@@ -128,8 +128,14 @@ const parseBackgroundImageURL = (rawJSON: string | undefined): string => {
     return "";
   }
   try {
-    const parsed = JSON.parse(trimmed);
-    return parsed.image_url || "";
+    const parsed = JSON.parse(trimmed) as { image_url?: string; url?: string };
+    if (typeof parsed.image_url === "string" && parsed.image_url.trim()) {
+      return resolveBackendAssetUrl(parsed.image_url.trim());
+    }
+    if (typeof parsed.url === "string" && parsed.url.trim()) {
+      return resolveBackendAssetUrl(parsed.url.trim());
+    }
+    return "";
   } catch {
     return "";
   }
@@ -1403,7 +1409,7 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
       const agentId = normalizedKey.slice(AGENT_ASSISTANT_KEY_PREFIX.length);
       const matchedAgent = enabledAgents.find((item) => item.agent_id === agentId);
       return {
-        assistantAvatar: matchedAgent?.avatar_url || defaultAssistantAvatar,
+        assistantAvatar: resolveBackendAssetUrl(matchedAgent?.avatar_url) || defaultAssistantAvatar,
         assistantName: matchedAgent?.name || "Agent",
       };
     },

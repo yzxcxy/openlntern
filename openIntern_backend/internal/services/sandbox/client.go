@@ -136,7 +136,7 @@ func (c *Client) ExecuteBash(ctx context.Context, endpoint, command string) (str
 	result, err := cli.CallTool(ctx, mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Name:      "sandbox_execute_bash",
-			Arguments: map[string]any{"command": command},
+			Arguments: map[string]any{"cmd": command},
 		},
 	})
 	if err != nil {

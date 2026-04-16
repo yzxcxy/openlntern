@@ -341,16 +341,16 @@ export default function PluginsPage() {
       const data = await requestBackend<{ url?: string }>("/v1/plugins/icon", {
         method: "POST",
         body: formData,
-        fallbackMessage: "上传头像失败",
+        fallbackMessage: "上传图标失败",
         router,
       });
       const url = typeof data.data?.url === "string" ? data.data.url : "";
       if (!url) {
-        throw new Error("上传头像失败");
+        throw new Error("上传图标失败");
       }
       setDraft((current) => ({ ...current, icon: url }));
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "上传头像失败");
+      setFormError(err instanceof Error ? err.message : "上传图标失败");
     } finally {
       setUploadingIcon(false);
     }

@@ -80,10 +80,14 @@ func (s *ChatUploadService) Upload(ctx context.Context, ownerID string, threadID
 	if err != nil {
 		return nil, err
 	}
+	accessURL, err := storagesvc.ObjectStorage.ResolveObjectAccessURL(uploaded.Key)
+	if err != nil {
+		return nil, err
+	}
 
 	return &ChatUploadAsset{
 		Key:       uploaded.Key,
-		URL:       uploaded.URL,
+		URL:       accessURL,
 		MIMEType:  mimeType,
 		FileName:  normalizedFileName,
 		Size:      fileHeader.Size,

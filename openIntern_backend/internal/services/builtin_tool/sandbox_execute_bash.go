@@ -2,6 +2,7 @@ package builtin_tool
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"openIntern/internal/services/sandbox"
 	"strings"
@@ -11,13 +12,31 @@ import (
 )
 
 type SandboxExecuteBashInput struct {
-	Command string `json:"command" jsonschema_description:"要在当前用户 sandbox 中执行的 bash 命令"`
+	Cmd string `json:"cmd" jsonschema_description:"要在当前用户 sandbox 中执行的 bash 命令"`
+}
+
+func (i *SandboxExecuteBashInput) UnmarshalJSON(data []byte) error {
+	type alias SandboxExecuteBashInput
+	var payload struct {
+		alias
+		Command string `json:"command"`
+	}
+
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	i.Cmd = strings.TrimSpace(payload.alias.Cmd)
+	if i.Cmd == "" {
+		// 历史线程里可能仍保留旧字段名 command，这里只做一次入参兼容。
+		i.Cmd = strings.TrimSpace(payload.Command)
+	}
+	return nil
 }
 
 func sandboxExecuteBashImpl(ctx context.Context, input SandboxExecuteBashInput) (string, error) {
-	command := strings.TrimSpace(input.Command)
+	command := strings.TrimSpace(input.Cmd)
 	if command == "" {
-		return "", errors.New("command is required")
+		return "", errors.New("cmd is required")
 	}
 	userID, _ := ctx.Value(ContextKeyUserID).(string)
 	instance, err := sandbox.Lifecycle.GetOrCreate(ctx, strings.TrimSpace(userID))

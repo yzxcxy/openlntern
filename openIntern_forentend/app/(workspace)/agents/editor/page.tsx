@@ -161,10 +161,10 @@ const parseBackgroundImageURL = (rawJSON: string | undefined): string => {
   try {
     const parsed = JSON.parse(trimmed) as { image_url?: string; url?: string };
     if (typeof parsed.image_url === "string" && parsed.image_url.trim()) {
-      return parsed.image_url.trim();
+      return resolveBackendAssetUrl(parsed.image_url.trim());
     }
     if (typeof parsed.url === "string" && parsed.url.trim()) {
-      return parsed.url.trim();
+      return resolveBackendAssetUrl(parsed.url.trim());
     }
   } catch {
     return "";
@@ -327,7 +327,7 @@ function AgentEditorContent({
   const [chatError, setChatError] = useState("");
 
   const effectiveAvatarURL =
-    (form.avatar_url || "").trim() || OPENINTERN_DEFAULT_AVATAR_URL;
+    resolveBackendAssetUrl((form.avatar_url || "").trim()) || OPENINTERN_DEFAULT_AVATAR_URL;
   const chatBackgroundStyle = useMemo(() => {
     const bg = (form.background_image_url || "").trim();
     if (!bg) {
@@ -1074,7 +1074,7 @@ function AgentEditorContent({
         const uploaded = await uploadAgentImage(file, requestContext);
         setForm((current) => ({
           ...current,
-          avatar_url: uploaded.url,
+          avatar_url: resolveBackendAssetUrl(uploaded.url),
         }));
       } catch (error) {
         setPageError(error instanceof Error ? error.message : "上传头像失败");
@@ -1093,7 +1093,7 @@ function AgentEditorContent({
         const uploaded = await uploadAgentImage(file, requestContext);
         setForm((current) => ({
           ...current,
-          background_image_url: uploaded.url,
+          background_image_url: resolveBackendAssetUrl(uploaded.url),
         }));
       } catch (error) {
         setPageError(error instanceof Error ? error.message : "上传聊天背景失败");
@@ -1783,12 +1783,17 @@ function ImageUploadCard({
   onPick: () => void;
   onClear: () => void;
 }) {
+  const resolvedImageURL = resolveBackendAssetUrl(imageURL);
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] p-3">
       <div className="text-xs font-semibold text-[var(--color-text-secondary)]">{title}</div>
       <div className="mt-2">
-        {imageURL ? (
-          <img src={imageURL} alt={title} className="h-24 w-full rounded-[var(--radius-sm)] border object-cover" />
+        {resolvedImageURL ? (
+          <img
+            src={resolvedImageURL}
+            alt={title}
+            className="h-24 w-full rounded-[var(--radius-sm)] border object-cover"
+          />
         ) : (
           <div className="flex h-24 items-center justify-center rounded-[var(--radius-sm)] border border-dashed text-xs text-[var(--color-text-muted)]">
             暂无图片
@@ -1799,7 +1804,7 @@ function ImageUploadCard({
         <UiButton variant="secondary" size="sm" onClick={onPick} disabled={uploading}>
           {uploading ? "上传中..." : "上传图片"}
         </UiButton>
-        {imageURL ? (
+        {resolvedImageURL ? (
           <UiButton variant="ghost" size="sm" onClick={onClear}>
             清空
           </UiButton>

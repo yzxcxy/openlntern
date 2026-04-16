@@ -135,7 +135,7 @@ func (s *AgentDefinitionService) Create(ctx context.Context, ownerID string, inp
 		AgentType:            normalizeAgentType(input.AgentType),
 		SystemPrompt:         strings.TrimSpace(input.SystemPrompt),
 		AvatarURL:            normalizeAgentAvatarForStorage(input.AvatarURL),
-		ChatBackgroundJSON:   strings.TrimSpace(input.ChatBackgroundJSON),
+		ChatBackgroundJSON:   normalizeAgentChatBackgroundForStorage(input.ChatBackgroundJSON),
 		DefaultModelID:       strings.TrimSpace(input.DefaultModelID),
 		AgentMemoryEnabled:   input.AgentMemoryEnabled,
 		ExampleQuestionsJSON: mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
@@ -168,7 +168,7 @@ func (s *AgentDefinitionService) Update(ctx context.Context, ownerID, agentID st
 		"agent_type":             normalizeAgentType(input.AgentType),
 		"system_prompt":          strings.TrimSpace(input.SystemPrompt),
 		"avatar_url":             normalizeAgentAvatarForStorage(input.AvatarURL),
-		"chat_background_json":   strings.TrimSpace(input.ChatBackgroundJSON),
+		"chat_background_json":   normalizeAgentChatBackgroundForStorage(input.ChatBackgroundJSON),
 		"example_questions_json": mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
 		"default_model_id":       strings.TrimSpace(input.DefaultModelID),
 		"agent_memory_enabled":   input.AgentMemoryEnabled,
@@ -202,7 +202,7 @@ func (s *AgentDefinitionService) BuildDebugDetail(ctx context.Context, ownerID s
 		AgentType:            normalizeAgentType(input.AgentType),
 		SystemPrompt:         strings.TrimSpace(input.SystemPrompt),
 		AvatarURL:            normalizeAgentAvatarForStorage(input.AvatarURL),
-		ChatBackgroundJSON:   strings.TrimSpace(input.ChatBackgroundJSON),
+		ChatBackgroundJSON:   normalizeAgentChatBackgroundForStorage(input.ChatBackgroundJSON),
 		ExampleQuestionsJSON: mustMarshalStringList(normalizeQuestionList(input.ExampleQuestions)),
 		DefaultModelID:       strings.TrimSpace(input.DefaultModelID),
 		AgentMemoryEnabled:   input.AgentMemoryEnabled,
@@ -323,7 +323,7 @@ func (s *AgentDefinitionService) ListEnabledOptions(ownerID string) ([]EnabledAg
 			AgentType:          item.AgentType,
 			Status:             item.Status,
 			AvatarURL:          resolveAgentAvatarForView(item.AvatarURL),
-			ChatBackgroundJSON: item.ChatBackgroundJSON,
+			ChatBackgroundJSON: resolveAgentChatBackgroundForView(item.ChatBackgroundJSON),
 			DefaultModelID:     item.DefaultModelID,
 			DefaultModelName:   modelNames[item.DefaultModelID],
 			ExampleQuestions:   parseExampleQuestions(item.ExampleQuestionsJSON),
@@ -514,7 +514,7 @@ func buildAgentDetailView(item models.Agent, bindings []models.AgentBinding, mod
 		Status:             item.Status,
 		SystemPrompt:       item.SystemPrompt,
 		AvatarURL:          resolveAgentAvatarForView(item.AvatarURL),
-		ChatBackgroundJSON: item.ChatBackgroundJSON,
+		ChatBackgroundJSON: resolveAgentChatBackgroundForView(item.ChatBackgroundJSON),
 		ExampleQuestions:   parseExampleQuestions(item.ExampleQuestionsJSON),
 		DefaultModelID:     item.DefaultModelID,
 		DefaultModelName:   modelName,
@@ -563,14 +563,73 @@ func groupBindingsByAgentID(bindings []models.AgentBinding) map[string][]models.
 }
 
 func normalizeAgentAvatarForStorage(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	return trimmed
+	return normalizeAgentImageReference(raw)
 }
 
 func resolveAgentAvatarForView(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		trimmed = defaultAgentAvatarObjectKey
+	}
+	if resolved := resolveAgentImageReference(trimmed); resolved != "" {
+		return resolved
+	}
+	return trimmed
+}
+
+// normalizeAgentChatBackgroundForStorage keeps stored background references stable by replacing asset URLs with object keys.
+func normalizeAgentChatBackgroundForStorage(rawJSON string) string {
+	return rewriteAgentBackgroundJSON(rawJSON, normalizeAgentImageReference)
+}
+
+// resolveAgentChatBackgroundForView rewrites stored object keys into browser-consumable asset URLs.
+func resolveAgentChatBackgroundForView(rawJSON string) string {
+	return rewriteAgentBackgroundJSON(rawJSON, resolveAgentImageReference)
+}
+
+func rewriteAgentBackgroundJSON(rawJSON string, rewrite func(string) string) string {
+	trimmed := strings.TrimSpace(rawJSON)
+	if trimmed == "" {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return trimmed
+	}
+	for _, field := range []string{"image_url", "url"} {
+		current, ok := payload[field].(string)
+		if !ok {
+			continue
+		}
+		payload[field] = rewrite(current)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return trimmed
+	}
+	return string(encoded)
+}
+
+func normalizeAgentImageReference(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	objectKey, err := storagesvc.ObjectStorage.ExtractStoredObjectKey(trimmed)
+	if err == nil && objectKey != "" {
+		return objectKey
+	}
+	return trimmed
+}
+
+func resolveAgentImageReference(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	resolved, err := storagesvc.ObjectStorage.ResolveObjectAccessURL(trimmed)
+	if err == nil && strings.TrimSpace(resolved) != "" {
+		return resolved
 	}
 	if strings.HasPrefix(trimmed, "public/") {
 		url, err := storagesvc.BuildPublicObjectURL(trimmed)

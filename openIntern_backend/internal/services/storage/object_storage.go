@@ -160,6 +160,9 @@ func (s *ObjectStorageService) ExtractStoredObjectKey(storedValue string) (strin
 	if raw == "" {
 		return "", nil
 	}
+	if key, ok := extractObjectKeyFromAssetRoute(raw); ok {
+		return key, nil
+	}
 	key := normalizeObjectKey(raw)
 	if hasSupportedObjectPrefix(key) {
 		return key, nil
@@ -236,6 +239,39 @@ func (s *ObjectStorageService) ReadObject(ctx context.Context, storedValue strin
 
 func hasSupportedObjectPrefix(key string) bool {
 	return strings.HasPrefix(key, "users/") || strings.HasPrefix(key, "public/")
+}
+
+// extractObjectKeyFromAssetRoute keeps persisted asset references stable even when callers submit app asset URLs.
+func extractObjectKeyFromAssetRoute(raw string) (string, bool) {
+	candidates := []string{strings.TrimSpace(raw)}
+	if parsed, err := url.Parse(raw); err == nil && strings.TrimSpace(parsed.Path) != "" {
+		candidates = append(candidates, parsed.Path)
+	}
+	for _, candidate := range candidates {
+		if key, ok := trimObjectKeyFromAssetPrefix(candidate, backendAssetRoutePrefix); ok {
+			return key, true
+		}
+		if key, ok := trimObjectKeyFromAssetPrefix(candidate, "/api/backend"+backendAssetRoutePrefix); ok {
+			return key, true
+		}
+	}
+	return "", false
+}
+
+func trimObjectKeyFromAssetPrefix(raw string, prefix string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, prefix) {
+		return "", false
+	}
+	key := strings.TrimPrefix(trimmed, prefix)
+	if cut := strings.IndexAny(key, "?#"); cut >= 0 {
+		key = key[:cut]
+	}
+	key = normalizeObjectKey(key)
+	if !hasSupportedObjectPrefix(key) {
+		return "", false
+	}
+	return key, true
 }
 
 func signObjectAccess(objectKey string, expiresAt int64) string {

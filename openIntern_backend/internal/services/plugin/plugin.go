@@ -770,6 +770,10 @@ func normalizePluginIconForStorage(value string) string {
 	if icon == "" {
 		return strings.TrimSpace(pluginDefaultIconURL)
 	}
+	objectKey, err := storagesvc.ObjectStorage.ExtractStoredObjectKey(icon)
+	if err == nil && objectKey != "" {
+		return objectKey
+	}
 	return icon
 }
 
@@ -777,6 +781,10 @@ func resolvePluginIconForView(value string) string {
 	icon := strings.TrimSpace(value)
 	if icon == "" {
 		icon = strings.TrimSpace(pluginDefaultIconURL)
+	}
+	resolved, err := storagesvc.ObjectStorage.ResolveObjectAccessURL(icon)
+	if err == nil && strings.TrimSpace(resolved) != "" {
+		return resolved
 	}
 	if strings.HasPrefix(icon, "public/") {
 		resolved, err := storagesvc.BuildPublicObjectURL(icon)
