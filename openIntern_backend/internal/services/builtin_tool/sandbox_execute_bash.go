@@ -55,7 +55,7 @@ func sandboxExecuteBashImpl(ctx context.Context, input SandboxExecuteBashInput) 
 func GetSandboxExecuteBashTool(ctx context.Context) (einoTool.BaseTool, error) {
 	return utils.InferTool[SandboxExecuteBashInput, string](
 		"sandbox_execute_bash",
-		"在当前用户的 AIO sandbox 中执行 bash 命令。",
+		"在当前用户的 AIO sandbox 中执行 bash 命令。仅适用于 sandbox 内可见文件，不能读取 skill 仓库中的文件。",
 		sandboxExecuteBashImpl,
 	)
 }

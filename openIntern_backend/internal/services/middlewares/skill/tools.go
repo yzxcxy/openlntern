@@ -34,7 +34,7 @@ func GetSkillFileTools(repo SkillRepository) ([]einoTool.BaseTool, error) {
 	}
 	listTool, err := utils.InferTool[listSkillFilesInput, string](
 		"list_skill_files",
-		"列出技能目录内的文件与子目录，返回相对路径、类型、大小与修改时间。",
+		"列出技能目录内的文件与子目录，返回相对路径、类型、大小与修改时间。Skill 文件不在 sandbox 内，不能通过 bash/cat 直接读取。",
 		listSkillFilesImpl(repo),
 	)
 	if err != nil {
@@ -42,7 +42,7 @@ func GetSkillFileTools(repo SkillRepository) ([]einoTool.BaseTool, error) {
 	}
 	readTool, err := utils.InferTool[readSkillFileInput, string](
 		"read_skill_file",
-		"专门用于读取技能目录内的指定文件，返回纯文本内容。",
+		"专门用于读取技能目录内的指定文件，返回纯文本内容。Skill 文件不在 sandbox 内，不能通过 bash/cat 直接读取。",
 		readSkillFileImpl(repo),
 	)
 	if err != nil {

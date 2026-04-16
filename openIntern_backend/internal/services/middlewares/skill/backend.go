@@ -117,9 +117,19 @@ func (b *RemoteBackend) Get(ctx context.Context, name string) (einoSkill.Skill, 
 			Name:        record.SkillName,
 			Description: parsed.Description,
 		},
-		Content:       strings.TrimSpace(content),
-		BaseDirectory: baseDir,
+		Content: strings.TrimSpace(content),
+		// 这里返回给上游 skill middleware 的 BaseDirectory 只用于向模型展示技能来源，
+		// 不是 sandbox 内可直接访问的真实目录，否则模型容易误判为可用 bash/cat 直接读取。
+		BaseDirectory: buildLogicalSkillBaseDirectory(baseDir),
 	}, nil
+}
+
+func buildLogicalSkillBaseDirectory(baseDir string) string {
+	trimmed := strings.TrimSpace(baseDir)
+	if trimmed == "" {
+		return "skill repository (logical only; not mounted in sandbox. Use list_skill_files/read_skill_file to access files.)"
+	}
+	return trimmed + " [logical skill repository only; not mounted in sandbox. Use list_skill_files/read_skill_file to access files.]"
 }
 
 type frontmatterPayload struct {
