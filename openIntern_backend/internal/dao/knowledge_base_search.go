@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"openIntern/internal/database"
@@ -56,13 +57,27 @@ func (d *KnowledgeBaseDAO) SearchInKnowledgeBases(ctx context.Context, query str
 	if len(cleanNames) == 0 {
 		return nil, nil
 	}
+	userID, err := OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	matches := make([]KnowledgeBaseSearchMatch, 0, len(cleanNames)*limitPerKB)
 	seenURI := make(map[string]struct{}, len(cleanNames)*limitPerKB)
 	for _, kbName := range cleanNames {
-		targetURI, err := d.URI(ctx, kbName)
+		kb, err := KBLocal.GetByName(ctx, userID, kbName)
 		if err != nil {
+			if errors.Is(err, ErrKBNotFound) {
+				continue
+			}
 			return nil, err
+		}
+		targetURI := strings.TrimSpace(kb.OpenVikingURI)
+		if targetURI == "" {
+			targetURI, err = d.URI(ctx, kbName)
+			if err != nil {
+				return nil, err
+			}
 		}
 		items, err := d.searchByTargetURI(ctx, query, targetURI, limitPerKB)
 		if err != nil {

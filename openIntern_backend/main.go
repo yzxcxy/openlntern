@@ -47,6 +47,9 @@ func main() {
 	if sandboxShutdown != nil {
 		defer sandboxShutdown()
 	}
+	if err := pluginsvc.InitBuiltinSandboxCatalog(cfg.Tools.Sandbox); err != nil {
+		log.Fatalf("failed to init builtin sandbox catalog: %v", err)
+	}
 	shutdown, err := agentsvc.InitEino(cfg.SummaryLLM, cfg.Tools, cfg.Agent, cfg.ContextCompression, cfg.APMPlus)
 	if err != nil {
 		log.Fatalf("failed to init eino: %v", err)

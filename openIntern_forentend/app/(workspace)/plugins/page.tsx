@@ -90,10 +90,22 @@ export default function PluginsPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const previewJSON = useMemo(() => JSON.stringify(buildPayload(draft), null, 2), [draft]);
   const activeDraftTool = useMemo(() => {
-    const nextTools = ensureRuntimeTools(draft.tools, draft.runtimeType);
+    const nextTools =
+      draft.source === "builtin"
+        ? draft.tools
+        : ensureRuntimeTools(draft.tools, draft.runtimeType);
     if (nextTools.length === 0) return null;
     return nextTools[Math.min(wizardToolIndex, nextTools.length - 1)] ?? null;
-  }, [draft.runtimeType, draft.tools, wizardToolIndex]);
+  }, [draft.runtimeType, draft.source, draft.tools, wizardToolIndex]);
+  const draftPluginLazyLoad = useMemo(() => {
+    const nextTools =
+      draft.source === "builtin"
+        ? draft.tools
+        : ensureRuntimeTools(draft.tools, draft.runtimeType);
+    return nextTools.length > 0
+      ? nextTools.every((tool) => tool.lazyLoad)
+      : draft.lazyLoad;
+  }, [draft.lazyLoad, draft.runtimeType, draft.source, draft.tools]);
   const activeTool = useMemo(() => {
     const tools = selectedPlugin?.tools ?? [];
     if (tools.length === 0) return null;
@@ -211,6 +223,8 @@ export default function PluginsPage() {
       toolId: tool.tool_id,
       toolName: tool.tool_name ?? "",
       description: tool.description ?? "",
+      lazyLoad: Boolean(tool.lazy_load),
+      searchHint: tool.search_hint ?? "",
       toolResponseMode:
         tool.tool_response_mode === "streaming" ? "streaming" : "non_streaming",
       apiRequestType: tool.api_request_type ?? "GET",
@@ -232,10 +246,15 @@ export default function PluginsPage() {
     }));
     setDraft({
       pluginId: plugin.plugin_id,
+      source: plugin.source === "builtin" ? "builtin" : "custom",
       name: plugin.name ?? "",
       description: plugin.description ?? "",
       icon: plugin.icon ?? "",
       enabled: plugin.status !== "disabled",
+      lazyLoad:
+        draftTools.length > 0
+          ? draftTools.every((tool) => tool.lazyLoad)
+          : Boolean(plugin.lazy_load),
       runtimeType,
       mcpURL: plugin.mcp_url ?? "",
       mcpProtocol: normalizeMCPProtocolValue(plugin.mcp_protocol),
@@ -541,6 +560,7 @@ export default function PluginsPage() {
   };
 
   const isBuiltinFilterActive = sourceFilter === "builtin";
+  const isBuiltinDraft = draft.source === "builtin";
 
   return (
     <div className="workspace-gradient-surface workspace-gradient-surface--panel h-full overflow-auto p-0">
@@ -988,6 +1008,12 @@ export default function PluginsPage() {
                             : "-"}
                         </div>
                       </div>
+                      <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3">
+                        <div className="text-xs text-[var(--color-text-muted)]">加载策略</div>
+                        <div className="mt-1 text-sm font-semibold text-[var(--color-text-primary)]">
+                          {selectedPlugin.lazy_load || activeTool.lazy_load ? "延迟加载" : "默认注入"}
+                        </div>
+                      </div>
                       {selectedPlugin.runtime_type === "api" && (
                         <>
                           <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3">
@@ -1028,6 +1054,12 @@ export default function PluginsPage() {
                             __html: activeTool.description?.trim() || "暂无描述",
                           }}
                         />
+                      </div>
+                      <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-3 md:col-span-2">
+                        <div className="text-xs text-[var(--color-text-muted)]">搜索提示词</div>
+                        <div className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--color-text-primary)]">
+                          {activeTool.search_hint?.trim() || "未设置"}
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -1129,11 +1161,9 @@ export default function PluginsPage() {
                       {draft.pluginId ? "第一步：查看插件类型" : "第一步：选择来源与运行方式"}
                     </div>
                     <div className="mt-2 text-xs text-[var(--color-text-muted)]">
-                      {draft.pluginId ? (
-                        "插件类型在创建时已确定，编辑时不可修改。"
-                      ) : (
-                        <>来源固定为 `custom`，`builtin` 保持只读。</>
-                      )}
+                      {draft.pluginId
+                        ? "插件类型在创建时已确定，编辑时不可修改。"
+                        : "来源固定为 custom，builtin 保持只读。"}
                     </div>
                     {draft.pluginId ? (
                       <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--color-action-primary)] bg-[rgba(37,99,255,0.06)] p-4">
@@ -1198,6 +1228,7 @@ export default function PluginsPage() {
                       <UiInput
                         placeholder="请输入插件名称"
                         value={draft.name}
+                        disabled={isBuiltinDraft}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, name: event.target.value }))
                         }
@@ -1207,6 +1238,7 @@ export default function PluginsPage() {
                       <UiInput
                         placeholder="请输入插件描述"
                         value={draft.description}
+                        disabled={isBuiltinDraft}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, description: event.target.value }))
                         }
@@ -1223,6 +1255,7 @@ export default function PluginsPage() {
                               spellCheck={false}
                               placeholder="请输入头像 URL（可选）"
                               value={draft.icon}
+                              disabled={isBuiltinDraft}
                               onChange={(event) =>
                                 setDraft((current) => ({ ...current, icon: event.target.value }))
                               }
@@ -1231,6 +1264,7 @@ export default function PluginsPage() {
                           <UiButton
                             variant="secondary"
                             onClick={openIconUpload}
+                            disabled={isBuiltinDraft}
                             loading={uploadingIcon}
                           >
                             上传头像
@@ -1267,11 +1301,12 @@ export default function PluginsPage() {
                       <input
                         type="checkbox"
                         checked={draft.enabled}
+                        disabled={isBuiltinDraft}
                         onChange={(event) =>
                           setDraft((current) => ({ ...current, enabled: event.target.checked }))
                         }
                       />
-                      创建后立即启用
+                      {isBuiltinDraft ? "内建插件启停请在详情页单独操作" : "创建后立即启用"}
                     </label>
                   </div>
                 )}
@@ -1282,17 +1317,90 @@ export default function PluginsPage() {
                       第三步：填写运行配置
                     </div>
 
-                    {requiresRuntimeTools(draft.runtimeType) && (
+                    <FormFieldRow label="插件级加载策略">
+                      <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+                        <input
+                          type="checkbox"
+                          checked={draftPluginLazyLoad}
+                          onChange={(event) =>
+                            setDraft((current) => {
+                              const nextValue = event.target.checked;
+                              const nextTools =
+                                current.source === "builtin"
+                                  ? current.tools
+                                  : ensureRuntimeTools(current.tools, current.runtimeType);
+                              return {
+                                ...current,
+                                lazyLoad: nextValue,
+                                tools:
+                                  nextTools.length > 0
+                                    ? nextTools.map((tool) => ({
+                                        ...tool,
+                                        lazyLoad: nextValue,
+                                      }))
+                                    : current.tools,
+                              };
+                            })
+                          }
+                        />
+                        整个插件启用延迟加载
+                      </label>
+                    </FormFieldRow>
+
+                    {(requiresRuntimeTools(draft.runtimeType) || isBuiltinDraft) && (
                       <ToolDraftSwitcher
-                        tools={ensureRuntimeTools(draft.tools, draft.runtimeType)}
+                        tools={
+                          isBuiltinDraft
+                            ? draft.tools
+                            : ensureRuntimeTools(draft.tools, draft.runtimeType)
+                        }
                         activeIndex={wizardToolIndex}
                         onSelect={setWizardToolIndex}
                         onAdd={addDraftTool}
                         onRemove={removeDraftToolAt}
+                        allowManage={!isBuiltinDraft}
                       />
                     )}
 
-                    {draft.runtimeType === "api" && activeDraftTool && (
+                    {isBuiltinDraft && activeDraftTool && (
+                      <div className="space-y-4">
+                        <FormFieldRow label="工具名称">
+                          <UiInput value={activeDraftTool.toolName} disabled />
+                        </FormFieldRow>
+                        <FormFieldRow label="工具描述">
+                          <UiTextarea value={activeDraftTool.description} disabled />
+                        </FormFieldRow>
+                        <FormFieldRow label="加载策略">
+                          <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+                            <input
+                              type="checkbox"
+                              checked={activeDraftTool.lazyLoad}
+                              onChange={(event) =>
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  lazyLoad: event.target.checked,
+                                }))
+                              }
+                            />
+                            启用延迟加载
+                          </label>
+                        </FormFieldRow>
+                        <FormFieldRow label="搜索提示词">
+                          <UiTextarea
+                            placeholder="例如：对象存储、上传文件、沙箱文件上传"
+                            value={activeDraftTool.searchHint}
+                            onChange={(event) =>
+                              updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                ...tool,
+                                searchHint: event.target.value,
+                              }))
+                            }
+                          />
+                        </FormFieldRow>
+                      </div>
+                    )}
+
+                    {draft.runtimeType === "api" && activeDraftTool && !isBuiltinDraft && (
                       <>
                         <div className="space-y-4">
                           <FormFieldRow label="工具名称" required>
@@ -1315,6 +1423,33 @@ export default function PluginsPage() {
                                 updateDraftToolAt(wizardToolIndex, (tool) => ({
                                   ...tool,
                                   description: event.target.value,
+                                }))
+                              }
+                            />
+                          </FormFieldRow>
+                          <FormFieldRow label="加载策略">
+                            <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+                              <input
+                                type="checkbox"
+                                checked={activeDraftTool.lazyLoad}
+                                onChange={(event) =>
+                                  updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                    ...tool,
+                                    lazyLoad: event.target.checked,
+                                  }))
+                                }
+                              />
+                              启用延迟加载
+                            </label>
+                          </FormFieldRow>
+                          <FormFieldRow label="搜索提示词">
+                            <UiTextarea
+                              placeholder="例如：天气查询、城市温度、气象 API"
+                              value={activeDraftTool.searchHint}
+                              onChange={(event) =>
+                                updateDraftToolAt(wizardToolIndex, (tool) => ({
+                                  ...tool,
+                                  searchHint: event.target.value,
                                 }))
                               }
                             />
@@ -1419,7 +1554,7 @@ export default function PluginsPage() {
                       </>
                     )}
 
-                    {draft.runtimeType === "mcp" && (
+                    {draft.runtimeType === "mcp" && !isBuiltinDraft && (
                       <div className="space-y-4">
                         <FormFieldRow label="MCP URL" required>
                           <UiInput
@@ -1470,7 +1605,7 @@ export default function PluginsPage() {
                       </div>
                     )}
 
-                    {draft.runtimeType === "code" && activeDraftTool && (
+                    {draft.runtimeType === "code" && activeDraftTool && !isBuiltinDraft && (
                       <CodeToolEditor
                         tool={activeDraftTool}
                         onDebugRun={debugCodeTool}
@@ -1488,7 +1623,9 @@ export default function PluginsPage() {
                       第四步：预览并确认
                     </div>
                     <div className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] px-3 py-3 text-xs text-[var(--color-text-muted)]">
-                      将写入 plugin 定义，并生成对应的 tool 元数据；敏感信息仅保存引用，不经前端透传。
+                      {isBuiltinDraft
+                        ? "仅会更新内建工具的延迟加载与搜索提示词，不会改动工具实现和其他插件定义。"
+                        : "将写入 plugin 定义，并生成对应的 tool 元数据；敏感信息仅保存引用，不经前端透传。"}
                     </div>
                     <pre className="overflow-auto rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[rgb(15,23,42)] p-4 text-xs text-[rgb(226,232,240)]">
                       {previewJSON}

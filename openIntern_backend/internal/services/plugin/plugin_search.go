@@ -36,6 +36,7 @@ type localRuntimeToolCandidate struct {
 	ToolID            string
 	ToolName          string
 	Description       string
+	SearchHint        string
 	RuntimeType       string
 	PluginName        string
 	PluginDescription string
@@ -88,7 +89,7 @@ func (s *PluginService) SearchRuntimeTools(ctx context.Context, query string, op
 	}
 
 	runtimeTypes := normalizeToolSearchRuntimeTypes(options.RuntimeTypes)
-	rows, err := dao.Plugin.ListEnabledRuntimeToolSearchRows(userID, runtimeTypes)
+	rows, err := dao.Plugin.ListEnabledRuntimeToolSearchRows(userID, runtimeTypes, true)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +181,7 @@ func buildLocalRuntimeToolCandidates(rows []dao.EnabledRuntimeToolSearchRow) []l
 			ToolID:            toolID,
 			ToolName:          toolName,
 			Description:       strings.ToLower(strings.TrimSpace(row.Description)),
+			SearchHint:        strings.ToLower(strings.TrimSpace(row.SearchHint)),
 			RuntimeType:       strings.ToLower(strings.TrimSpace(row.RuntimeType)),
 			PluginName:        strings.ToLower(strings.TrimSpace(row.PluginName)),
 			PluginDescription: strings.ToLower(strings.TrimSpace(row.PluginDescription)),
@@ -294,6 +296,9 @@ func scoreRuntimeToolCandidate(candidate localRuntimeToolCandidate, terms []stri
 		if strings.Contains(candidate.Description, term) {
 			score += 2
 		}
+		if strings.Contains(candidate.SearchHint, term) {
+			score += 6
+		}
 		if strings.Contains(candidate.PluginName, term) {
 			score += 4
 		}
@@ -314,6 +319,7 @@ func candidateContainsTerm(candidate localRuntimeToolCandidate, term string) boo
 		containsPartialNamePart(candidate.NameParts, term) ||
 		strings.Contains(candidate.FullName, term) ||
 		strings.Contains(candidate.Description, term) ||
+		strings.Contains(candidate.SearchHint, term) ||
 		strings.Contains(candidate.PluginName, term) ||
 		strings.Contains(candidate.PluginDescription, term)
 }
@@ -382,12 +388,12 @@ func normalizeToolSearchMaxMCPTools(value int) int {
 	return value
 }
 
-// normalizeToolSearchRuntimeTypes 归一化 runtime_type 白名单，默认包含 api/mcp/code。
+// normalizeToolSearchRuntimeTypes 归一化 runtime_type 白名单，默认包含 api/mcp/code/builtin。
 func normalizeToolSearchRuntimeTypes(values []string) []string {
 	normalized := make([]string, 0, len(values))
 	for _, value := range values {
 		switch strings.ToLower(strings.TrimSpace(value)) {
-		case pluginRuntimeAPI, pluginRuntimeMCP, pluginRuntimeCode:
+		case pluginRuntimeAPI, pluginRuntimeMCP, pluginRuntimeCode, pluginRuntimeBuiltin:
 			normalized = append(normalized, strings.ToLower(strings.TrimSpace(value)))
 		}
 	}
@@ -395,5 +401,5 @@ func normalizeToolSearchRuntimeTypes(values []string) []string {
 	if len(normalized) > 0 {
 		return normalized
 	}
-	return []string{pluginRuntimeAPI, pluginRuntimeMCP, pluginRuntimeCode}
+	return []string{pluginRuntimeAPI, pluginRuntimeMCP, pluginRuntimeCode, pluginRuntimeBuiltin}
 }

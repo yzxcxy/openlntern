@@ -11,6 +11,7 @@ export type FieldType =
   | "object"
   | "array";
 export type MCPProtocol = "sse" | "streamableHttp";
+export type PluginSource = "" | "custom" | "builtin";
 
 export type PluginField = {
   id: string;
@@ -28,6 +29,8 @@ export type PluginTool = {
   tool_id?: string;
   tool_name?: string;
   description?: string;
+  lazy_load?: boolean;
+  search_hint?: string;
   tool_response_mode?: ResponseMode;
   api_request_type?: RequestType;
   request_url?: string;
@@ -53,6 +56,7 @@ export type PluginRecord = {
   source?: string;
   runtime_type?: RuntimeType;
   status?: "enabled" | "disabled";
+  lazy_load?: boolean;
   mcp_url?: string;
   mcp_protocol?: string;
   timeout_ms?: number;
@@ -67,6 +71,8 @@ export type ToolDraft = {
   toolId?: string;
   toolName: string;
   description: string;
+  lazyLoad: boolean;
+  searchHint: string;
   toolResponseMode: ResponseMode;
   apiRequestType: RequestType;
   requestURL: string;
@@ -82,10 +88,12 @@ export type ToolDraft = {
 
 export type PluginDraft = {
   pluginId?: string;
+  source: PluginSource;
   name: string;
   description: string;
   icon: string;
   enabled: boolean;
+  lazyLoad: boolean;
   runtimeType: RuntimeType;
   mcpURL: string;
   mcpProtocol: MCPProtocol;
@@ -148,6 +156,8 @@ export const sanitizeOutputFields = (fields: PluginField[]): PluginField[] =>
 export const createToolDraft = (): ToolDraft => ({
   toolName: "",
   description: "",
+  lazyLoad: false,
+  searchHint: "",
   toolResponseMode: "non_streaming",
   apiRequestType: "GET",
   requestURL: "",
@@ -162,10 +172,12 @@ export const createToolDraft = (): ToolDraft => ({
 });
 
 export const createPluginDraft = (): PluginDraft => ({
+  source: "custom",
   name: "",
   description: "",
   icon: "",
   enabled: true,
+  lazyLoad: false,
   runtimeType: "",
   mcpURL: "",
   mcpProtocol: "sse",
@@ -713,13 +725,20 @@ const validateRuntimePayload = (
 };
 
 export const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
+  const nextTools =
+    draft.runtimeType === "mcp"
+      ? []
+      : ensureRuntimeTools(draft.tools, draft.runtimeType);
+  const pluginLazyLoad =
+    nextTools.length > 0 ? nextTools.every((tool) => tool.lazyLoad) : draft.lazyLoad;
   const payload: Record<string, unknown> = {
     name: draft.name.trim(),
     description: draft.description.trim(),
     icon: draft.icon.trim(),
-    source: "custom",
+    source: draft.source || "custom",
     runtime_type: draft.runtimeType,
     enabled: draft.enabled,
+    lazy_load: pluginLazyLoad,
   };
 
   if (draft.runtimeType === "mcp") {
@@ -733,12 +752,13 @@ export const buildPayload = (draft: PluginDraft): Record<string, unknown> => {
     return payload;
   }
 
-  const nextTools = ensureRuntimeTools(draft.tools, draft.runtimeType);
   payload.tools = nextTools.map((tool) => {
     const toolPayload: Record<string, unknown> = {
       ...(tool.toolId ? { tool_id: tool.toolId } : {}),
       tool_name: tool.toolName.trim(),
       description: tool.description.trim(),
+      lazy_load: tool.lazyLoad,
+      search_hint: tool.searchHint.trim(),
       enabled: true,
     };
 

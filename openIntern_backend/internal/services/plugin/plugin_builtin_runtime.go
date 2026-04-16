@@ -17,7 +17,15 @@ func (s *PluginService) BuildRuntimeBuiltinTools(ctx context.Context, toolIDs []
 	if len(toolIDs) == 0 {
 		return nil, nil
 	}
+	return s.buildRuntimeBuiltinTools(ctx, toolIDs)
+}
 
+// BuildAllRuntimeBuiltinTools 构建全部启用态 builtin 插件工具，供动态工具池预装使用。
+func (s *PluginService) BuildAllRuntimeBuiltinTools(ctx context.Context) ([]einoTool.BaseTool, error) {
+	return s.buildRuntimeBuiltinTools(ctx, nil)
+}
+
+func (s *PluginService) buildRuntimeBuiltinTools(ctx context.Context, toolIDs []string) ([]einoTool.BaseTool, error) {
 	userID := userIDFromContext(ctx)
 	if userID == "" {
 		return nil, nil
@@ -39,7 +47,15 @@ func (s *PluginService) BuildRuntimeBuiltinTools(ctx context.Context, toolIDs []
 	for _, row := range toolRows {
 		runtimeTool, ok := catalog[row.ToolName]
 		if !ok {
-			return nil, fmt.Errorf("builtin tool implementation not found: %s", row.ToolName)
+			if isBuiltinSandboxToolName(row.ToolName) {
+				var err error
+				runtimeTool, err = newSandboxBuiltinProxyTool(row)
+				if err != nil {
+					return nil, fmt.Errorf("build sandbox builtin tool %s failed: %w", row.ToolID, err)
+				}
+			} else {
+				return nil, fmt.Errorf("builtin tool implementation not found: %s", row.ToolName)
+			}
 		}
 		runtimeTools = append(runtimeTools, runtimeTool)
 	}

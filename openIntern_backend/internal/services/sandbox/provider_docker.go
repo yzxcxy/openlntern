@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"os/exec"
 	"strings"
 	"time"
 
 	"openIntern/internal/config"
+
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 type DockerProvider struct {
@@ -121,15 +122,33 @@ func (p *DockerProvider) HealthCheck(ctx context.Context, instance Instance) err
 	checkCtx, cancel := healthcheckContext(ctx, p.healthcheckTimout)
 	defer cancel()
 
-	parsed, err := url.Parse(strings.TrimSpace(instance.Endpoint))
-	if err != nil {
-		return err
+	mcpURL := strings.TrimRight(strings.TrimSpace(instance.Endpoint), "/") + "/mcp"
+	var lastErr error
+	for {
+		if err := probeSandboxMCP(checkCtx, mcpURL); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+
+		if checkCtx.Err() != nil {
+			break
+		}
+		timer := time.NewTimer(300 * time.Millisecond)
+		select {
+		case <-checkCtx.Done():
+			timer.Stop()
+		case <-timer.C:
+		}
 	}
-	conn, err := (&net.Dialer{}).DialContext(checkCtx, "tcp", parsed.Host)
-	if err != nil {
-		return err
+
+	if lastErr == nil {
+		lastErr = checkCtx.Err()
 	}
-	return conn.Close()
+	if lastErr == nil {
+		lastErr = errors.New("sandbox mcp health check timed out")
+	}
+	return fmt.Errorf("sandbox mcp health check failed: %w", lastErr)
 }
 
 func (p *DockerProvider) removeStaleContainer(ctx context.Context, userID string) error {
@@ -217,4 +236,28 @@ func dockerOutput(ctx context.Context, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("docker %s failed: %s", strings.Join(args, " "), msg)
 	}
 	return output, nil
+}
+
+// probeSandboxMCP verifies that the sandbox MCP endpoint can finish one initialize handshake.
+func probeSandboxMCP(ctx context.Context, mcpURL string) error {
+	cli, err := client.NewStreamableHttpClient(mcpURL)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = cli.Close()
+	}()
+
+	if err := cli.Start(ctx); err != nil {
+		return err
+	}
+
+	request := mcp.InitializeRequest{}
+	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	request.Params.ClientInfo = mcp.Implementation{
+		Name:    "openintern-sandbox-healthcheck",
+		Version: "1.0.0",
+	}
+	_, err = cli.Initialize(ctx, request)
+	return err
 }

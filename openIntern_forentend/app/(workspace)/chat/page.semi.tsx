@@ -118,6 +118,10 @@ type EnabledAgentOption = {
   example_questions?: string[];
 };
 
+// 对话里的临时知识库问答不支持索引失败的知识库。
+const isChatSelectableKnowledgeBase = (item: KnowledgeBaseOption) =>
+  String(item.index_status ?? "").trim().toLowerCase() !== "failed";
+
 const parseBackgroundImageURL = (rawJSON: string | undefined): string => {
   const trimmed = (rawJSON || "").trim();
   if (!trimmed) {
@@ -412,7 +416,9 @@ function ChatContent({ token, userId, userName, userAvatar }: ChatContentProps) 
             keyword: `${id} ${name}`.toLowerCase(),
           });
         });
-        const kbItems = Array.isArray(kbsData.data) ? kbsData.data : [];
+        const kbItems = Array.isArray(kbsData.data)
+          ? kbsData.data.filter(isChatSelectableKnowledgeBase)
+          : [];
         kbItems.forEach((item) => {
           const name =
             typeof item.name === "string" ? item.name.trim() : "";

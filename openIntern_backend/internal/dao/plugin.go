@@ -33,6 +33,8 @@ type EnabledRuntimeToolSearchRow struct {
 	ToolID            string `gorm:"column:tool_id"`
 	ToolName          string `gorm:"column:tool_name"`
 	Description       string `gorm:"column:description"`
+	LazyLoad          bool   `gorm:"column:lazy_load"`
+	SearchHint        string `gorm:"column:search_hint"`
 	RuntimeType       string `gorm:"column:runtime_type"`
 	PluginName        string `gorm:"column:plugin_name"`
 	PluginDescription string `gorm:"column:plugin_description"`
@@ -79,6 +81,7 @@ func (d *PluginDAO) Update(userID string, pluginID string, plugin *models.Plugin
 				"source":       plugin.Source,
 				"runtime_type": plugin.RuntimeType,
 				"status":       plugin.Status,
+				"lazy_load":    plugin.LazyLoad,
 				"mcp_url":      plugin.MCPURL,
 				"mcp_protocol": plugin.MCPProtocol,
 				"last_sync_at": plugin.LastSyncAt,
@@ -319,18 +322,45 @@ func (d *PluginDAO) ListEnabledToolsByIDs(userID string, toolIDs []string) ([]mo
 	return tools, nil
 }
 
+// ListEnabledRuntimeToolNamesByLazyLoad 返回指定延迟加载状态下的启用工具名。
+func (d *PluginDAO) ListEnabledRuntimeToolNamesByLazyLoad(userID string, runtimeTypes []string, lazyLoad bool) ([]string, error) {
+	query := database.DB.
+		Table("tool").
+		Select("tool.tool_name").
+		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id AND plugin.user_id = tool.user_id").
+		Where("tool.user_id = ? AND tool.enabled = ? AND plugin.status = ?", strings.TrimSpace(userID), true, "enabled")
+	if len(runtimeTypes) > 0 {
+		query = query.Where("plugin.runtime_type IN ?", runtimeTypes)
+	}
+	// 插件级延迟加载会把该插件下全部工具都纳入延迟集合。
+	if lazyLoad {
+		query = query.Where("(plugin.lazy_load = ? OR tool.lazy_load = ?)", true, true)
+	} else {
+		query = query.Where("plugin.lazy_load = ? AND tool.lazy_load = ?", false, false)
+	}
+
+	var names []string
+	if err := query.Order("tool.tool_name ASC").Pluck("tool.tool_name", &names).Error; err != nil {
+		return nil, err
+	}
+	return util.NormalizeUniqueStringList(names), nil
+}
+
 // ListEnabledRuntimeToolSearchRows 返回本地工具搜索所需的启用态工具视图。
-func (d *PluginDAO) ListEnabledRuntimeToolSearchRows(userID string, runtimeTypes []string) ([]EnabledRuntimeToolSearchRow, error) {
+func (d *PluginDAO) ListEnabledRuntimeToolSearchRows(userID string, runtimeTypes []string, lazyLoadOnly bool) ([]EnabledRuntimeToolSearchRow, error) {
 	query := database.DB.
 		Table("tool").
 		Select(
-			"tool.tool_id AS tool_id, tool.tool_name AS tool_name, tool.description AS description, "+
+			"tool.tool_id AS tool_id, tool.tool_name AS tool_name, tool.description AS description, tool.lazy_load AS lazy_load, tool.search_hint AS search_hint, "+
 				"plugin.runtime_type AS runtime_type, plugin.name AS plugin_name, plugin.description AS plugin_description",
 		).
 		Joins("JOIN plugin ON plugin.plugin_id = tool.plugin_id AND plugin.user_id = tool.user_id").
 		Where("tool.user_id = ? AND tool.enabled = ? AND plugin.status = ?", strings.TrimSpace(userID), true, "enabled")
 	if len(runtimeTypes) > 0 {
 		query = query.Where("plugin.runtime_type IN ?", runtimeTypes)
+	}
+	if lazyLoadOnly {
+		query = query.Where("(plugin.lazy_load = ? OR tool.lazy_load = ?)", true, true)
 	}
 
 	var rows []EnabledRuntimeToolSearchRow
@@ -461,6 +491,8 @@ func buildToolUpdateMap(tool models.Tool) map[string]any {
 		"plugin_id":          tool.PluginID,
 		"tool_name":          tool.ToolName,
 		"description":        tool.Description,
+		"lazy_load":          tool.LazyLoad,
+		"search_hint":        tool.SearchHint,
 		"input_schema_json":  tool.InputSchemaJSON,
 		"output_schema_json": tool.OutputSchemaJSON,
 		"tool_response_mode": tool.ToolResponseMode,

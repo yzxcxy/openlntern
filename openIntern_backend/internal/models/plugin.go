@@ -18,6 +18,7 @@ type Plugin struct {
 	Source      string     `gorm:"index;not null;size:20" json:"source"`
 	RuntimeType string     `gorm:"index;not null;size:20" json:"runtime_type"`
 	Status      string     `gorm:"index;not null;size:20" json:"status"`
+	LazyLoad    bool       `gorm:"column:lazy_load;not null;default:false" json:"lazy_load"`
 	MCPURL      string     `gorm:"column:mcp_url;size:255" json:"mcp_url"`
 	MCPProtocol string     `gorm:"column:mcp_protocol;size:40" json:"mcp_protocol"`
 	TimeoutMS   int        `gorm:"column:timeout_ms;default:30000" json:"timeout_ms"`

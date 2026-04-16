@@ -12,6 +12,15 @@ func (s *PluginService) ResolveEnabledRuntimeToolNamesByIDs(toolIDs []string) ([
 	return []string{}, nil
 }
 
+// ListInitiallyVisibleRuntimeToolNamesForUser 返回 search 模式下默认暴露给模型的动态工具名。
+func (s *PluginService) ListInitiallyVisibleRuntimeToolNamesForUser(userID string) ([]string, error) {
+	return dao.Plugin.ListEnabledRuntimeToolNamesByLazyLoad(
+		userID,
+		[]string{pluginRuntimeAPI, pluginRuntimeMCP, pluginRuntimeCode, pluginRuntimeBuiltin},
+		false,
+	)
+}
+
 func (s *PluginService) ResolveEnabledRuntimeToolNamesByIDsForUser(userID string, toolIDs []string) ([]string, error) {
 	toolIDs = util.NormalizeUniqueStringList(toolIDs)
 	if len(toolIDs) == 0 {

@@ -249,6 +249,9 @@ func (h contextSelectionsForwardedPropsHandler) Handle(ctx *forwardedPropsChainC
 		return nil
 	}
 	ctx.runtimeConfig.KnowledgeBaseNames = collectKnowledgeBaseNames(selection.KnowledgeBases)
+	if err := kbsvc.KnowledgeBase.ValidateChatSelections(ctx.requestCtx, ctx.runtimeConfig.KnowledgeBaseNames); err != nil {
+		return err
+	}
 
 	userText, userIndex := findLastUserMessageTextAndIndex(ctx.input.Messages)
 	if len(selection.KnowledgeBases) > 0 && userText != "" {

@@ -15,6 +15,8 @@ type Tool struct {
 	PluginID         string `gorm:"column:plugin_id;uniqueIndex:ux_tool_user_plugin_name,priority:2;index;not null;size:36" json:"plugin_id"`
 	ToolName         string `gorm:"column:tool_name;uniqueIndex:ux_tool_user_plugin_name,priority:3;index;not null;size:120" json:"tool_name"`
 	Description      string `gorm:"type:text" json:"description"`
+	LazyLoad         bool   `gorm:"column:lazy_load;not null;default:false" json:"lazy_load"`
+	SearchHint       string `gorm:"column:search_hint;type:text" json:"search_hint"`
 	InputSchemaJSON  string `gorm:"column:input_schema_json;type:longtext" json:"input_schema_json"`
 	OutputSchemaJSON string `gorm:"column:output_schema_json;type:longtext" json:"output_schema_json"`
 	ToolResponseMode string `gorm:"column:tool_response_mode;size:20" json:"tool_response_mode"`

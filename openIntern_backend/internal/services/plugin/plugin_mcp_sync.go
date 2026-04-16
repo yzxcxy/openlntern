@@ -496,7 +496,7 @@ func (s *PluginService) syncMCPPluginRecord(ctx context.Context, plugin *models.
 		return err
 	}
 
-	syncedTools, err := buildSyncedMCPToolRecords(plugin.UserID, plugin.PluginID, remoteTools, existingTools)
+	syncedTools, err := buildSyncedMCPToolRecords(plugin.UserID, plugin.PluginID, plugin.LazyLoad, remoteTools, existingTools)
 	if err != nil {
 		return err
 	}
@@ -520,6 +520,8 @@ type mcpToolComparable struct {
 	PluginID         string
 	ToolName         string
 	Description      string
+	LazyLoad         bool
+	SearchHint       string
 	InputSchemaJSON  string
 	OutputSchemaJSON string
 	ToolResponseMode string
@@ -555,6 +557,8 @@ func toMCPToolComparable(item models.Tool) mcpToolComparable {
 		PluginID:         strings.TrimSpace(item.PluginID),
 		ToolName:         strings.TrimSpace(item.ToolName),
 		Description:      strings.TrimSpace(item.Description),
+		LazyLoad:         item.LazyLoad,
+		SearchHint:       strings.TrimSpace(item.SearchHint),
 		InputSchemaJSON:  strings.TrimSpace(item.InputSchemaJSON),
 		OutputSchemaJSON: strings.TrimSpace(item.OutputSchemaJSON),
 		ToolResponseMode: strings.TrimSpace(item.ToolResponseMode),
@@ -672,7 +676,7 @@ func shouldTryAlternateMCPProtocol(configured string, attempted string, err erro
 	}
 }
 
-func buildSyncedMCPToolRecords(userID string, pluginID string, remoteTools []mcp.Tool, existingTools []models.Tool) ([]models.Tool, error) {
+func buildSyncedMCPToolRecords(userID string, pluginID string, pluginLazyLoad bool, remoteTools []mcp.Tool, existingTools []models.Tool) ([]models.Tool, error) {
 	byName := make(map[string]models.Tool, len(existingTools))
 	for _, tool := range existingTools {
 		byName[tool.ToolName] = tool
@@ -725,6 +729,8 @@ func buildSyncedMCPToolRecords(userID string, pluginID string, remoteTools []mcp
 			PluginID:         pluginID,
 			ToolName:         toolName,
 			Description:      strings.TrimSpace(remoteTool.Description),
+			LazyLoad:         existing.LazyLoad || (existing.ToolID == "" && pluginLazyLoad),
+			SearchHint:       strings.TrimSpace(existing.SearchHint),
 			InputSchemaJSON:  inputSchemaJSON,
 			OutputSchemaJSON: outputSchemaJSON,
 			ToolResponseMode: toolResponseMode,

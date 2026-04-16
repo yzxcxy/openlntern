@@ -187,6 +187,14 @@ func (d *KnowledgeBaseDAO) ReadContent(ctx context.Context, uri string) (string,
 	return readContent(ctx, uri, "/api/v1/content/read")
 }
 
+func (d *KnowledgeBaseDAO) ReadAbstract(ctx context.Context, uri string) (string, error) {
+	return readContent(ctx, uri, "/api/v1/content/abstract")
+}
+
+func (d *KnowledgeBaseDAO) ReadOverview(ctx context.Context, uri string) (string, error) {
+	return readContent(ctx, uri, "/api/v1/content/overview")
+}
+
 // NormalizeScopedURI ensures externally provided knowledge-base URIs stay within the current user's root.
 func (d *KnowledgeBaseDAO) NormalizeScopedURI(ctx context.Context, rawURI string) (string, error) {
 	uri := strings.TrimSpace(rawURI)

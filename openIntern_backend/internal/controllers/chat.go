@@ -69,14 +69,29 @@ func isBenignSSECloseError(err error) bool {
 	if err == nil {
 		return false
 	}
+	lower := strings.ToLower(err.Error())
+	if isUpstreamToolTransportError(lower) {
+		return false
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 		return true
 	}
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) {
 		return true
 	}
-	lower := strings.ToLower(err.Error())
 	return strings.Contains(lower, "broken pipe") || strings.Contains(lower, "reset by peer")
+}
+
+// isUpstreamToolTransportError excludes upstream MCP transport failures from SSE client disconnect logs.
+func isUpstreamToolTransportError(message string) bool {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return false
+	}
+	return strings.Contains(message, "failed to send request") ||
+		strings.Contains(message, "streamablehttp") ||
+		strings.Contains(message, "/mcp") ||
+		strings.Contains(message, "toolnode")
 }
 
 // UploadChatAsset handles chat attachment uploads and returns uploaded URL metadata.

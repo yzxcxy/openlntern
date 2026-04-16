@@ -51,11 +51,27 @@ func upsertBuiltinPlugin(userID string, definition builtinPluginDefinition) erro
 		return nil
 	}
 
+	existingTools, err := dao.Plugin.ListToolsByUserIDAndPluginID(userID, existing.PluginID)
+	if err != nil {
+		return err
+	}
+
 	plugin.ID = existing.ID
 	plugin.CreatedAt = existing.CreatedAt
 	plugin.PluginID = existing.PluginID
+	// 内建定义刷新时保留用户在前端调整过的 tool_search 配置。
+	plugin.LazyLoad = existing.LazyLoad
+	existingToolByName := make(map[string]models.Tool, len(existingTools))
+	for _, item := range existingTools {
+		existingToolByName[strings.TrimSpace(item.ToolName)] = item
+	}
 	for i := range definition.tools {
 		definition.tools[i].PluginID = existing.PluginID
+		if current, ok := existingToolByName[strings.TrimSpace(definition.tools[i].ToolName)]; ok {
+			definition.tools[i].ToolID = current.ToolID
+			definition.tools[i].LazyLoad = current.LazyLoad
+			definition.tools[i].SearchHint = current.SearchHint
+		}
 	}
 	if err := dao.Plugin.Update(userID, existing.PluginID, &plugin, definition.tools); err != nil {
 		return fmt.Errorf("update builtin plugin %s failed: %w", plugin.PluginID, err)

@@ -47,6 +47,8 @@ type IndexStatusResult struct {
 	Resource string `json:"resource_id,omitempty"`
 }
 
+const missingImportedRootURIMessage = "openviking import returned no root_uri"
+
 type Service struct{}
 
 var KnowledgeBase = new(Service)
@@ -76,7 +78,7 @@ func (s *Service) List(ctx context.Context) ([]Item, error) {
 	for _, kb := range kbs {
 		result = append(result, Item{
 			Name:        kb.Name,
-			IndexStatus: kb.IndexStatus,
+			IndexStatus: normalizeIndexStatus(kb.IndexStatus),
 		})
 	}
 	return result, nil
@@ -178,31 +180,36 @@ func (s *Service) Import(ctx context.Context, rawName string, fileHeader *multip
 	// 上传zip到OpenViking进行检索索引
 	result, err := dao.KnowledgeBase.IngestZip(ctx, tempZipPath, openVikingURI, false, 0)
 	taskID := ""
+	importedRootURI := openVikingURI
 	if result != nil {
-		taskID = result.TaskID
+		taskID = strings.TrimSpace(result.TaskID)
+		if strings.TrimSpace(result.RootURI) != "" {
+			importedRootURI = strings.TrimSpace(result.RootURI)
+		}
 	}
+
+	indexStatus, indexError := s.resolveImportedIndexState(result, err)
 
 	// 创建KB记录（包含索引状态）
 	kb := &models.KnowledgeBase{
 		UserID:        userID,
 		Name:          kbName,
-		OpenVikingURI: openVikingURI,
+		OpenVikingURI: importedRootURI,
 		LocalPath:     localPath,
 		IndexTaskID:   taskID,
-		IndexStatus:   "pending",
-	}
-	if taskID == "" {
-		// OpenViking上传失败，标记状态为failed
-		if err != nil {
-			kb.IndexStatus = "failed"
-			kb.IndexError = err.Error()
-		}
+		IndexStatus:   indexStatus,
+		IndexError:    indexError,
 	}
 	if err := dao.KBLocal.Create(ctx, kb, treeEntries); err != nil {
 		return nil, err
 	}
 
-	return &AsyncResult{Name: kbName, TaskID: taskID, Status: "accepted", Async: true}, nil
+	async := indexStatus == "pending" || indexStatus == "processing"
+	resultStatus := "accepted"
+	if !async {
+		resultStatus = indexStatus
+	}
+	return &AsyncResult{Name: kbName, TaskID: taskID, Status: resultStatus, Async: async}, nil
 }
 
 // uploadExtractedFiles 上传解压后的文件到MinIO。
@@ -292,6 +299,24 @@ func normalizeKnowledgeBaseName(rawName string) (string, error) {
 	return name, nil
 }
 
+// ValidateChatSelections 确保对话态临时选择的知识库不包含索引失败项。
+func (s *Service) ValidateChatSelections(ctx context.Context, kbNames []string) error {
+	userID, err := dao.OpenVikingUserIDFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	for _, kbName := range normalizeKnowledgeBaseNames(kbNames) {
+		kb, err := dao.KBLocal.GetByName(ctx, userID, kbName)
+		if err != nil {
+			return err
+		}
+		if normalizeIndexStatus(kb.IndexStatus) == "failed" {
+			return fmt.Errorf("知识库 %s 索引失败，暂不支持在对话中选择问答", kb.Name)
+		}
+	}
+	return nil
+}
+
 func IsNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -319,13 +344,13 @@ func (s *Service) GetIndexStatus(ctx context.Context, rawName string) (*IndexSta
 	}
 	return &IndexStatusResult{
 		TaskID:   kb.IndexTaskID,
-		Status:   kb.IndexStatus,
+		Status:   normalizeIndexStatus(kb.IndexStatus),
 		Error:    kb.IndexError,
 		Resource: kb.OpenVikingURI,
 	}, nil
 }
 
-// RefreshIndexStatus 刷新知识库索引状态（查询OpenViking并更新数据库）。
+// RefreshIndexStatus 刷新知识库索引状态（按知识库根URI探测OpenViking语义层是否可用）。
 func (s *Service) RefreshIndexStatus(ctx context.Context, rawName string) (*IndexStatusResult, error) {
 	userID, err := dao.OpenVikingUserIDFromContext(ctx)
 	if err != nil {
@@ -340,41 +365,33 @@ func (s *Service) RefreshIndexStatus(ctx context.Context, rawName string) (*Inde
 		return nil, err
 	}
 
-	// 如果没有task_id或状态已完成/失败，直接返回当前状态
-	if kb.IndexTaskID == "" || kb.IndexStatus == "completed" || kb.IndexStatus == "failed" {
+	currentStatus := normalizeIndexStatus(kb.IndexStatus)
+
+	// 已完成直接返回；失败状态仅对明确不可恢复的错误停止探测。
+	if currentStatus == "completed" || (currentStatus == "failed" && !shouldProbeFailedKB(kb.IndexError)) {
 		return &IndexStatusResult{
 			TaskID:   kb.IndexTaskID,
-			Status:   kb.IndexStatus,
+			Status:   currentStatus,
 			Error:    kb.IndexError,
 			Resource: kb.OpenVikingURI,
 		}, nil
 	}
 
-	// 查询OpenViking任务状态
-	taskResult, err := dao.OpenVikingSession.GetTask(ctx, kb.IndexTaskID)
+	newStatus, newError, err := s.probeIndexStatusByRootURI(ctx, kb)
 	if err != nil {
-		// 查询失败，返回当前状态但不更新
 		return &IndexStatusResult{
 			TaskID:   kb.IndexTaskID,
-			Status:   kb.IndexStatus,
+			Status:   currentStatus,
 			Error:    kb.IndexError,
 			Resource: kb.OpenVikingURI,
 		}, nil
-	}
-
-	// 更新数据库记录
-	newStatus := taskResult.Status
-	newError := ""
-	if taskResult.Error != "" {
-		newError = taskResult.Error
 	}
 	if err := dao.KBLocal.UpdateIndexStatus(ctx, kb.ID, kb.IndexTaskID, newStatus, newError); err != nil {
-		// 更新失败，返回查询到的状态但不持久化
 		return &IndexStatusResult{
 			TaskID:   kb.IndexTaskID,
 			Status:   newStatus,
 			Error:    newError,
-			Resource: taskResult.ResourceID,
+			Resource: kb.OpenVikingURI,
 		}, nil
 	}
 
@@ -382,6 +399,74 @@ func (s *Service) RefreshIndexStatus(ctx context.Context, rawName string) (*Inde
 		TaskID:   kb.IndexTaskID,
 		Status:   newStatus,
 		Error:    newError,
-		Resource: taskResult.ResourceID,
+		Resource: kb.OpenVikingURI,
 	}, nil
+}
+
+// resolveImportedIndexState determines the persisted KB index state after one import submission.
+func (s *Service) resolveImportedIndexState(result *dao.ImportResult, importErr error) (string, string) {
+	switch {
+	case importErr != nil:
+		return "failed", importErr.Error()
+	case result == nil:
+		return "failed", missingImportedRootURIMessage
+	case strings.TrimSpace(result.RootURI) == "":
+		return "failed", missingImportedRootURIMessage
+	case normalizeIndexStatus(result.Status) == "failed":
+		return "failed", strings.TrimSpace(result.Status)
+	}
+	return "pending", ""
+}
+
+func (s *Service) probeIndexStatusByRootURI(ctx context.Context, kb *models.KnowledgeBase) (string, string, error) {
+	targetURI := strings.TrimSpace(kb.OpenVikingURI)
+	if targetURI == "" {
+		return "failed", missingImportedRootURIMessage, nil
+	}
+	if overview, err := dao.KnowledgeBase.ReadOverview(ctx, targetURI); err == nil {
+		if strings.TrimSpace(overview) != "" {
+			return "completed", "", nil
+		}
+	} else if !isProbePendingError(err) {
+		return "", "", err
+	}
+	if abstract, err := dao.KnowledgeBase.ReadAbstract(ctx, targetURI); err == nil {
+		if strings.TrimSpace(abstract) != "" {
+			return "completed", "", nil
+		}
+	} else if !isProbePendingError(err) {
+		return "", "", err
+	}
+	return "pending", "", nil
+}
+
+func isProbePendingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return IsNotFound(err)
+}
+
+func shouldProbeFailedKB(errMsg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(errMsg))
+	if lower == "" {
+		return true
+	}
+	return strings.Contains(lower, "no task_id")
+}
+
+// normalizeIndexStatus maps OpenViking and legacy status strings into the frontend contract.
+func normalizeIndexStatus(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "pending", "queued", "accepted", "created":
+		return "pending"
+	case "processing", "running", "in_progress", "in-progress":
+		return "processing"
+	case "completed", "success", "succeeded", "done", "finished":
+		return "completed"
+	case "failed", "error", "errored", "cancelled", "canceled", "timeout", "timed_out", "timed-out":
+		return "failed"
+	default:
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
 }

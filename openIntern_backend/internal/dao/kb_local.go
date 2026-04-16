@@ -26,11 +26,17 @@ func (d *KBLocalDAO) Create(ctx context.Context, kb *models.KnowledgeBase, entri
 	if kb == nil {
 		return errors.New("kb is nil")
 	}
-	// 检查是否已存在
+	// 检查是否已存在；如果只是历史软删除残留，则先物理清理再允许重建同名知识库。
 	var existing models.KnowledgeBase
-	err := database.DB.Where("user_id = ? AND name = ?", kb.UserID, kb.Name).First(&existing).Error
+	err := database.DB.Unscoped().Where("user_id = ? AND name = ?", kb.UserID, kb.Name).First(&existing).Error
 	if err == nil {
-		return ErrKBAlreadyExists
+		if existing.DeletedAt.Valid {
+			if err := database.DB.Unscoped().Delete(&existing).Error; err != nil {
+				return err
+			}
+		} else {
+			return ErrKBAlreadyExists
+		}
 	}
 	// 创建KB记录
 	if err := database.DB.Create(kb).Error; err != nil {
@@ -85,8 +91,8 @@ func (d *KBLocalDAO) Delete(ctx context.Context, userID, name string) error {
 	if err := database.DB.Where("kb_id = ?", kb.ID).Delete(&models.KBTreeEntry{}).Error; err != nil {
 		return err
 	}
-	// 删除KB记录
-	if err := database.DB.Delete(kb).Error; err != nil {
+	// KnowledgeBase 启用了 DeletedAt，使用硬删除避免同名重建时唯一索引残留冲突。
+	if err := database.DB.Unscoped().Delete(kb).Error; err != nil {
 		return err
 	}
 	return nil

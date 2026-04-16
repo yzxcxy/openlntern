@@ -27,6 +27,7 @@ type builtinPluginManifestPlugin struct {
 	Source      string                      `yaml:"source"`
 	RuntimeType string                      `yaml:"runtime_type"`
 	Status      string                      `yaml:"status"`
+	LazyLoad    bool                        `yaml:"lazy_load"`
 	Tools       []builtinPluginManifestTool `yaml:"tools"`
 }
 
@@ -34,6 +35,8 @@ type builtinPluginManifestTool struct {
 	ToolID           string `yaml:"tool_id"`
 	ToolName         string `yaml:"tool_name"`
 	Description      string `yaml:"description"`
+	LazyLoad         bool   `yaml:"lazy_load"`
+	SearchHint       string `yaml:"search_hint"`
 	InputSchemaJSON  string `yaml:"input_schema_json"`
 	OutputSchemaJSON string `yaml:"output_schema_json"`
 	ToolResponseMode string `yaml:"tool_response_mode"`
@@ -119,6 +122,7 @@ func buildBuiltinPluginDefinition(item builtinPluginManifestPlugin) (builtinPlug
 		Source:      source,
 		RuntimeType: runtimeType,
 		Status:      status,
+		LazyLoad:    item.LazyLoad,
 	}
 
 	if len(item.Tools) == 0 {
@@ -188,6 +192,8 @@ func buildBuiltinManifestTool(pluginID string, item builtinPluginManifestTool) (
 		PluginID:         pluginID,
 		ToolName:         toolName,
 		Description:      strings.TrimSpace(item.Description),
+		LazyLoad:         item.LazyLoad,
+		SearchHint:       strings.TrimSpace(item.SearchHint),
 		InputSchemaJSON:  inputSchemaJSON,
 		OutputSchemaJSON: outputSchemaJSON,
 		ToolResponseMode: responseMode,

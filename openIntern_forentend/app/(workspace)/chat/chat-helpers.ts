@@ -67,6 +67,7 @@ export type SkillCatalogItem = {
 export type KnowledgeBaseOption = {
   name?: string;
   uri?: string;
+  index_status?: string;
 };
 
 export type MentionTargetType = "skill" | "kb";

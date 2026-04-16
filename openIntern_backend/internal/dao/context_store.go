@@ -27,8 +27,9 @@ type storeAddResult struct {
 	Errors  []any  `json:"errors"`
 }
 
-// ImportResult captures the async import response from OpenViking.
+// ImportResult captures the import response from OpenViking.
 type ImportResult struct {
+	Status  string
 	TaskID  string
 	RootURI string
 }
@@ -270,6 +271,7 @@ func decodeStoreAddResult(body []byte) (*ImportResult, error) {
 			return nil, errors.New(strings.TrimSpace(fmt.Sprint(result.Errors)))
 		}
 		return &ImportResult{
+			Status:  strings.TrimSpace(result.Status),
 			TaskID:  strings.TrimSpace(result.TaskID),
 			RootURI: strings.TrimSpace(result.RootURI),
 		}, nil

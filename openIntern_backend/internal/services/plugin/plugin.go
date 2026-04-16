@@ -62,6 +62,8 @@ type PluginToolInput struct {
 	ToolID           string             `json:"tool_id"`
 	ToolName         string             `json:"tool_name"`
 	Description      string             `json:"description"`
+	LazyLoad         bool               `json:"lazy_load"`
+	SearchHint       string             `json:"search_hint"`
 	ToolResponseMode string             `json:"tool_response_mode"`
 	OutputSchemaJSON string             `json:"output_schema_json"`
 	Enabled          *bool              `json:"enabled"`
@@ -83,6 +85,7 @@ type UpsertPluginInput struct {
 	Source      string            `json:"source"`
 	RuntimeType string            `json:"runtime_type"`
 	Enabled     *bool             `json:"enabled"`
+	LazyLoad    bool              `json:"lazy_load"`
 	MCPURL      string            `json:"mcp_url"`
 	MCPProtocol string            `json:"mcp_protocol"`
 	TimeoutMS   int               `json:"timeout_ms"`
@@ -93,6 +96,8 @@ type PluginToolView struct {
 	ToolID           string             `json:"tool_id"`
 	ToolName         string             `json:"tool_name"`
 	Description      string             `json:"description"`
+	LazyLoad         bool               `json:"lazy_load"`
+	SearchHint       string             `json:"search_hint"`
 	InputSchemaJSON  string             `json:"input_schema_json"`
 	OutputSchemaJSON string             `json:"output_schema_json"`
 	ToolResponseMode string             `json:"tool_response_mode"`
@@ -118,6 +123,7 @@ type PluginView struct {
 	Source      string           `json:"source"`
 	RuntimeType string           `json:"runtime_type"`
 	Status      string           `json:"status"`
+	LazyLoad    bool             `json:"lazy_load"`
 	MCPURL      string           `json:"mcp_url"`
 	MCPProtocol string           `json:"mcp_protocol"`
 	TimeoutMS   int              `json:"timeout_ms"`
@@ -139,6 +145,8 @@ type ChatToolView struct {
 	ToolID           string `json:"tool_id"`
 	ToolName         string `json:"tool_name"`
 	Description      string `json:"description"`
+	LazyLoad         bool   `json:"lazy_load"`
+	SearchHint       string `json:"search_hint"`
 	ToolResponseMode string `json:"tool_response_mode"`
 }
 
@@ -149,6 +157,7 @@ type ChatPluginView struct {
 	Icon        string         `json:"icon"`
 	Source      string         `json:"source"`
 	RuntimeType string         `json:"runtime_type"`
+	LazyLoad    bool           `json:"lazy_load"`
 	Tools       []ChatToolView `json:"tools"`
 }
 
@@ -401,6 +410,8 @@ func (s *PluginService) ListAvailableForChat(userID string) ([]ChatPluginView, e
 				ToolID:           tool.ToolID,
 				ToolName:         tool.ToolName,
 				Description:      tool.Description,
+				LazyLoad:         tool.LazyLoad,
+				SearchHint:       tool.SearchHint,
 				ToolResponseMode: tool.ToolResponseMode,
 			})
 		}
@@ -411,6 +422,7 @@ func (s *PluginService) ListAvailableForChat(userID string) ([]ChatPluginView, e
 			Icon:        resolvePluginIconForView(plugin.Icon),
 			Source:      plugin.Source,
 			RuntimeType: plugin.RuntimeType,
+			LazyLoad:    plugin.LazyLoad,
 			Tools:       lightTools,
 		})
 	}
@@ -422,6 +434,11 @@ func (s *PluginService) getPluginRecord(userID string, pluginID string) (*models
 }
 
 func (s *PluginService) prepareDefinition(userID string, pluginID string, input UpsertPluginInput, existing *models.Plugin) (*models.Plugin, []models.Tool, error) {
+	if existing != nil && existing.Source == pluginSourceBuiltin {
+		// 内建插件仅允许前端调整 tool_search 相关元数据，避免开放其实现定义。
+		return s.prepareBuiltinToolSearchDefinition(userID, pluginID, input, existing)
+	}
+
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, nil, errors.New("name is required")
@@ -491,6 +508,7 @@ func (s *PluginService) prepareDefinition(userID string, pluginID string, input 
 		Source:      source,
 		RuntimeType: runtimeType,
 		Status:      status,
+		LazyLoad:    input.LazyLoad,
 		MCPURL:      "",
 		MCPProtocol: "",
 		LastSyncAt:  nil,
@@ -527,6 +545,64 @@ func (s *PluginService) prepareDefinition(userID string, pluginID string, input 
 	tools, err := s.buildTools(strings.TrimSpace(userID), nextPluginID, runtimeType, input.Tools)
 	if err != nil {
 		return nil, nil, err
+	}
+	plugin.LazyLoad = normalizePluginLazyLoad(input.LazyLoad, tools)
+	return plugin, tools, nil
+}
+
+func (s *PluginService) prepareBuiltinToolSearchDefinition(userID string, pluginID string, input UpsertPluginInput, existing *models.Plugin) (*models.Plugin, []models.Tool, error) {
+	if existing == nil {
+		return nil, nil, errors.New("builtin plugin is read-only")
+	}
+
+	existingTools, err := dao.Plugin.ListToolsByUserIDAndPluginID(strings.TrimSpace(userID), pluginID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	inputToolsByID := make(map[string]PluginToolInput, len(input.Tools))
+	inputToolsByName := make(map[string]PluginToolInput, len(input.Tools))
+	for _, item := range input.Tools {
+		toolID := strings.TrimSpace(item.ToolID)
+		toolName := strings.TrimSpace(item.ToolName)
+		if toolID != "" {
+			inputToolsByID[toolID] = item
+		}
+		if toolName != "" {
+			inputToolsByName[toolName] = item
+		}
+	}
+
+	tools := make([]models.Tool, 0, len(existingTools))
+	for _, currentTool := range existingTools {
+		nextTool := currentTool
+		if inputTool, ok := inputToolsByID[strings.TrimSpace(currentTool.ToolID)]; ok {
+			nextTool.LazyLoad = inputTool.LazyLoad
+			nextTool.SearchHint = strings.TrimSpace(inputTool.SearchHint)
+		} else if inputTool, ok := inputToolsByName[strings.TrimSpace(currentTool.ToolName)]; ok {
+			nextTool.LazyLoad = inputTool.LazyLoad
+			nextTool.SearchHint = strings.TrimSpace(inputTool.SearchHint)
+		}
+		tools = append(tools, nextTool)
+	}
+	pluginLazyLoad := normalizePluginLazyLoad(input.LazyLoad, tools)
+
+	plugin := &models.Plugin{
+		ID:          existing.ID,
+		UserID:      existing.UserID,
+		PluginID:    existing.PluginID,
+		Name:        existing.Name,
+		Description: existing.Description,
+		Icon:        existing.Icon,
+		Source:      existing.Source,
+		RuntimeType: existing.RuntimeType,
+		Status:      existing.Status,
+		LazyLoad:    pluginLazyLoad,
+		MCPURL:      existing.MCPURL,
+		MCPProtocol: existing.MCPProtocol,
+		TimeoutMS:   existing.TimeoutMS,
+		LastSyncAt:  existing.LastSyncAt,
+		CreatedAt:   existing.CreatedAt,
 	}
 	return plugin, tools, nil
 }
@@ -586,6 +662,8 @@ func (s *PluginService) buildTool(userID string, pluginID string, runtimeType st
 		PluginID:         pluginID,
 		ToolName:         toolName,
 		Description:      strings.TrimSpace(input.Description),
+		LazyLoad:         input.LazyLoad,
+		SearchHint:       strings.TrimSpace(input.SearchHint),
 		OutputSchemaJSON: outputSchemaJSON,
 		Enabled:          enabled,
 		TimeoutMS:        defaultPluginTimeoutMS,
@@ -744,6 +822,8 @@ func buildToolUpdateMap(tool models.Tool) map[string]any {
 		"plugin_id":          tool.PluginID,
 		"tool_name":          tool.ToolName,
 		"description":        tool.Description,
+		"lazy_load":          tool.LazyLoad,
+		"search_hint":        tool.SearchHint,
 		"input_schema_json":  tool.InputSchemaJSON,
 		"output_schema_json": tool.OutputSchemaJSON,
 		"tool_response_mode": tool.ToolResponseMode,
@@ -770,6 +850,8 @@ func buildPluginView(plugin models.Plugin, tools []models.Tool) PluginView {
 			ToolID:           tool.ToolID,
 			ToolName:         tool.ToolName,
 			Description:      tool.Description,
+			LazyLoad:         tool.LazyLoad,
+			SearchHint:       tool.SearchHint,
 			InputSchemaJSON:  tool.InputSchemaJSON,
 			OutputSchemaJSON: tool.OutputSchemaJSON,
 			ToolResponseMode: tool.ToolResponseMode,
@@ -795,6 +877,7 @@ func buildPluginView(plugin models.Plugin, tools []models.Tool) PluginView {
 		Source:      plugin.Source,
 		RuntimeType: plugin.RuntimeType,
 		Status:      plugin.Status,
+		LazyLoad:    normalizePluginLazyLoad(plugin.LazyLoad, tools),
 		MCPURL:      plugin.MCPURL,
 		MCPProtocol: plugin.MCPProtocol,
 		TimeoutMS:   plugin.TimeoutMS,
@@ -804,6 +887,18 @@ func buildPluginView(plugin models.Plugin, tools []models.Tool) PluginView {
 		CreatedAt:   plugin.CreatedAt,
 		UpdatedAt:   plugin.UpdatedAt,
 	}
+}
+
+func normalizePluginLazyLoad(current bool, tools []models.Tool) bool {
+	if len(tools) == 0 {
+		return current
+	}
+	for _, tool := range tools {
+		if !tool.LazyLoad {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeFields(fields []PluginFieldInput) ([]PluginFieldInput, string, string, error) {

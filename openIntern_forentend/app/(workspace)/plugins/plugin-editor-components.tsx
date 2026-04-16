@@ -425,12 +425,14 @@ export function ToolDraftSwitcher({
   onSelect,
   onAdd,
   onRemove,
+  allowManage = true,
 }: {
   tools: ToolDraft[];
   activeIndex: number;
   onSelect: (index: number) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  allowManage?: boolean;
 }) {
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-page)] p-3">
@@ -438,20 +440,26 @@ export function ToolDraftSwitcher({
         <div className="text-sm font-semibold text-[var(--color-text-primary)]">
           工具配置（{tools.length}）
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <UiButton type="button" variant="secondary" size="sm" onClick={onAdd}>
-            添加工具
-          </UiButton>
-          <UiButton
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => onRemove(activeIndex)}
-            disabled={tools.length <= 1}
-          >
-            删除当前工具
-          </UiButton>
-        </div>
+        {allowManage ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <UiButton type="button" variant="secondary" size="sm" onClick={onAdd}>
+              添加工具
+            </UiButton>
+            <UiButton
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onRemove(activeIndex)}
+              disabled={tools.length <= 1}
+            >
+              删除当前工具
+            </UiButton>
+          </div>
+        ) : (
+          <div className="text-xs text-[var(--color-text-muted)]">
+            内建工具数量由系统维护
+          </div>
+        )}
       </div>
       <div className="mt-3 flex min-w-full gap-2 overflow-x-auto pb-1">
         {tools.map((tool, index) => {
@@ -670,6 +678,33 @@ export function CodeToolEditor({
                   onChange({
                     ...tool,
                     description: event.target.value,
+                  })
+                }
+              />
+            </FormFieldRow>
+            <FormFieldRow label="加载策略">
+              <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-default)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={tool.lazyLoad}
+                  onChange={(event) =>
+                    onChange({
+                      ...tool,
+                      lazyLoad: event.target.checked,
+                    })
+                  }
+                />
+                启用延迟加载，仅在 `tool_search` 召回后暴露
+              </label>
+            </FormFieldRow>
+            <FormFieldRow label="搜索提示词">
+              <UiTextarea
+                placeholder="例如：文件检索、目录扫描、代码搜索"
+                value={tool.searchHint}
+                onChange={(event) =>
+                  onChange({
+                    ...tool,
+                    searchHint: event.target.value,
                   })
                 }
               />

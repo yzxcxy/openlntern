@@ -103,6 +103,15 @@ func (s *Service) resolveRuntimeToolSet(ctx context.Context, runtimeConfig *Agen
 		}
 		resolved.staticTools = append(resolved.staticTools, searchTool)
 		resolved.allowToolSearchSelection = true
+		// search 模式下，未开启延迟加载的动态工具默认直接暴露给模型。
+		initialVisibleToolNames, err := pluginsvc.Plugin.ListInitiallyVisibleRuntimeToolNamesForUser(ownerIDFromContext(ctx))
+		if err != nil {
+			if resolved.cleanup != nil {
+				resolved.cleanup()
+			}
+			return nil, err
+		}
+		resolved.initialVisibleToolNames = initialVisibleToolNames
 	case "select":
 		if len(runtimeConfig.Plugins.SelectedToolIDs) == 0 {
 			return finalizeRuntimeToolSet(ctx, resolved)
@@ -156,6 +165,11 @@ func (s *Service) resolveDynamicRuntimeTools(ctx context.Context) ([]einoTool.Ba
 		return nil, nil, err
 	}
 
+	builtinTools, err := pluginsvc.Plugin.BuildAllRuntimeBuiltinTools(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	mcpTools, cleanup, err := pluginsvc.Plugin.BuildAllRuntimeMCPTools(ctx)
 	if err != nil {
 		if cleanup != nil {
@@ -164,9 +178,10 @@ func (s *Service) resolveDynamicRuntimeTools(ctx context.Context) ([]einoTool.Ba
 		return nil, nil, err
 	}
 
-	resolved := make([]einoTool.BaseTool, 0, len(codeTools)+len(apiTools)+len(mcpTools))
+	resolved := make([]einoTool.BaseTool, 0, len(codeTools)+len(apiTools)+len(builtinTools)+len(mcpTools))
 	resolved = append(resolved, codeTools...)
 	resolved = append(resolved, apiTools...)
+	resolved = append(resolved, builtinTools...)
 	resolved = append(resolved, mcpTools...)
 	return resolved, cleanup, nil
 }
