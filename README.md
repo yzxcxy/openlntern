@@ -359,4 +359,14 @@ docker compose logs -f openviking
 
 ## License
 
-仓库中暂未看到明确的开源许可证文件；如需开源发布，建议补充 `LICENSE`。
+本项目采用 [MIT License](./LICENSE)。
+
+这意味着你可以在保留版权声明与许可证文本的前提下：
+
+- 使用
+- 复制
+- 修改
+- 分发
+- 商业使用
+
+许可证全文见根目录 [LICENSE](/Users/fqc/project/agent/openIntern/LICENSE)。
